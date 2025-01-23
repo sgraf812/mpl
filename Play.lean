@@ -593,6 +593,11 @@ theorem Tmp.forIn_list {α β} {m : Type u → Type v} {w : Type u → Type x}
       ∨ .done  <$> inv [] ≤ Observation.observe (f hd b)) :
       inv xs ≤ Observation.observe (forIn xs init f) := by
     have instMorph : Observation Id PredTrans := inferInstance
+    let antitone (f : List α → PredTrans β) := ∀ xs ys, List.IsSuffix xs ys → f xs ≤ f ys
+    suffices hanti : antitone fun xs => inv xs >>= fun b => Observation.observe (forIn xs b f) by
+      have : inv xs ≤ inv [] >>= fun b => Observation.observe (forIn [] b f) := by simp[-Id.pure_eq, List.forIn_nil,instMorph.pure_pure]
+    from (hanti xs [] (by rfl))
+
     -- we need some monotonicity property; i.e. that
     --   inv xs >>= fun a => Observation.observe (forIn xs a f)
     -- decreases with the length of xs.
