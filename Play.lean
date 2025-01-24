@@ -591,26 +591,33 @@ theorem Tmp.forIn_list {α β} {m : Type u → Type v} {w : Type u → Type x}
     (hstep : ∀ {hd tl b}, (inv (hd::tl) ≤ pure b) →
         .yield <$> inv tl ≤ Observation.observe (f hd b)
       ∨ .done  <$> inv [] ≤ Observation.observe (f hd b)) :
-      inv xs ≤ Observation.observe (forIn xs init f) := by
+      inv [] ≤ Observation.observe (forIn xs init f) := by
     have instMorph : Observation Id PredTrans := inferInstance
-    let antitone (f : List α → PredTrans β) := ∀ xs ys, List.IsSuffix xs ys → f xs ≤ f ys
-    suffices hanti : antitone fun xs => inv xs >>= fun b => Observation.observe (forIn xs b f) by
-      have : inv xs ≤ inv [] >>= fun b => Observation.observe (forIn [] b f) := by simp[-Id.pure_eq, List.forIn_nil,instMorph.pure_pure]
-    from (hanti xs [] (by rfl))
+    let monotone (f : List α → PredTrans β) := ∀ xs ys, List.IsSuffix xs ys → f xs ≤ f ys
+    suffices hmono : monotone fun xs => inv xs >>= fun b => Observation.observe (forIn xs b f) by
+      calc inv []
+        _ = inv [] >>= fun b => Observation.observe (forIn [] b f) := by simp only [List.forIn_nil, instMorph.pure_pure, bind_pure]
+        _ ≤ inv xs >>= fun b => Observation.observe (forIn xs b f) := hmono [] xs (by simp)
+        _ ≤ pure init >>= fun b => Observation.observe (forIn xs b f) := MonadOrdered.bind_mono _ _ _ _ hpre (by rfl)
+        _ ≤ Observation.observe (forIn xs init f) := by simp
 
-    -- we need some monotonicity property; i.e. that
+    -- intuition: inv encapsulates the effects of looping over a prefix of xs (and gets passed the suffix)
+    --
+    -- we need some antitonicity property; i.e. that
     --   inv xs >>= fun a => Observation.observe (forIn xs a f)
-    -- decreases with the length of xs.
+    -- decreases with when the length of xs increases.
     -- (This is because the invariant is stronger than the actual weakest precondition,
     -- and the longer the list, the more we rely on the invariant.)
-    -- Then for the initial case (full xs), we have an upper bound via hpre and
+    -- Then for the initial case (full xs), we have an lower bound via hpre and
     --   Observation.observe (forIn xs init f)
-    -- conversely, for the final case (empty xs), we have a lower bound
+    -- conversely, for the final case (empty xs), we have an upper bound
     --   inv []
     -- because `forIn [] a f` is the identity.
-    induction xs generalizing init
-    case nil => simp only [List.forIn_nil, Observation.pure_pure, map_pure, hpre]
+    intro xssuff ys ⟨xspre, hsuff⟩
+    induction xspre
+    case nil => simp_all only [List.nil_append, le_refl]
     case cons hd tl h =>
+      simp_all
       simp only [List.forIn_cons, Observation.bind_bind]
       simp
       cases hstep hpre
