@@ -614,7 +614,7 @@ theorem Tmp.forIn_list {α β} {m : Type u → Type v} {w : Type u → Type x}
     --   inv []
     -- because `forIn [] a f` is the identity.
     intro xssuff ys ⟨xspre, hsuff⟩
-    induction xspre
+    induction ys
     case nil => simp_all only [List.nil_append, le_refl]
     case cons hd tl h =>
       simp_all
