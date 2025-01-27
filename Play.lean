@@ -10,6 +10,42 @@ open Lean.Meta
 open Lean.SubExpr
 --open Std.Range
 
+section StateT
+
+def StateT.le [base : ∀{α}, LE (w α)] : StateT σ w α → StateT σ w α → Prop :=
+  fun x y => ∀s, x.run s ≤ y.run s
+instance [base : ∀{α}, LE (w α)] : LE (StateT σ w α) := ⟨StateT.le⟩
+instance [base : ∀{α}, Preorder (w α)] : Preorder (StateT σ w α) where
+  le_refl := fun x => fun s => le_refl (x.run s)
+  le_trans := fun x y z hxy hyz => fun s => (hxy s).trans (hyz s)
+instance [base : ∀{α}, PartialOrder (w α)] : PartialOrder (StateT σ w α) where
+  le_antisymm := fun _ _ hxy hyx => funext fun s => (hxy s).antisymm (hyx s)
+
+end StateT
+
+section LawfulMonadState
+
+class LawfulMonadState (σ : semiOutParam (Type u)) (m : Type u → Type v) [Monad m] [LawfulMonad m] [MonadStateOf σ m] where
+  get_set : (do let s ← get; set s) = pure (f := m) ⟨⟩
+  set_get {k : σ → m β} : (do set s₁; let s₂ ← get; k s₂) = (do set s₁; k s₁)
+  set_set {s₁ s₂ : σ} : (do set s₁; set s₂) = set (m := m) s₂
+
+theorem LawfulMonadState.set_get_pure [Monad m] [LawfulMonad m] [MonadStateOf σ m] [LawfulMonadState σ m] {s : σ} :
+  (do set s; get) = (do set (m := m) s; pure s) := by
+    calc (do set s; get)
+      _ = (do set s; let s' ← get; pure s') := by simp
+      _ = (do set s; pure s) := by rw [LawfulMonadState.set_get]
+attribute [simp] LawfulMonadState.get_set LawfulMonadState.set_get LawfulMonadState.set_set LawfulMonadState.set_get_pure
+
+instance [Monad m] [LawfulMonad m] : LawfulMonadState σ (StateT σ m) where
+  get_set := by ext s; simp
+  set_get := by intros; ext s; simp
+  set_set := by intros; ext s; simp
+
+end LawfulMonadState
+
+section PredTrans
+
 def PredTrans.mono {α} (t : (α → Prop) → Prop) : Prop :=
   ∀ p q, p ≤ q → t p → t q
 
@@ -21,7 +57,7 @@ theorem PredTrans.ext {α} (x y : PredTrans α) (h : ∀ p, x.val p = y.val p) :
   simp[PredTrans]; ext p; simp[h]
 
 def PredTrans.le {α} (a b : PredTrans α) : Prop :=
-  ∀x, a.val x ≤ b.val x
+  ∀x, match a, b with | ⟨a, _⟩, ⟨b, _⟩ => a x ≤ b x
 def PredTrans.bot {α} : PredTrans α :=
   ⟨fun _ => ⊥, fun _ _ _ h => h⟩
 def PredTrans.top {α} : PredTrans α :=
@@ -35,19 +71,24 @@ def PredTrans.sInf {α} (s : Set (PredTrans α)) : PredTrans α :=
 def PredTrans.sSup {α} (s : Set (PredTrans α)) : PredTrans α :=
   ⟨fun p => ∃ w ∈ s, w.val p, fun _ _ hpq => fun | ⟨w, hws, h⟩ => ⟨w, hws, w.property _ _ hpq h⟩⟩
 
-instance : CompleteLattice (PredTrans α) where
-  le := PredTrans.le
-  sup := PredTrans.sup
-  inf := PredTrans.inf
-  bot := PredTrans.bot
-  top := PredTrans.top
-  sInf := PredTrans.sInf
-  sSup := PredTrans.sSup
+instance : LE (PredTrans α) := ⟨PredTrans.le⟩
+instance : Preorder (PredTrans α) where
   le_refl := fun _ _ hp => hp
   le_trans := fun _ _ _ hab hbc p => (hab p).trans (hbc p)
+instance : PartialOrder (PredTrans α) where
   le_antisymm := fun _ _ hab hba => by apply PredTrans.ext; intro p; exact (hab p).antisymm (hba p)
-  le_top := fun _ _ _ => .intro
-  bot_le := fun _ _ fls => fls.elim
+--instance : Lattice (PredTrans α) where
+--  le := PredTrans.le
+--  sup := PredTrans.sup
+--  inf := PredTrans.inf
+--instance : CompleteLattice (PredTrans α) where
+--  le := PredTrans.le
+--  top := PredTrans.top
+--  bot := PredTrans.bot
+--  sInf := PredTrans.sInf
+--  sSup := PredTrans.sSup
+--  le_top := by intros; simp[PredTrans.top]
+--  bot_le := fun _ _ fls => fls.elim
   -- and so on
 
 def PredTrans.pure {α} (x : α) : PredTrans α :=
@@ -64,6 +105,9 @@ instance : LawfulMonad PredTrans where
   bind_assoc := by intros; ext p; simp only [bind, PredTrans.bind]
   bind_map := by intros; ext p; simp only [bind, PredTrans.bind, Functor.map, Function.comp_apply, PredTrans.pure, Seq.seq]
 
+end PredTrans
+
+section Subst
 /-- Backward predicate transformer derived from a substitution property of monads.
 A generic effect observation that can be used to observe all monads.
 It is oblivious to any computations that happened before it, so `Subst.bind` loses information
@@ -135,10 +179,6 @@ theorem Subst.inf_conj [Monad m] [LawfulMonad m] {x : m α} {ps : Set (α → Pr
       exact hp p this.1 (by simp +contextual)
       sorry
 
-@[simp]
-theorem Monad.bind_unit {m : Type u → Type v} [Monad m] {x : m PUnit} {f : PUnit → m α} :
-  (do let a ← x; f a) = (do x; f ⟨⟩) := by simp only
-
 theorem Subst.split_unit {m : Type u → Type v} [Monad m] {x : m PUnit} (hp : p) :
   Subst⟦x⟧ (fun _ => p) := fun hfg =>
     funext (fun u => hfg u hp) ▸ rfl
@@ -177,37 +217,6 @@ theorem Subst.mono [Monad m] [LawfulMonad m] {x : m a}
     intro _ _ _ hfg
     apply h
     simp_all only [implies_true]
-
-class LawfulMonadState (σ : semiOutParam (Type u)) (m : Type u → Type v) [Monad m] [LawfulMonad m] [MonadStateOf σ m] where
-  get_set : (do let s ← get; set s) = pure (f := m) ⟨⟩
-  set_get {k : σ → m β} : (do set s₁; let s₂ ← get; k s₂) = (do set s₁; k s₁)
-  set_set {s₁ s₂ : σ} : (do set s₁; set s₂) = set (m := m) s₂
-
-theorem LawfulMonadState.set_get_pure [Monad m] [LawfulMonad m] [MonadStateOf σ m] [LawfulMonadState σ m] {s : σ} :
-  (do set s; get) = (do set (m := m) s; pure s) := by
-    calc (do set s; get)
-      _ = (do set s; let s' ← get; pure s') := by simp
-      _ = (do set s; pure s) := by rw [LawfulMonadState.set_get]
-attribute [simp] LawfulMonadState.get_set LawfulMonadState.set_get LawfulMonadState.set_set LawfulMonadState.set_get_pure
-
-instance [Monad m] [LawfulMonad m] : LawfulMonadState σ (StateT σ m) where
-  get_set := by ext s; simp
-  set_get := by intros; ext s; simp
-  set_set := by intros; ext s; simp
-
-def SatisfiesSM {m : Type u → Type v} {α} [Monad m] (x : StateT σ m α) (p : α × σ → Prop) : Prop :=
-  Subst⟦do let a ← x; let s ← get; pure (a, s)⟧ p
-
-theorem SatisfiesSM.subst [Monad m] [LawfulMonad m] {x : StateT σ m α}
-  {f g : α → StateT σ m β}
-  (hp : SatisfiesSM x p) (hf : ∀ a s, p (a, s) → (do set s; f a) = (do set s; g a)) :
-  x >>= f = x >>= g := by
-    suffices h : (do let (a,s) ← (do let a ← x; let s ← get; pure (a, s)); set s; f a) = (do let (a,s) ← (do let a ← x; let s ← get; pure (a, s)); set s; g a) by
-      simp at h
-      simp[← LawfulMonad.bind_assoc] at h
-      assumption
-    unfold SatisfiesSM at hp
-    apply hp.subst fun ⟨a, s⟩ => hf a s
 
 theorem Subst.split_step [Monad m] [LawfulMonad m] {x : m (ForInStep β)}
     {done : β → Prop} {yield : β → Prop}
@@ -267,6 +276,162 @@ theorem Subst.forIn_loop
   (hyield : ∀ {b}, inv true b →       -- vc₃: weaken invariant to precondition of loop body upon loop entry, yield case
           Subst⟦f () b⟧ (∀ b', · = .yield b' → inv true b')) :
   Subst⟦forIn Loop.mk init f⟧ p := sorry
+
+end Subst
+
+section MonadOrdered
+
+class MonadOrdered (w : Type u → Type v) [∀{α},Preorder (w α)] extends Monad w, LawfulMonad w where
+  -- the following theorem combines
+  -- * substitutivity (x ≤ y → x >>= f ≤ y >>= f)
+  -- * congruence (f ≤ g → x >>= f ≤ x >>= g)
+  bind_mono : ∀{α β} {x y : w α} {f g : α → w β}, x ≤ y → f ≤ g → x >>= f ≤ y >>= g
+
+attribute [simp] MonadOrdered.bind_mono
+
+@[simp]
+theorem MonadOrdered.map_mono {α β} [∀{α},Preorder (w α)] [MonadOrdered w] (f : α → β) (x y : w α) (h : x ≤ y) : f <$> x ≤ f <$> y := by
+  simp only [←bind_pure_comp]
+  exact bind_mono h (by rfl)
+
+instance PredTrans.instMonadOrdered : MonadOrdered PredTrans where
+  bind_mono := by
+    intros _ _ x y f g hxy hfg --p hxf fixup fallout from Subtype. Want `ext p`; doesn't work
+    simp[Bind.bind,PredTrans.bind] at *
+--    apply hxy
+--    exact x.property (fun a => (f a).val p) _ (fun a => hfg a p) hxf
+
+instance StateT.instMonadOrdered [∀{α},Preorder (w α)] [MonadOrdered w] : MonadOrdered (StateT σ w) where
+  bind_mono := by
+    intros _ _ _ _ _ _ hxy hfg
+    intro s
+    simp
+    apply MonadOrdered.bind_mono
+    apply hxy
+    intro p;
+    apply hfg
+
+end MonadOrdered
+
+section Observation
+
+class Observation (m : Type u → Type v) (w : Type u → Type x) [Monad m] [∀{α}, Preorder (w α)] extends MonadOrdered w where
+  observe : m α → w α
+  pure_pure : observe (Pure.pure (f:=m) a) = Pure.pure (f := w) a
+  bind_bind (x : m α) (f : α → m β) : observe (x >>= f) = observe x >>= (fun a => observe (f a))
+attribute [simp] Observation.pure_pure Observation.bind_bind
+
+class ObservationState (σ : Type u) (m : Type u → Type v) (w : Type u → Type x) [∀{α}, Preorder (w α)] [Monad m] [MonadStateOf σ m] extends MonadStateOf σ w, Observation m w where
+  get_get : observe MonadState.get = MonadState.get
+  set_set : observe (MonadStateOf.set s) = MonadStateOf.set (σ := σ) s
+attribute [simp] ObservationState.get_get ObservationState.set_set
+
+instance Id.instObservationPredTrans : Observation Id PredTrans where
+  observe := pure
+  pure_pure := by simp
+  bind_bind := by simp
+--instance Subst.instObservation [Monad m] [LawfulMonad m] : Observation m PredTrans where
+--  observe := Subst
+--  pure_pure := by
+--    intros _ a
+--    ext p
+--    constructor
+--    case mpr => simp[Pure.pure, PredTrans.pure]; exact Subst.pure
+--    case mp => sorry -- not sure if possible!
+--  bind_bind := by
+--    intros _ _ x f
+--    ext p
+--    simp
+--    constructor
+--    case mpr => sorry
+--    case mp => sorry
+instance StateT.instObservationState [Monad m] [∀{α}, Preorder (w α)] [base : Observation m w] :
+  ObservationState σ (StateT σ m) (StateT σ w) where
+  observe := fun x s₁ => base.observe (x.run s₁)
+  pure_pure := by
+    intros _ a
+    ext s
+    simp[StateT.run,Pure.pure,StateT.pure,base.pure_pure]
+  bind_bind := by
+    intros _ _ x f
+    ext s
+    simp[StateT.run,Bind.bind,StateT.bind,base.bind_bind]
+  get_get := by
+    ext s
+    simp[StateT.run, MonadState.get, StateT.get]
+  set_set := by
+    intro s
+    ext s'
+    simp[StateT.run, MonadStateOf.set, StateT.set]
+
+def someProgram : StateT Nat Id Nat := do
+  let x ← get
+  set (x * 2)
+  return x
+
+theorem someProgram_spec : ((StateT.instObservationState.observe someProgram).run s : PredTrans (Nat × Nat)) = pure (s, s*2) := by
+  unfold someProgram
+  simp[←bind_pure_comp]
+
+def ExceptT.observe [Monad m] [Monad w] [base : Observation m w] (x : ExceptT ε m α) : ExceptT ε w α :=
+  ExceptT.mk (base.observe (ExceptT.run x))
+instance ExceptT.instObservation [Monad m] [Monad w] [base : Observation m w] : Observation (ExceptT ε m) (ExceptT ε w) where
+  observe := ExceptT.observe
+  pure_pure := base.pure_pure
+  bind_bind := by
+    intros _ _ x f
+    have h : ExceptT.bindCont (ExceptT.observe ∘ f) = base.observe ∘ (ExceptT.bindCont f) := by
+      ext x
+      simp[ExceptT.bindCont,ExceptT.observe]
+      split
+      · rfl
+      · simp only [base.pure_pure]
+    simp[ExceptT.run,Bind.bind,ExceptT.bind,ExceptT.bindCont]
+    simp[h,ExceptT.observe,base.bind_bind]
+    rfl
+
+theorem Observation.forIn_list {α β} {m : Type u → Type v} {w : Type u → Type x}
+    [Monad m] [∀{α}, Preorder (w α)] [obs : Observation m w]
+    {xs : List α} {init : β} {f : α → β → m (ForInStep β)}
+    (inv : List α → w β)
+    (hpre : inv xs ≤ pure init)
+    (hstep : ∀ hd tl,
+        .yield <$> inv tl ≤ (inv (hd :: tl) >>= fun b => obs.observe (f hd b))
+      ∨ .done  <$> inv [] ≤ (inv (hd :: tl) >>= fun b => obs.observe (f hd b))) :
+      inv [] ≤ obs.observe (forIn xs init f) := by
+    -- Intuition: inv encapsulates the effects of looping over a prefix of xs (and gets passed the suffix)
+    -- The induction hypothesis is:
+    let prog xs := inv xs >>= fun b => obs.observe (forIn xs b f)
+    suffices hind : prog [] ≤ prog xs by
+      -- This is because the invariant is stronger than the actual weakest precondition,
+      -- and the longer the list, the more we rely on the invariant (except when there's a sudden break).
+      have : LawfulMonad w := inferInstance
+      calc inv []
+        _ = inv [] >>= fun b => obs.observe (forIn [] b f) := by simp only [List.forIn_nil, obs.pure_pure, bind_pure]
+        -- For the after case (xs=[]), we have a lower bound because `forIn [] b` reduces to `pure b`
+        _ ≤ inv xs >>= fun b => obs.observe (forIn xs b f) := hind
+        -- For the initial case (full xs), we have an upper bound via hpre
+        _ ≤ pure init >>= fun b => obs.observe (forIn xs b f) := MonadOrdered.bind_mono hpre (by rfl)
+        _ ≤ obs.observe (forIn xs init f) := by simp
+    -- Now prove hind : prog [] ≤ prog xs by induction
+    clear hpre -- not needed any longer and would need to be generalized
+    induction xs
+    case nil => simp_all only [List.nil_append, le_refl]
+    case cons hd tl h =>
+      cases hstep hd tl
+      case inl hstep =>
+        apply LE.le.trans h
+        simp only [prog, List.forIn_cons, Observation.bind_bind, ←bind_assoc]
+        apply LE.le.trans _ (MonadOrdered.bind_mono hstep (by rfl))
+        simp only [bind_map_left, le_refl]
+      case inr hstep =>
+        simp only [prog, List.forIn_cons, List.forIn_nil, Observation.bind_bind, ←bind_assoc]
+        apply LE.le.trans _ (MonadOrdered.bind_mono hstep (by rfl))
+        simp only [bind_map_left, le_refl, prog]
+
+end Observation
+
+section vcgen
 
 elab "vcgen" /-("invariant " ilbls:ident ": " inv:term)*-/ : tactic => withMainContext <| do
   let goal ← getMainGoal
@@ -411,6 +576,8 @@ theorem test_3 [Monad m] [LawfulMonad m] (h : Subst e₁ (fun _ => Subst (m:=m) 
 theorem test_4 : Subst (m:=Id) (do let mut x := 5; if x > 1 then { x := 1 } else { x := x }; pure x) (fun r => r ≤ 1) := by
   vcgen <;> simp; omega
 
+end vcgen
+
 section UserStory1
 def FinSimpleGraph (n : ℕ) := SimpleGraph (Fin n)
 open SimpleGraph
@@ -441,6 +608,7 @@ lemma correctnessOfGreedySpanner {n:ℕ }(G : FinSimpleGraph n)(t :ℕ ) (u v : 
       vcgen
 end UserStory1
 
+section fib
 
 def fib_impl (n : Nat) := Id.run do
   if n = 0 then return 0
@@ -483,137 +651,11 @@ theorem fib_correct {n} : fib_impl n = fib_spec n := Obs_Id_eq (P := fun r => r 
     induction n with
     | zero => rfl
     | succ n ih => simp [fib_spec, List.range'_1_concat, ih]
+end fib
 /-
 https://lean-fro.zulipchat.com/#narrow/channel/398861-general/topic/baby.20steps.20towards.20monadic.20verification
 
 -/
-
-def StateT.le [base : ∀{α}, PartialOrder (w α)] : StateT σ w α → StateT σ w α → Prop :=
-  fun x y => ∀s, x.run s ≤ y.run s
-instance [base : ∀{α}, PartialOrder (w α)] : PartialOrder (StateT σ w α) where
-  le := StateT.le
-  le_refl := fun x => fun s => le_refl (x.run s)
-  le_trans := fun x y z hxy hyz => fun s => (hxy s).trans (hyz s)
-  le_antisymm := fun x y hxy hyx => funext fun s => (hxy s).antisymm (hyx s)
-
-class MonadOrdered (w : Type u → Type v) [Monad w] [∀{α},Lattice (w α)] extends LawfulMonad w where
-  -- the following theorem combines
-  -- * substitutivity (x ≤ y → x >>= f ≤ y >>= f)
-  -- * congruence (f ≤ g → x >>= f ≤ x >>= g)
-  bind_mono : ∀{α β} {x y : w α} {f g : α → w β}, x ≤ y → f ≤ g → x >>= f ≤ y >>= g
-
-attribute [simp] MonadOrdered.bind_mono
-
-@[simp]
-theorem MonadOrdered.map_mono {α β} [Monad w] [LawfulMonad w] [∀{α},Lattice (w α)] [MonadOrdered w] (f : α → β) (x y : w α) (h : x ≤ y) : f <$> x ≤ f <$> y := by
-  simp only [←bind_pure_comp]
-  exact bind_mono h (by rfl)
-
-instance PredTrans.instMonadOrdered : MonadOrdered PredTrans where
-  bind_mono := by
-    intros _ _ x y f g hxy hfg --p hxf fixup fallout from Subtype. Want `ext p`; doesn't work
-    simp[Bind.bind,PredTrans.bind] at *
---    apply hxy
---    exact x.property (fun a => (f a).val p) _ (fun a => hfg a p) hxf
-
-instance StateT.instMonadOrdered [Monad w] [∀{α},Lattice (w α)] [MonadOrdered w] : MonadOrdered (StateT σ w) where
-  bind_mono := by
-    intros _ _ _ _ _ _ hxy hfg
-    intro s
-    simp
-    apply MonadOrdered.bind_mono
-    apply hxy
-    intro p;
-    apply hfg
-
-class Observation (m : Type u → Type v) (w : Type u → Type x) [Monad m] [Monad w] [∀{α}, Lattice (w α)] [MonadOrdered w] where
-  observe : m α → w α
-  pure_pure : observe (pure (f:=m) a) = pure (f := w) a
-  bind_bind (x : m α) (f : α → m β) : observe (x >>= f) = observe x >>= (fun a => observe (f a))
-
-instance Id.instMonadMorphismPredTrans : Observation Id PredTrans where
-  observe := pure
-  pure_pure := by simp
-  bind_bind := by simp
-instance Subst.instMonadMorphism [Monad m] [LawfulMonad m] : Observation m PredTrans where
-  observe := Subst
-  pure_pure := by
-    intros _ a
-    ext p
-    constructor
-    case mpr => simp[Pure.pure, PredTrans.pure]; exact Subst.pure
-    case mp => sorry -- not sure if possible!
-  bind_bind := by
-    intros _ _ x f
-    ext p
-    simp
-    constructor
-    case mpr => sorry
-    case mp => sorry
-instance StateT.instMonadMorphism [Monad m] [Monad w] [base : Observation m w] : Observation (StateT σ m) (StateT σ w) where
-  observe := fun x s₁ => base.observe (x.run s₁)
-  pure_pure := by
-    intros _ a
-    ext s
-    simp[StateT.run,Pure.pure,StateT.pure,base.pure_pure]
-  bind_bind := by
-    intros _ _ x f
-    ext s
-    simp[StateT.run,Bind.bind,StateT.bind,base.bind_bind]
-def ExceptT.observe [Monad m] [Monad w] [base : Observation m w] (x : ExceptT ε m α) : ExceptT ε w α :=
-  ExceptT.mk (base.observe (ExceptT.run x))
-instance ExceptT.instMonadMorphism [Monad m] [Monad w] [base : Observation m w] : Observation (ExceptT ε m) (ExceptT ε w) where
-  observe := ExceptT.observe
-  pure_pure := base.pure_pure
-  bind_bind := by
-    intros _ _ x f
-    have h : ExceptT.bindCont (ExceptT.observe ∘ f) = base.observe ∘ (ExceptT.bindCont f) := by
-      ext x
-      simp[ExceptT.bindCont,ExceptT.observe]
-      split
-      · rfl
-      · simp only [base.pure_pure]
-    simp[ExceptT.run,Bind.bind,ExceptT.bind,ExceptT.bindCont]
-    simp[h,ExceptT.observe,base.bind_bind]
-    rfl
-
-theorem Tmp.forIn_list {α β} {m : Type u → Type v} {w : Type u → Type x}
-    [Monad m] [Monad w] [LawfulMonad w] [∀{α}, Lattice (w α)] [MonadOrdered w] [obs : Observation m w]
-    {xs : List α} {init : β} {f : α → β → m (ForInStep β)}
-    (inv : List α → w β)
-    (hpre : inv xs ≤ pure init)
-    (hstep : ∀ hd tl,
-        .yield <$> inv tl ≤ (inv (hd :: tl) >>= fun b => obs.observe (f hd b))
-      ∨ .done  <$> inv [] ≤ (inv (hd :: tl) >>= fun b => obs.observe (f hd b))) :
-      inv [] ≤ obs.observe (forIn xs init f) := by
-    -- Intuition: inv encapsulates the effects of looping over a prefix of xs (and gets passed the suffix)
-    -- The induction hypothesis is:
-    let prog xs := inv xs >>= fun b => obs.observe (forIn xs b f)
-    suffices hind : prog [] ≤ prog xs by
-      -- This is because the invariant is stronger than the actual weakest precondition,
-      -- and the longer the list, the more we rely on the invariant (except when there's a sudden break).
-      calc inv []
-        _ = inv [] >>= fun b => obs.observe (forIn [] b f) := by simp only [List.forIn_nil, obs.pure_pure, bind_pure]
-        -- For the after case (xs=[]), we have a lower bound because `forIn [] b` reduces to `pure b`
-        _ ≤ inv xs >>= fun b => obs.observe (forIn xs b f) := hind
-        -- For the initial case (full xs), we have an upper bound via hpre
-        _ ≤ pure init >>= fun b => obs.observe (forIn xs b f) := MonadOrdered.bind_mono hpre (by rfl)
-        _ ≤ obs.observe (forIn xs init f) := by simp
-    -- Now prove hind : prog [] ≤ prog xs by induction
-    clear hpre -- not needed any longer and would need to be generalized
-    induction xs
-    case nil => simp_all only [List.nil_append, le_refl]
-    case cons hd tl h =>
-      cases hstep hd tl
-      case inl hstep =>
-        apply LE.le.trans h
-        simp only [prog, List.forIn_cons, Observation.bind_bind, ←bind_assoc]
-        apply LE.le.trans _ (MonadOrdered.bind_mono hstep (by rfl))
-        simp only [bind_map_left, le_refl]
-      case inr hstep =>
-        simp only [prog, List.forIn_cons, List.forIn_nil, Observation.bind_bind, ←bind_assoc]
-        apply LE.le.trans _ (MonadOrdered.bind_mono hstep (by rfl))
-        simp only [bind_map_left, le_refl, prog]
 
 
 theorem Tmp.get {m : Type u → Type v} {w : Type u → Type x}
