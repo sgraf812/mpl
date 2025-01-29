@@ -4,12 +4,12 @@ keywords = ["math"]
 defaultTargets = ["Play"]
 
 [leanOptions]
-pp.unicode.fun = true # pretty-prints `fun a ↦ b`
-autoImplicit = true
+#pp.unicode.fun = true # pretty-prints `fun a ↦ b`
+#autoImplicit = false
 
 [[require]]
 name = "mathlib"
 scope = "leanprover-community"
 
 [[lean_lib]]
-name = "Play"
+name = "VCGen"
