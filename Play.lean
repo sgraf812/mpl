@@ -193,7 +193,7 @@ example : PredTrans.post p ≤ Pure.pure x → p ≤ (· = x) := by
   exact h y
 
 @[vc_gen]
-theorem PredTrans.post_bind_pure {f : α → β} : (do let a ← PredTrans.post p; Pure.pure (f a)) = PredTrans.post (fun b => ∃ a, f a = b ∧ p a) := by
+theorem PredTrans.post_bind_pure {f : α → β} : f <$> PredTrans.post p = PredTrans.post (fun b => ∃ a, f a = b ∧ p a) := by
   ext q
   simp only [Bind.bind, bind, post, pure]
   constructor
@@ -214,12 +214,15 @@ class MonadOrdered (w : Type u → Type v) [∀{α},Preorder (w α)] extends Mon
   -- * congruence (f ≤ g → x >>= f ≤ x >>= g)
   bind_mono : ∀{α β} {x y : w α} {f g : α → w β}, x ≤ y → f ≤ g → x >>= f ≤ y >>= g
 
-attribute [simp] MonadOrdered.bind_mono
+theorem MonadOrdered.map_mono {w : Type u → Type v} {f : α → β} {x y : w α} [∀{α}, Preorder (w α)] [MonadOrdered w]
+  (h : x ≤ y) : f <$> x ≤ f <$> y := by simp only [← bind_pure_comp, le_refl, bind_mono h]
 
-@[simp]
-theorem MonadOrdered.map_mono {α β} [∀{α},Preorder (w α)] [MonadOrdered w] (f : α → β) (x y : w α) (h : x ≤ y) : f <$> x ≤ f <$> y := by
-  simp only [←bind_pure_comp]
-  exact bind_mono h (by rfl)
+theorem MonadOrdered.seq_mono {w : Type u → Type v} {f g : w (α → β)} {x y : w α} [∀{α}, Preorder (w α)] [MonadOrdered w]
+  (h₁ : f ≤ g) (h₂ : x ≤ y) : f <*> x ≤ g <*> y := by
+  simp only [← bind_map, ← bind_pure_comp]
+  exact bind_mono h₁ (fun a => bind_mono h₂ (by rfl))
+
+attribute [simp, vc_gen] MonadOrdered.bind_mono MonadOrdered.map_mono MonadOrdered.seq_mono
 
 theorem MonadOrdered.bind_mono_sup {w : Type u → Type v} {x y : w α} {f : α → w β} [∀{α}, SemilatticeSup (w α)] [MonadOrdered w] :
   (x >>= f) ⊔ (y >>= f) ≤ x ⊔ y >>= f:= by
@@ -253,8 +256,11 @@ class Observation (m : Type u → Type v) (w : outParam (Type u → Type x)) [Mo
   observe : m α → w α
   pure_pure : observe (Pure.pure a) = Pure.pure a
   bind_bind (x : m α) (f : α → m β) : observe (x >>= f) = observe x >>= (fun a => observe (f a))
-attribute [vc_gen] Observation.pure_pure Observation.bind_bind
-attribute [simp] Observation.pure_pure Observation.bind_bind
+theorem Observation.map_map {m : Type u → Type v} {w : Type u → Type x} [Monad m] [LawfulMonad m] [∀{α}, Preorder (w α)] [Observation m w] {f : α → β} {x : m α} :
+  observe (f <$> x) = f <$> observe x := by simp only [← bind_pure_comp, bind_bind, pure_pure]
+theorem Observation.seq_seq {m : Type u → Type v} {w : Type u → Type x} [Monad m] [LawfulMonad m] [∀{α}, Preorder (w α)] [Observation m w] {f : m (α → β)} {x : m α} :
+  observe (f <*> x) = observe f <*> observe x := by simp only [← bind_map, bind_bind, map_map]
+attribute [vc_gen,simp] Observation.pure_pure Observation.bind_bind Observation.map_map Observation.seq_seq
 
 /-- An expression's spec is a predicate transformer that is an upper bound on the observation of a program -/
 abbrev Observation.Spec [Monad m] [∀{α}, Preorder (w α)] [Observation m w] (x : m α) :=
@@ -457,7 +463,7 @@ theorem Observation.forIn_loop {β} {m : Type u → Type v} {w : Type u → Type
 --    obs.observe (Loop.mk.forIn init (fun _ b => if c b then ForInStep.yield <$> f b else pure (ForInStep.done b))) ≤ inv := term.elim
 
 -- the following theorem does not work as a simp lemma:
-@[vc_gen]
+--@[vc_gen]
 theorem Observation.forIn_range2 {β} {m : Type u → Type v} {w : Type u → Type x}
   [Monad m] [lat : ∀{α}, Preorder (w α)] [obs : Observation m w]
   {xs : Std.Range} {init : β} {f : ℕ → β → m (ForInStep β)} {wp : w β}
@@ -549,9 +555,17 @@ theorem PredTrans.ForInStep_done_cancel {a b : PredTrans α} : ForInStep.done <$
 --  Observation.observe (if b then x else y) = if b then Observation.observe x else Observation.observe y := by
 --    cases b <;> simp
 
-theorem use_spec {w : Type u → Type x} {f : α → w β} {x y : w α} {goal : w β} [∀ {α}, Preorder (w α)] [MonadOrdered w]
+theorem use_spec_bind {w : Type u → Type x} {f : α → w β} {x y : w α} {goal : w β} [∀ {α}, Preorder (w α)] [MonadOrdered w]
   (hrw : x ≤ y) (hgoal : y >>= f ≤ goal) : x >>= f ≤ goal :=
   le_trans (MonadOrdered.bind_mono hrw (by rfl)) hgoal
+
+theorem use_spec_map {w : Type u → Type x} {f : α → β} {x y : w α} {goal : w β} [∀ {α}, Preorder (w α)] [MonadOrdered w]
+  (hrw : x ≤ y) (hgoal : f <$> y ≤ goal) : f <$> x ≤ goal :=
+  le_trans (MonadOrdered.map_mono hrw) hgoal
+
+--theorem use_spec_seq {w : Type u → Type x} {f : w (α → β)} {x y : w α} {goal : w β} [∀ {α}, Preorder (w α)] [MonadOrdered w]
+--  (hrw : x ≤ y) (hgoal : f <*> y ≤ goal) : f <*> x ≤ goal :=
+--  le_trans (MonadOrdered.seq_mono (by rfl) hrw) hgoal
 
 theorem test_3 : Observation.observe (do let mut x := 0; for i in [1:5] do { x := x + i }; pure (f := Idd) (); return x) ≤ PredTrans.post (· < 30) := by
   vc_gen
@@ -573,7 +587,7 @@ theorem test_3_2 : Observation.observe (do let mut x := 0; for i in [1:5] do { x
 -- TBD: Figure out while loops
 theorem test_4 : Observation.observe (do let mut x := 0; let mut i := 0; while i < 4 do { x := x + i; i := i + 1 }; pure (f := Idd) (); return x) ≤ pure 6 := by
   vc_gen
-  apply use_spec (Observation.forIn_loop ?term ?inv ?hpre ?hstep) ?hgoal
+  apply use_spec_map (Observation.forIn_loop ?term ?inv ?hpre ?hstep) ?hgoal
   case term => sorry
   case inv => exact PredTrans.post fun | ⟨i, x⟩ => x + (List.range' i (4-i) 1).sum = 6
   case hpre => simp_arith
@@ -618,7 +632,7 @@ lemma correctnessOfGreedySpanner {n:ℕ }(G : FinSimpleGraph n)(t :ℕ ) (u v : 
     simp
     exact (Idd.observe_post (p := fun r => SimpleGraph.dist r u v ≤ 2*t-1)).mp <| by
       vc_gen
-      apply use_spec (Observation.forIn_list ?inv ?hpre ?hstep) ?hgoal
+      apply use_spec_map (Observation.forIn_list ?inv ?hpre ?hstep) ?hgoal
       case inv => exact fun xs => PredTrans.post fun f_H => ∀ i j, f_H i j → 2*t-1 < dist f_H s(i,j)
       case hpre => simp
       case hstep => vc_gen; intro e es; left; sorry
@@ -656,7 +670,7 @@ theorem fib_correct {n} : fib_impl n = fib_spec n := by
   vc_spec_Idd fib_impl (· = fib_spec n)
   if h : n = 0 then vc_gen[h,fib_spec] else ?_
   vc_gen [h,fib_spec]
-  apply use_spec (Observation.forIn_range ?inv ?hpre ?hstep)
+  apply use_spec_map (Observation.forIn_range ?inv ?hpre ?hstep)
   case inv => exact fun xs => PredTrans.post fun
     | ⟨a, b⟩ => let i := n - xs.length; xs.length < n ∧ a = fib_spec (i-1) ∧ b = fib_spec i
   case hpre => simp_arith [Nat.succ_le_of_lt, Nat.zero_lt_of_ne_zero h, Nat.sub_sub_eq_min]

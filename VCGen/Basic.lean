@@ -57,9 +57,8 @@ end Elab
 section Rules
 
 -- attribute [simp ←] LawfulMonad.bind_pure_comp
-attribute [vc_gen ←] LawfulMonad.bind_pure_comp LawfulMonad.bind_map
--- attribute [vc_gen ←] Id.map_eq Id.bind_eq Id.pure_eq -- cyclic...
-attribute [vc_gen] pure_bind bind_assoc bind_pure
+-- attribute [vc_gen ←] Id.map_eq Id.bind_eq Id.pure_eq -- cyclic... Just use `Idd`
+attribute [vc_gen] map_pure pure_bind bind_assoc bind_pure bind_pure_comp
 
 end Rules
 
