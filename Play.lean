@@ -19,21 +19,14 @@ def StateT.le [base : ∀{α}, LE (w α)] : StateT σ w α → StateT σ w α �
   fun x y => ∀s, x.run s ≤ y.run s
 instance [base : ∀{α}, LE (w α)] : LE (StateT σ w α) := ⟨StateT.le⟩
 instance [base : ∀{α}, Preorder (w α)] : Preorder (StateT σ w α) where
-  __ := inferInstanceAs (LE (StateT σ w α))
   le_refl := fun x => fun s => le_refl (x.run s)
   le_trans := fun x y z hxy hyz => fun s => (hxy s).trans (hyz s)
 instance [base : ∀{α}, PartialOrder (w α)] : PartialOrder (StateT σ w α) where
-  __ := inferInstanceAs (Preorder (StateT σ w α))
   le_antisymm := fun _ _ hxy hyx => funext fun s => (hxy s).antisymm (hyx s)
-instance [base : ∀{α}, SemilatticeSup (w α)] : SemilatticeSup (StateT σ w α) where
-  __ := inferInstanceAs (PartialOrder (StateT σ w α))
-instance [base : ∀{α}, SemilatticeInf (w α)] : SemilatticeInf (StateT σ w α) where
-  __ := inferInstanceAs (PartialOrder (StateT σ w α))
-instance [base : ∀{α}, Lattice (w α)] : Lattice (StateT σ w α) where
-  __ := inferInstanceAs (SemilatticeSup (StateT σ w α))
-  __ := inferInstanceAs (SemilatticeInf (StateT σ w α))
-instance [base : ∀{α}, CompleteLattice (w α)] : CompleteLattice (StateT σ w α) where
-  __ := inferInstanceAs (Lattice (StateT σ w α))
+-- instance [base : ∀{α}, SemilatticeSup (w α)] : SemilatticeSup (StateT σ w α) where
+-- instance [base : ∀{α}, SemilatticeInf (w α)] : SemilatticeInf (StateT σ w α) where
+-- instance [base : ∀{α}, Lattice (w α)] : Lattice (StateT σ w α) where
+-- instance [base : ∀{α}, CompleteLattice (w α)] : CompleteLattice (StateT σ w α) where
 
 end StateT
 
@@ -213,178 +206,6 @@ theorem PredTrans.post_bind_pure {f : α → β} : (do let a ← PredTrans.post 
 
 end PredTrans
 
-section Subst
-/-- Backward predicate transformer derived from a substitution property of monads.
-A generic effect observation that can be used to observe all monads.
-It is oblivious to any computations that happened before it, so `Subst.bind` loses information
-for non-pure monads.
-It is a suitable choice for the base layer of a specification monad stack if
-the observation does the right thing for your use case; see the equivalence lemmas such as
-`Obs_Id_eq`.
-More sophisticated observations can be built on top of `Subst` by wrapping suitable monad transformers such
-as `StateT` or `ExceptT`.
--/
-def Subst {m : Type u → Type v} {α} [Monad m] (x : m α) : PredTrans α :=
-  ⟨fun p => ∀ {β} {f g : α → m β}, (∀ a, p a → f a = g a) → x >>= f = x >>= g, sorry⟩
-
-notation "Subst⟦" x "⟧" => Subtype.val (Subst x)
-
-theorem Subst.pure [Monad m] [LawfulMonad m]
-    (h : p a) : Subst⟦pure (f:=m) a⟧ p := by
-  simp_all only [Subst, pure_bind, implies_true]
-
---set_option pp.all true in
---theorem repro {m : Type u → Type v} {p : α × σ → Prop} [Monad m] [LawfulMonad m] (hp : p (a, s)) :
---  (do Subst (m := StateT σ m) (set s); Subst (m := StateT σ m) (Pure.pure (a, s))) p
---  = Subst (m := StateT σ m) (set s) (fun _ => True)
---  := by
---    replace hp : Subst (m := StateT σ m) (Pure.pure (a, s)) p := (Subst.pure hp)
---    set_option trace.Tactic.rewrites true in
---    conv => lhs; arg 1; intro; rw [eq_true @hp]
-
-theorem Subst.bind [Monad m] [LawfulMonad m] {f : α → m β}
-    (hx : Subst⟦x⟧ (fun a => Subst⟦f a⟧ q)) :
-    Subst⟦x >>= f⟧ q := by
-  intros γ f g hfg
-  simp only [bind_assoc]
-  exact hx fun a hq => hq hfg
-
-theorem Subst.subst [Monad m] [LawfulMonad m] {x : m α}
-  (hp : Subst⟦x⟧ p) (hf : ∀ a, p a → f a = g a) : x >>= f = x >>= g := hp hf
-
-theorem Subst.subst_pre [Monad m] [LawfulMonad m] {x : m α} (hp : Subst⟦x⟧ (fun r => f r = g r)) :
-  x >>= f = x >>= g := by apply hp; simp
-
-theorem Subst.conj [Monad m] [LawfulMonad m] {x : m α}
-    (hp : Subst⟦x⟧ p) (hq : Subst⟦x⟧ q) : Subst⟦x⟧ (fun r => p r ∧ q r) := by
-  intros β f g hfg
-  open Classical in
-  calc x >>= f
-    _ = x >>= (fun r => if p r ∧ q r then f r else f r) := by simp
-    _ = x >>= (fun r => if p r ∧ q r then g r else f r) := by simp +contextual [hfg]
-    _ = x >>= (fun r => if q r then g r else f r) := hp (by simp +contextual)
-    _ = x >>= g := hq (by simp +contextual)
-
-#check Classical.forall_or_exists_not
-theorem Subst.inf_conj [Monad m] [LawfulMonad m] {x : m α} {ps : Set (α → Prop)}
-    (hp : ∀ p ∈ ps, Subst⟦x⟧ p) : Subst⟦x⟧ (fun r => ∀p ∈ ps, p r) := by
-  intros β f g hfg
-  replace hp : sInf { Subst⟦x⟧ p | p ∈ ps } := by simp_all only [eq_iff_iff, sInf_Prop_eq,
-    Set.mem_setOf_eq, forall_exists_index, and_imp, true_iff, implies_true]
-  #check sInf_eq_of_forall_ge_of_forall_gt_exists_lt
-  open Classical in
-      calc x >>= f
-    _ = x >>= (fun r => if ∀ p ∈ ps, p r then f r else f r) := by simp
-    _ = x >>= (fun r => if ∀ p ∈ ps, p r then g r else f r) := by simp +contextual [hfg]
---    _ = x >>= (fun r => if ∀ p ∈ ps, p r then g r else g r) := hp _ _ (by simp +contextual [hfg])
-  conv => lhs; arg 2; ext r; tactic =>
-    match Classical.forall_or_exists_not (fun p => p ∈ ps → p r) with
-    | .inl h => simp[hfg r h]; sorry
-    | .inr ⟨p, hps⟩ =>
-      have : p ∈ ps ∧ ¬ (p r) := Classical.not_imp.mp hps
-      exact hp p this.1 (by simp +contextual)
-      sorry
-
-theorem Subst.split_unit {m : Type u → Type v} [Monad m] {x : m PUnit} (hp : p) :
-  Subst⟦x⟧ (fun _ => p) := fun hfg =>
-    funext (fun u => hfg u hp) ▸ rfl
-
-def KimsSubst {m : Type u → Type v} {α} [Functor m] (p : α → Prop) (x : m α) : Prop :=
-  (fun r => (r, p r)) <$> x = (fun r => (r, True)) <$> x
-
-def KimsObs_of_Subst {m : Type u → Type v} {α} [Monad m] [LawfulMonad m] (p : α → Prop) (x : m α)
-  (h : Subst⟦x⟧ p) : KimsSubst p x := by
-  unfold KimsSubst
-  simp [← LawfulMonad.bind_pure_comp]
-  apply h
-  intros
-  simp [*]
-
-@[simp]
-theorem Obs_Id_eq : Subst⟦x⟧ P ↔ P (Id.run x) := by
-  constructor
-  case mp =>
-    intro h
-    replace h := KimsObs_of_Subst P x h
-    simp [KimsSubst] at h
-    injection h
-    simp[*, Id.run]
-  case mpr =>
-    intro h; apply Subst.pure; exact h
-
-theorem Subst.imp [Monad m] [LawfulMonad m] {p : Prop} {f : α → m β} :
-    Subst⟦f a⟧ (fun r => p → q r) ↔ (p → Subst⟦f a⟧ q) := by
-  if hp : p
-  then simp_all
-  else simp_all; intro _ _ _ h; simp[funext (fun a => h a ⟨⟩)]
-
-theorem Subst.mono [Monad m] [LawfulMonad m] {x : m a}
-    (h : Subst⟦x⟧ p) (H : ∀ {a}, p a → q a) : Subst⟦x⟧ q := by
-    intro _ _ _ hfg
-    apply h
-    simp_all only [implies_true]
-
-theorem Subst.split_step [Monad m] [LawfulMonad m] {x : m (ForInStep β)}
-    {done : β → Prop} {yield : β → Prop}
-    (hyield : Subst⟦x⟧ (∀ b', · = .yield b' → yield b'))
-    (hdone :  Subst⟦x⟧ (∀ b', · = .done b'  → done b')) :
-    Subst⟦x⟧ (fun | .yield b' => yield b' | .done b' => done b') := by
-  apply Subst.mono (Subst.conj hyield hdone)
-  rintro a ⟨hyield, hdone⟩
-  split <;> solve_by_elim
-
-theorem Subst.forIn_list
-  [Monad m] [LawfulMonad m]
-  {xs : List α} {init : β} {f : α → β → m (ForInStep β)}
-  (inv : List α → β → Prop)                     -- user-supplied loop invariant
-  (hpre : inv xs init)                          -- pre⟦for {inv} xs init f⟧(p)
-  (hweaken : ∀ b, inv [] b → p b)               -- vc₁: weaken invariant to postcondition after loop exit
-  (hdone : ∀ {hd tl b}, inv (hd::tl) b →        -- vc₂: weaken invariant to precondition of loop body upon loop entry, done case
-          Subst⟦f hd b⟧ (∀ b', · = .done b'  → inv [] b'))
-  (hyield : ∀ {hd tl b}, inv (hd::tl) b →       -- vc₃: weaken invariant to precondition of loop body upon loop entry, yield case
-          Subst⟦f hd b⟧ (∀ b', · = .yield b' → inv tl b')) :
-  Subst⟦forIn xs init f⟧ p := by
-    induction xs generalizing init
-    case nil => simp only [List.forIn_nil]; apply Subst.pure; apply hweaken; exact hpre
-    case cons hd tl h =>
-      simp only [List.forIn_cons]
-      apply Subst.bind
-      have : Subst⟦f hd init⟧ (fun | .yield b' => inv tl b' | .done b' => inv [] b') :=
-        Subst.split_step (hyield hpre) (hdone hpre)
-      apply Subst.mono this
-      intro r hres
-      match r with
-      | .done b => apply Subst.pure; apply hweaken; assumption
-      | .yield b => simp; simp at hres; exact @h b hres
-
-theorem Subst.forIn_range
-  [Monad m] [LawfulMonad m]
-  {xs : Std.Range} {init : β} {f : Nat → β → m (ForInStep β)}
-  (inv : List Nat → β → Prop := fun _ => p)     -- user-supplied loop invariant
-  (hpre : inv (List.range' xs.start xs.size xs.step) init)                          -- pre⟦for {inv} xs init f⟧(p)
-  (hweaken : ∀ b, inv [] b → p b)               -- vc1: weaken invariant to postcondition after loop exit
-  (hdone : ∀ {hd tl b}, inv (hd::tl) b →        -- vc₂: weaken invariant to precondition of loop body upon loop entry, done case
-          Subst⟦f hd b⟧ (∀ b', · = .done b'  → inv [] b'))
-  (hyield : ∀ {hd tl b}, inv (hd::tl) b →       -- vc₃: weaken invariant to precondition of loop body upon loop entry, yield case
-          Subst⟦f hd b⟧ (∀ b', · = .yield b' → inv tl b')) :
-  Subst⟦forIn xs init f⟧ p := by
-    rw [Std.Range.forIn_eq_forIn_range']
-    exact Subst.forIn_list inv hpre hweaken hdone hyield
-
-theorem Subst.forIn_loop
-  [Monad m] [LawfulMonad m]
-  {xs : Loop} {init : β} {f : Unit → β → m (ForInStep β)}
-  (inv : Bool → β → Prop := fun _ => p)     -- user-supplied loop invariant
-  (hpre : inv true init)                          -- pre⟦for {inv} xs init f⟧(p)
-  (hweaken : ∀ b, inv false b → p b)               -- vc1: weaken invariant to postcondition after loop exit
-  (hdone : ∀ {b}, inv true b →        -- vc₂: weaken invariant to precondition of loop body upon loop entry, done case
-          Subst⟦f () b⟧ (∀ b', · = .done b'  → inv false b'))
-  (hyield : ∀ {b}, inv true b →       -- vc₃: weaken invariant to precondition of loop body upon loop entry, yield case
-          Subst⟦f () b⟧ (∀ b', · = .yield b' → inv true b')) :
-  Subst⟦forIn Loop.mk init f⟧ p := sorry
-
-end Subst
-
 section MonadOrdered
 
 class MonadOrdered (w : Type u → Type v) [∀{α},Preorder (w α)] extends Monad w, LawfulMonad w where
@@ -408,10 +229,11 @@ theorem MonadOrdered.bind_mono_sup {w : Type u → Type v} {x y : w α} {f : α 
 
 instance PredTrans.instMonadOrdered : MonadOrdered PredTrans where
   bind_mono := by
-    intros _ _ x y f g hxy hfg --p hxf fixup fallout from Subtype. Want `ext p`; doesn't work
+    intros _ _ x y f g hxy hfg
     simp[Bind.bind,PredTrans.bind] at *
---    apply hxy
---    exact x.property (fun a => (f a).val p) _ (fun a => hfg a p) hxf
+    intro p hyg
+    apply hxy
+    exact y.property _ _ (fun a => hfg a p) hyg
 
 instance StateT.instMonadOrdered [∀{α}, Preorder (w α)] [MonadOrdered w] : MonadOrdered (StateT σ w) where
   bind_mono := by
@@ -438,7 +260,7 @@ attribute [simp] Observation.pure_pure Observation.bind_bind
 abbrev Observation.Spec [Monad m] [∀{α}, Preorder (w α)] [Observation m w] (x : m α) :=
   { wp : w α // Observation.observe x ≤ wp }
 
-class ObservationState (σ : Type u) (m : Type u → Type v) (w : Type u → Type x) [∀{α}, LE (w α)] [Monad m] [MonadStateOf σ m] extends MonadStateOf σ w, Observation m w where
+class ObservationState (σ : Type u) (m : Type u → Type v) (w : Type u → Type x) [∀{α}, Preorder (w α)] [Monad m] [MonadStateOf σ m] extends MonadStateOf σ w, Observation m w where
   get_get : observe MonadState.get = MonadState.get
   set_set : observe (MonadStateOf.set s) = MonadStateOf.set (σ := σ) s
 attribute [vc_gen] ObservationState.get_get ObservationState.set_set
@@ -490,22 +312,52 @@ theorem someProgram_spec : ((StateT.instObservationState.observe someProgram).ru
   unfold someProgram
   vc_gen
 
-def ExceptT.observe [Monad m] [Monad w] [base : Observation m w] (x : ExceptT ε m α) : ExceptT ε w α :=
+def Except.le [LE ε] [LE α] (x : Except ε α) (y : Except ε α) :=
+  match x, y with
+  | Except.error _, Except.ok _ => True
+  | Except.error x, Except.error y => x ≤ y
+  | Except.ok _, Except.error _ => False
+  | Except.ok x, Except.ok y => x ≤ y
+instance Except.instLE [LE ε] [LE α] : LE (Except ε α) where
+  le := Except.le
+instance Except.instPreorder [Preorder ε] [Preorder α] : Preorder (Except ε α) where
+  le_refl := fun x => by cases x <;> simp[LE.le, Except.le]
+  le_trans := fun x y z hxy hyz => by
+    simp[LE.le, Except.le] at hxy hyz
+    cases x <;> cases y <;> cases z <;> simp[LE.le, Except.le, hxy, hyz]
+    simp_all
+    · exact le_trans hxy hyz
+    · simp at *
+    · simp at *
+    · exact le_trans hxy hyz
+
+def ExceptT.le [∀{α}, LE (w α)] (a b : ExceptT ε w α) :=
+  ExceptT.run a ≤ ExceptT.run b
+instance ExceptT.instLE [∀{α}, Preorder (w α)] : LE (ExceptT ε w α) where
+  le := ExceptT.le
+instance ExceptT.instPreorder [∀{α}, Preorder (w α)] : Preorder (ExceptT ε w α) where
+  le_refl := fun x => le_refl (ExceptT.run x)
+  le_trans := by intro _ _ _ hxy hyz; simp [LE.le, le] at *; exact le_trans hxy hyz
+
+def ExceptT.observe [Monad m] [Monad w] [∀{α}, Preorder (w α)] [base : Observation m w] (x : ExceptT ε m α) : ExceptT ε w α :=
   ExceptT.mk (base.observe (ExceptT.run x))
-instance ExceptT.instObservation [Monad m] [Monad w] [base : Observation m w] : Observation (ExceptT ε m) (ExceptT ε w) where
+instance ExceptT.instObservation [Monad m] [∀{α}, Preorder (w α)] [base : Observation m w] :
+  Observation (ExceptT ε m) (ExceptT ε w) where
   observe := ExceptT.observe
   pure_pure := base.pure_pure
   bind_bind := by
     intros _ _ x f
-    have h : ExceptT.bindCont (ExceptT.observe ∘ f) = base.observe ∘ (ExceptT.bindCont f) := by
+    have h : ExceptT.bindCont (ExceptT.observe ∘ f) = (base.observe ∘ ExceptT.bindCont f) := by
       ext x
       simp[ExceptT.bindCont,ExceptT.observe]
       split
       · rfl
       · simp only [base.pure_pure]
-    simp[ExceptT.run,Bind.bind,ExceptT.bind,ExceptT.bindCont]
-    simp[h,ExceptT.observe,base.bind_bind]
-    rfl
+    calc (x >>= f).observe
+      _ = mk (base.observe (x.run >>= ExceptT.bindCont f)) := rfl
+      _ = mk (base.observe x.run >>= (base.observe ∘ ExceptT.bindCont f)) := by simp only [base.bind_bind, Function.comp_def]
+      _ = mk (base.observe x.run >>= ExceptT.bindCont (observe ∘ f)) := by rw[h]
+      _ = x.observe >>= (fun a => (f a).observe) := rfl
 
 -- the following *might* be useful, but I haven't been able to apply it yet
 theorem Observation.ForInStep_split {m : Type u → Type v} {w : Type u → Type x} {r : ForInStep β} {y d : β → m ρ}
@@ -834,73 +686,7 @@ https://lean-fro.zulipchat.com/#narrow/channel/398861-general/topic/baby.20steps
 -/
 
 
-theorem Tmp.get {m : Type u → Type v} {w : Type u → Type x}
-    [Monad m] [Monad w] [LawfulMonad w] [∀{α}, Lattice (w α)] [MonadOrdered w] [obs : Observation m w] :
-    Observation.observe get ≤ pure s := sorry
-
-theorem bleh {a : α} {s : σ} : (fun p => p (a, s)) → (do s ← Subst get; Subst (Pure.pure (a, s))) := by
-  intro h
-  simp only [observe]
-  vc_gen
-  assumption
-
-theorem StateT.observe.pure {m : Type u → Type v} {p : α × σ → Prop} [Monad m] [LawfulMonad m]
-  (hp : p (a, s)) : StateT.observe (m:=m) (pure a) s p := by
-  simp only [observe, pure_bind, LawfulMonadState.set_get]
-  vc_gen
-  assumption
-
-theorem StateT.observe.get_pre {m : Type u → Type v} [Monad m] [LawfulMonad m] {p : σ × σ → Prop} (hp : p ⟨s, s⟩) :
-  StateT.observe (m:=m) get s p := by
-  simp only [observe, pure_bind, LawfulMonadState.set_get]
-  vc_gen
-  assumption
-
-theorem StateT.observe.get {m : Type u → Type v} [Monad m] [LawfulMonad m] :
-  StateT.observe (m:=m) get s (· = ⟨s, s⟩) := StateT.observe.get_pre (by rfl)
-
-theorem StateT.observe.set_pre {m : Type u → Type v} [Monad m] [LawfulMonad m] {p : PUnit × σ → Prop} (hp : p ⟨⟨⟩, s₂⟩) :
-  StateT.observe (m:=m) (set s₂) s₁ p := by
-  simp only [observe, pure_bind, Monad.bind_unit]
-  simp only [← LawfulMonad.bind_assoc, LawfulMonadState.set_set]
-  simp only [LawfulMonadState.set_get_pure]
-  simp [-LawfulMonad.bind_pure_comp]
-  vc_gen
-  assumption
-
-theorem StateT.observe.set {m : Type u → Type v} [Monad m] [LawfulMonad m] {s₂ : σ} :
-  StateT.observe (m:=m) (set s₂) s₁ (· = ⟨⟨⟩, s₂⟩) := StateT.observe.set_pre (by rfl)
-
-
 /-
-def fib_spec : Nat → Nat
-| 0 => 0
-| 1 => 1
-| n+2 => fib_spec n + fib_spec (n+1)
-
-theorem fib_spec_rec (h : n > 1) : fib_spec n = fib_spec (n-2) + fib_spec (n-1) := by
-  rw (occs := .pos [1]) [fib_spec.eq_def]
-  split
-  repeat omega
-  --omega
-  simp
-
-def fib_impl (n : Nat) := Id.run do
-  if n = 0 then return 0
-  let mut i := 1
-  let mut a := 0
-  let mut b := 0
-  b := b + 1
-  while@first_loop i < n do
-    let a' := a
-    a := b
-    b := a' + b
-    i := i + 1
-    if n > 15 then return 42
-  return b
-
-theorem blah : let i := 1; ¬(n = 0) → i ≤ n := by intro _ h; have : _ := Nat.succ_le_of_lt (Nat.zero_lt_of_ne_zero h); assumption
-
 theorem fib_correct : fib_impl n = fib_spec n := by
   unfold fib_impl
   split -- if_split n = 0
@@ -982,123 +768,4 @@ def fib_impl_intrinsic (n : Nat) := Id.run do
     b := a' + b
     i := i + 1
   return b
--/
-
-def ex (e₁ e₂ : Id Nat) := Id.run do
-  let x ← e₁
-  let y ← e₂
-  pure (x + y)
-
-
-/--
-## Semi-automated verification of monadic programs
-
-Program verification is about
-
-1. Formulating a correctness specification `P` for a program `c`
-2. Verifying that `c` satisfies `P`
-
-In Lean, the programs of interest are written using `do`-notation, desugaring to monadic `pure` and `bind` operators of some user-specified monad `M`.
-
-It is tedious to reason about large `do` blocks, because the specification `P` is a postcondition of the program (e.g., for `c = fib_imp 3, P r := r = 8` TODO work out example), while `do`-blocks are fundamentally associated “to-the-right” (forwardly). Furthermore, backward proofs aren’t easily possible because `bind` introduces new binders that are hard to get a handle on without specialised lemmas.
-
-Backward predicate transformer semantics are the standard answer to solving this problem.
-
-### Predicate transformer semantics
-
-Given a postcondition `P : α → Prop` on the result of a program `c : M α`, a *predicate transformer* for `c` is a function `w : (α → Prop) → Prop` such that `w(P)` is a precondition for `c` that ensures `P` "holds on the result of `c`".
-(It is an open question whether there is a way to precisely express this property independently of `M`).
-For every program, there exists a *weakest* precondition transformer `W` such that every other precondition transformer `w` satisfies `w(P) → W(P)`.
-While computing weakest preconditions is impossible for programs involving loops, it is quite mechanical for other every other feature of `do`-blocks, and this is what we propose to automate.
-
----
-
-Let us write `⟦c⟧(P) : Prop` to say “`c : M α` satisfies postcondition `P : α → Prop`", and let there exist a way to prove `P(c)` from `⟦c⟧(P)`. Then:
-
-- `⟦pure e⟧(P)` iff `P e`
-- `⟦bind x f⟧(P)`  iff `⟦x⟧(fun a => ⟦f a⟧(P))`
-
-Applying the valuation `⟦·⟧` manually over the whole `do` block results in a deep nest of proof obligations that is again difficult to visualise and to reason about.
-Fortunately, the predicate transformers in the range of the valuation again form a monad, namely the continuation monad `Cont Prop`!
-We call `Cont Prop` the *specification monad*, and `M` the *computation monad*.
-We may now write
-- `⟦pure e⟧(P)` as `(pure e)(P)` (NB: the latter is in `Cont Prop`)
-- `⟦bind x f⟧(P)` as `bind ⟦x⟧ ⟦f⟧(P)`
-Thus, `⟦·⟧ : ∀{α}, M α → Cont Prop` is a monad morphism, since it maps `pure` to `pure` and `bind` to `bind`, pushing the valuation ever inward.
-On a longer `do` block, we get
-```
-  ⟦do let x ← e₁; let y ← e₂; pure (x + y)⟧(P)
-= (do x ← ⟦e₁⟧; y ← ⟦e₂⟧; pure (x + y))(P)
-= (do x ← ⟦e₁⟧; y ← ⟦e₂⟧; pure (x + y)(P))
-= (do x ← ⟦e₁⟧; y ← ⟦e₂⟧; P (x + y))
-```
-Which by itself has not achieved *much*, because we are lacking valid predicate transformers for `e₁` and `e₂` to make the binds compute.
-This poses a couple of challenges:
-
-- **Challenge 1**: These predicate transformers have to be computed by the user, and we have to provide a way to register them, akin to simp lemmas.
-                   Then a simp-like tactic should apply them, generating small verification conditions in turn.
-- **Challenge 2**: Can some of these specs be reused, so that the user doesn't to prove them for, e.g., `get` and `set`?
-                   Similarly for `foldlM` and `forIn`. This will require a type class algebra in which we can express pre and postconditions.
-- **Challenge 3**: We need to be able to add assertions (to aid `grind`) and invariants (for `forIn`) to this setup, with good syntax.
-                   This will likely require a way to "navigate" the control flow graph/basic blocks.
-                   Alternatively, require that these assertions are provided inline.
-
-An independent set of challenges arises because there is not a single `⟦·⟧` that serves all use cases.
-It may be necessary to generalize the entire framework over the choice over the observation `⟦·⟧`, giving rise to "monadic program logic".
-
-### Monadic program logic
-
-There is no single viable implementation of `⟦·⟧`.
-To see that, consider first that `Cont Prop` is not the only viable specification monad.
-For example,
-- When the computation monad is a state monad, the specification monad should have access to the state as well.
-- When the computation monad is an exception monad, the specification monad should have access to the exception as well.
-
-Neither is there just a single viable implementation of `⟦·⟧`.
-- When the computation monad is non-deterministic, `⟦·⟧` can be chosen to have an angelic (∃ x, P x) or demonic (∀ x, P x) interpretation of the postcondition.
-- When the computation monad is `IO`, it is unclear what is the best implementation. Do we only care about input/output, or do we want a separation logic for reasoning about ref cells?
-
-Given that each application comes with its own monad stack, it is hard to anticipate every possible observation.
-Therefore we should make it as frictionless as possible for users to plug together their own bespoke observations from a toolbox of building blocks.
-This calls for a type class-based approach. Let's call this type class `Observation`.
-
-**Challenge 4**: Which operations should be part of this type class?
-
-This is quite tricky to get right. The type class algebra must be expressive enough to prove monad-polymorphic lemmas.
-
-Here is an example about `forIn`.
-I managed to prove the following lemma about `forIn` for a specific specification monad `Subst`:
-```
-theorem Subst.forIn_list
-  [Monad m] [LawfulMonad m]
-  {xs : List α} {init : β} {f : α → β → m (ForInStep β)}
-  (inv : List α → β → Prop)                     -- user-supplied loop invariant
-  (hpre : inv xs init)                          -- pre⟦for {inv} xs init f⟧(p)
-  (hweaken : ∀ b, inv [] b → p b)               -- vc₁: weaken invariant to postcondition after loop exit
-  (hdone : ∀ {hd tl b}, inv (hd::tl) b →        -- vc₂: weaken invariant to precondition of loop body upon loop entry, done case
-          Subst⟦f hd b⟧ (∀ b', · = .done b'  → inv [] b'))
-  (hyield : ∀ {hd tl b}, inv (hd::tl) b →       -- vc₃: weaken invariant to precondition of loop body upon loop entry, yield case
-          Subst⟦f hd b⟧ (∀ b', · = .yield b' → inv tl b')) :
-  Subst⟦forIn xs init f⟧ p := ...
-```
-This is a nice lemma because it corresponds to the classic precondition transformer for while loops.
-
-**Challenge 4.1**: How would we generalize this lemma beyond `Subst : Cont Prop`? This will influence the type class algebra.
-
-I think we will need a notion of `∀` (infinite conjunction) in addition to implication (modelled by `≤`).
-We could then register the `Observation`-generalized version of `Subst.forIn_list` above as the specification of `forIn`.
-Other monad-polymorphic functions should get similar treatment, and similarly lead to requirements on the design of `Observation`.
-
-Once the design is final, all that remains is to tweak the simp-like tactic; what remains should be pure verification conditions.
-
-### Discharging verification conditions
-
-... should be possible by a simple call to `simp_all` or `grind`.
-We should try very hard to make this as convenient and *fast* as possible.
-Verus is an excellent example in this regard; they have taken great lengths to generate verification conditions that the SMT solver is fast to discharge.
-The user must help the SMT solver by providing assertions with the right trigger expressions for the SMT solver to instantiate formulas.
-
-Furthermore, Verus integrates a couple of even faster and automated verifiers, such as ones based on ERP (effectively propositional logic), non-linear arithmetic solvers, bit blasters, etc.
-
-In addition to that, Verus integrates a nice transition system centric model for verifying concurrent systems based on ghost resources (but without exposing the user to linear logic).
 -/
