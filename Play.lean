@@ -201,6 +201,10 @@ theorem PredTrans.post_bind_pure {f : α → β} : f <$> PredTrans.post p = Pred
     intro h b ⟨a, hfa, hp⟩
     exact hfa ▸ h a hp
 
+theorem PredTrans.bind_post {f : α → PredTrans β} {goal : PredTrans β}
+  (hgoal : ∀ a, p a → f a ≤ goal) : PredTrans.post p >>= f ≤ goal :=
+  fun q hq a hp => hgoal a hp q hq
+
 end PredTrans
 
 section MonadOrdered
@@ -385,18 +389,23 @@ theorem Observation.forIn_list {α β} {m : Type u → Type v} {w : Type u → T
         apply LE.le.trans (MonadOrdered.bind_mono hstep (by rfl))
         simp only [bind_map_left, le_refl, prog]
 
-theorem Observation.forIn_list_no_break {α β} {m : Type u → Type v} {w : Type u → Type x}
+theorem Observation.foldlM_list {α β} {m : Type u → Type v} {w : Type u → Type x}
   [Monad m] [LawfulMonad m] [∀{α}, Preorder (w α)] [obs : Observation m w]
-  {xs : List α} {init : β} {f : α → β → m β}
+  {xs : List α} {init : β} {f : β → α → m β}
   (inv : List α → w β)
   (hpre : pure init ≤ inv xs)
   (hstep : ∀ hd tl,
-      (inv (hd :: tl) >>= fun b => obs.observe (f hd b)) ≤ inv tl) :
-    obs.observe (forIn xs init (fun a b => do let r ← f a b; pure (.yield r))) ≤ inv [] :=
-  Observation.forIn_list inv hpre <| by
-    intro hd tl
-    left
-    simp only [← bind_pure_comp, bind_bind, pure_pure, ← bind_assoc, MonadOrdered.bind_mono (hstep hd tl) (by rfl)]
+      (inv (hd :: tl) >>= fun b => obs.observe (f b hd)) ≤ inv tl) :
+    obs.observe (xs.foldlM f init) ≤ inv [] := by
+  have : xs.foldlM f init = forIn xs init (fun a b => .yield <$> f b a) := by
+    simp only [List.forIn_yield_eq_foldlM, id_map']
+  rw[this]
+  apply Observation.forIn_list inv hpre
+  intro hd tl
+  left
+  have : .yield <$> (inv (hd :: tl) >>= fun b => obs.observe (f b hd)) ≤ ForInStep.yield <$> inv tl := MonadOrdered.map_mono (hstep hd tl)
+  simp only [map_bind] at this
+  simp only [map_map, this]
 
 theorem Observation.forIn_range {β} {m : Type u → Type v} {w : Type u → Type x}
   [Monad m] [∀{α}, Preorder (w α)] [obs : Observation m w]
@@ -536,45 +545,14 @@ theorem EStateM.pure_inj [inh : Inhabited σ] : pure (f := EStateM ε σ) x = pu
 axiom IO.pure_inj {α} {x y : α} : pure (f := IO) x = pure y ↔ x = y -- just as for EStateM, but unsafe. Yet very reasonable; part of the TCB
 
 axiom IO.observe {α} (x : IO α) : PredTrans α
-axiom IO.observe_pure {α} (x : α) : IO.observe (pure x) = pure x
+axiom IO.observe_pure {α} {x : α} : IO.observe (pure x) = pure x
 axiom IO.observe_bind {α β} (x : IO α) (f : α → IO β) : IO.observe (x >>= f) = IO.observe x >>= fun a => IO.observe (f a)
 
-instance IO.instObservation : Observation IO PredTrans where
-  observe := Subst
-  pure_pure := by
-    intro _ x
-    ext p
-    simp only [Subst, pure_bind]
-    constructor
-    · intro h
-      simp only [Pure.pure, PredTrans.pure]
-      open Classical in
-      have h2 : pure x >>= (fun a => pure True) = pure x >>= (fun a => if p a then pure True else pure False) :=
-        calc  pure x >>= (fun a => pure True)
-          _ = pure x >>= (fun a => if p a then pure True else pure True) := by conv => rhs; arg 2; intro a; apply ite_self -- why doesn't simp work here???
-          _ = pure x >>= (fun a => if p a then pure True else pure False) := h <| by intro a hp; simp[Pure.pure, hp]
-      by_contra hnp
-      simp[hnp] at h2
-    · intro hp
-      intro _ _ _ hfg
-      simp only [hfg x hp]
-  bind_bind := by
-    intro α β x f
-    ext p
-    simp
-    -- have pp x a := ∀ {γ} {g h : β → IO γ}, (∀ a, p a → g a = h a) → f a >>= g = f a >>= h
-    -- have qq x a := ∀ {β} {f₁ f₂ : α → IO β}, (∀ a, pp (f a) → f₁ a = f₂ a) → x >>= f₁ = x >>= f₂
-    constructor
-    · intro h _ g h hfg
-    have h :=
-      calc (Subst x >>= (fun a => Subst (f a))).val p
-        _ = (Subst x).val (fun a => (Subst (f a)).val p) := by rfl
-        _ = ∀ {β} {f₁ f₂ : α → IO β}, (∀ a, (Subst (f a)).val p → f₁ a = f₂ a) → x >>= f₁ = x >>= f₂ := by rfl
-        _ = (Q x (fun a => P (f a))) := by rfl
-        _ = (Q x (fun a => P (f a))) := by rfl
-        _ = P (x >>= f) := by rfl
-        _ = (Subst (x >>= f)).val p := by rfl
-    simp only [h]
+noncomputable instance IO.instObservation : Observation IO PredTrans where
+  observe := IO.observe
+  pure_pure := IO.observe_pure
+  bind_bind := IO.observe_bind
+
 end IO
 
 gen_injective_theorems% ForInStep
@@ -636,6 +614,9 @@ theorem use_spec_map {w : Type u → Type x} {f : α → β} {x y : w α} {goal 
 --  (hrw : x ≤ y) (hgoal : f <*> y ≤ goal) : f <*> x ≤ goal :=
 --  le_trans (MonadOrdered.seq_mono (by rfl) hrw) hgoal
 
+macro (name := vc_spec_Idd) "vc_spec_Idd " post:term : tactic =>
+  `(tactic|(apply (Idd.observe_post (p := $post)).mp; simp))
+
 theorem test_3 : Observation.observe (do let mut x := 0; for i in [1:5] do { x := x + i }; pure (f := Idd) (); return x) ≤ PredTrans.post (· < 30) := by
   simp
   apply le_trans (Observation.forIn_list ?inv ?hpre ?hstep) ?hgoal
@@ -695,17 +676,39 @@ noncomputable def greedySpanner {n:ℕ }(G : FinSimpleGraph n) (t :ℕ ): FinSim
     if (2*t -1) < dist f_H e then f_H := AddEdge f_H e
   return SimpleGraph.fromRel f_H
 
+@[simp]
+theorem ite_extrude_yield {c : Prop} [Decidable c] {x y : α} :
+  (if c then pure (.yield x) else pure (.yield y)) = ForInStep.yield <$> if c then pure x else pure (f := Idd) y := by
+  split <;> simp
+
 lemma correctnessOfGreedySpanner {n:ℕ }(G : FinSimpleGraph n)(t :ℕ ) (u v : Fin n) :
   (greedySpanner G t).dist u v ≤ 2*t-1 := by
-    unfold greedySpanner -- TODO: Extract the unfold+exact step into a tactic
-    simp
-    exact (Idd.observe_post (p := fun r => SimpleGraph.dist r u v ≤ 2*t-1)).mp <| by
+    vc_spec_Idd (fun r => SimpleGraph.dist r u v ≤ 2*t-1)
+    apply use_spec_map (Observation.foldlM_list ?inv ?hpre ?hstep) ?hgoal
+    case inv => exact fun xs => PredTrans.post fun f_H => ∀ i j, f_H i j → 2*t-1 < dist f_H s(i,j)
+    case hpre => simp
+    case hstep =>
+      intro e es
+      apply PredTrans.bind_post; intro f_H hinv
+      if h : 2*t-1 < dist f_H e
+      then
+        simp[h]
+        show ∀ (i j : Fin n), AddEdge f_H e i j → 2 * t - 1 < _root_.dist (AddEdge f_H e) s(i, j)
+        -- domain-specific, pure proof
+        sorry
+      else
+        simp[h]
+        show  ∀ (i j : Fin n), f_H i j → 2 * t - 1 < _root_.dist f_H s(i, j)
+        -- domain-specific, pure proof
+        sorry
+    case hgoal =>
       simp
-      apply use_spec_map (Observation.forIn_list ?inv ?hpre ?hstep) ?hgoal
-      case inv => exact fun xs => PredTrans.post fun f_H => ∀ i j, f_H i j → 2*t-1 < dist f_H s(i,j)
-      case hpre => simp
-      case hstep => simp; intro e; left; sorry
-      case hgoal => sorry
+      show ∀ (x : SimpleGraph (Fin n)) (x_1 : Fin n → Fin n → Prop),
+        fromRel x_1 = x → (∀ (i j : Fin n), x_1 i j → 2 * t - 1 < _root_.dist x_1 s(i, j)) →
+        x.dist u v ≤ 2 * t - 1
+      -- domain-specific, pure proof
+      sorry
+
 end UserStory1
 
 section fib
@@ -730,9 +733,6 @@ theorem fib_spec_rec (h : n > 1) : fib_spec n = fib_spec (n-2) + fib_spec (n-1) 
   split
   repeat omega
   simp
-
-macro (name := vc_spec_Idd) "vc_spec_Idd " post:term : tactic =>
-  `(tactic|(apply (Idd.observe_post (p := $post)).mp; simp))
 
 theorem fib_correct {n} : fib_impl n = fib_spec n := by
   vc_spec_Idd (· = fib_spec n)
@@ -770,8 +770,60 @@ def addRandomEvens (n : Nat) (k : Nat) : IO Nat := do
     r := r + 2 * (← IO.rand 0 37)
   pure r
 
+def program (n : Nat) (k : Nat) : IO Nat := do
+  let r₁ ← addRandomEvens n k
+  let r₂ ← addRandomEvens n k
+  return r₁ + r₂
+
+axiom IO.rand_spec {n : Nat} : Observation.observe (IO.rand 0 n : IO Nat) ≤ PredTrans.post (· < n)
+
 /-- The result has the same parity as the input. -/
-theorem addRandomEvens_spec (n k) : SatisfiesM (fun r => r % 2 = k % 2) (addRandomEvens n k) := by
+theorem addRandomEvens_spec (n k) : Observation.observe (addRandomEvens n k) ≤ PredTrans.post (fun r => r % 2 = k % 2) := by
+  simp only [addRandomEvens, bind_pure_comp, map_pure, List.forIn_yield_eq_foldlM, bind_pure]
+  apply le_trans (Observation.foldlM_list ?inv ?hpre ?hstep) ?hgoal
+  case inv => exact fun xs => PredTrans.post fun r => r % 2 = k % 2
+  case hpre => simp
+  case hstep =>
+    intro hd tl
+    -- (do let b ← PredTrans.post fun r => r % 2 = k % 2
+    --     Observation.observe ((fun c => b + 2 * c) <$> liftM (IO.rand 0 37)))
+    -- ≤ PredTrans.post fun r => r % 2 = k % 2
+    apply PredTrans.bind_post -- accept the spec `PredTrans.post fun r => r % 2 = k % 2` for b
+    intro b hb
+    -- b : Nat
+    -- hb : b % 2 = k % 2
+    -- Observation.observe ((fun c => b + 2 * c) <$> liftM (IO.rand 0 37))
+    -- ≤ PredTrans.post fun r => r % 2 = k % 2
+    simp -- only [Observation.map_map]
+    -- b : Nat
+    -- hb : b % 2 = k % 2
+    -- (fun c => b + 2 * c) <$> Observation.observe (liftM (IO.rand 0 37))
+    -- ≤ PredTrans.post fun r => r % 2 = k % 2
+    apply use_spec_map IO.rand_spec -- apply the spec for IO.rand under <$>
+    -- b : Nat
+    -- hb : b % 2 = k % 2
+    -- (fun c => b + 2 * c) <$> PredTrans.post (· < 37)
+    -- ≤ PredTrans.post fun r => r % 2 = k % 2
+    simp -- only [PredTrans.post_bind_pure, PredTrans.post_mono, forall_exists_index, and_imp]
+    -- b : Nat
+    -- hb : b % 2 = k % 2
+    -- ∀ (x x_1 : ℕ), b + 2 * x_1 = x → x_1 < 37 → x % 2 = k % 2
+    omega
+  simp
+
+/-- Since we're adding even numbers to our number twice, and summing,
+the entire result is even. -/
+theorem program_spec (n k) : Observation.observe (program n k) ≤ PredTrans.post (fun r => r % 2 = 0) := by
+  -- unfold program
+  simp[program] -- only [program, bind_pure_comp, Observation.bind_bind, Observation.map_map]
+  -- apply the spec for addRandomEvens
+  apply use_spec_bind (addRandomEvens_spec n k)
+  apply PredTrans.bind_post; intro r₁ h₁ -- accept the spec; move focus/lens to next instruction and bring in scope the post condition
+  apply use_spec_map (addRandomEvens_spec n k)
+  simp
+  omega
+
+theorem addRandomEvens_spec_old (n k) : SatisfiesM (fun r => r % 2 = k % 2) (addRandomEvens n k) := by
   simp [addRandomEvens]
   apply List.satisfiesM_foldlM
   · rfl
@@ -784,20 +836,15 @@ Add `n` random even numbers to `k`,
 returning the result and a proof it has the same parity as `k`.
 -/
 def addRandomEvens' (n : Nat) (k : Nat) : IO { r : Nat // r % 2 = k % 2 } := do
-  satisfying (addRandomEvens_spec n k)
-
-def program (n : Nat) (k : Nat) : IO Nat := do
-  let r₁ ← addRandomEvens n k
-  let r₂ ← addRandomEvens n k
-  return r₁ + r₂
+  satisfying (addRandomEvens_spec_old n k)
 
 /-- Since we're adding even numbers to our number twice, and summing,
 the entire result is even. -/
-theorem program_spec (n k) : SatisfiesM (fun r => r % 2 = 0) (program n k) := by
+theorem program_spec_old (n k) : SatisfiesM (fun r => r % 2 = 0) (program n k) := by
   -- unfold program
   rw [program]
   -- apply the spec for addRandomEvens
-  obtain ⟨r₁, h₁⟩ := addRandomEvens_spec n k
+  obtain ⟨r₁, h₁⟩ := addRandomEvens_spec_old n k
   simp [← h₁]
   -- now deal with `SatisfiesM`, fairly mechanically
   apply SatisfiesM.bind_pre
