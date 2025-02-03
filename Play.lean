@@ -489,9 +489,92 @@ end Idd
 
 section IO
 
-instance IO.instObservation : Observation IO PredTrans where
-  observe := fun
+/-- Backward predicate transformer derived from a substitution property of monads.
+A generic effect observation that can be used to observe many monads.
+It is a suitable choice for the opaque base layer of a specification monad stack, such as for `IO`.
+-/
+def Subst {m : Type u → Type v} {α} [Monad m] (x : m α) : PredTrans α :=
+  ⟨fun p => ∀ {β} {f g : α → m β}, (∀ a, p a → f a = g a) → x >>= f = x >>= g, fun _ _ hpq hsubst _ _ _ hfg => hsubst fun a hp => hfg a (hpq a hp)⟩
+-- urgh, cannot prove this direction of bind_bind: Subst (x >>= f) ≤ Subst x >>= fun a => Subst (f a)
+-- Specifically,
+-- α β : Type
+-- x : IO α
+-- f : α → IO β
+-- p : β → Prop
+-- h✝ : ↑(Subst (x >>= f)) p
+-- β✝ : Type
+-- g h : α → IO β✝
+-- hgh : ∀ (a : α), ↑(Subst (f a)) p → g a = h a
+-- ⊢ x >>= g = x >>= h
+-- It appears we need to derive from hgh that g and h factor over f.
 
+theorem Subst.conj [Monad m] [LawfulMonad m] {x : m α}
+    (hp : (Subst x).val p) (hq : (Subst x).val q) : (Subst x).val (fun r => p r ∧ q r) := by
+  intros β f g hfg
+  open Classical in
+  calc x >>= f
+    _ = x >>= (fun r => if p r ∧ q r then f r else f r) := by simp
+    _ = x >>= (fun r => if p r ∧ q r then g r else f r) := by simp +contextual [hfg]
+    _ = x >>= (fun r => if q r then g r else f r) := hp (by simp +contextual)
+    _ = x >>= g := hq (by simp +contextual)
+
+theorem Subst.subst [Monad m] [LawfulMonad m] {x : m α}
+  (hk : ∀ {β} {f g : α → m β}, (∀ a, p a → f a = g a))
+  (hsub : Subst x ≤ PredTrans.post p) :
+  x >>= f = x >>= g :=
+  hsub p (le_refl _) hk
+
+@[simp]
+theorem EStateM.pure_inj [inh : Inhabited σ] : pure (f := EStateM ε σ) x = pure y ↔ x = y := by
+  constructor
+  case mp =>
+    intro h
+    injection congrArg (·.run inh.default) h
+  case mpr => intro h; simp[h]
+
+@[simp]
+axiom IO.pure_inj {α} {x y : α} : pure (f := IO) x = pure y ↔ x = y -- just as for EStateM, but unsafe. Yet very reasonable; part of the TCB
+
+axiom IO.observe {α} (x : IO α) : PredTrans α
+axiom IO.observe_pure {α} (x : α) : IO.observe (pure x) = pure x
+axiom IO.observe_bind {α β} (x : IO α) (f : α → IO β) : IO.observe (x >>= f) = IO.observe x >>= fun a => IO.observe (f a)
+
+instance IO.instObservation : Observation IO PredTrans where
+  observe := Subst
+  pure_pure := by
+    intro _ x
+    ext p
+    simp only [Subst, pure_bind]
+    constructor
+    · intro h
+      simp only [Pure.pure, PredTrans.pure]
+      open Classical in
+      have h2 : pure x >>= (fun a => pure True) = pure x >>= (fun a => if p a then pure True else pure False) :=
+        calc  pure x >>= (fun a => pure True)
+          _ = pure x >>= (fun a => if p a then pure True else pure True) := by conv => rhs; arg 2; intro a; apply ite_self -- why doesn't simp work here???
+          _ = pure x >>= (fun a => if p a then pure True else pure False) := h <| by intro a hp; simp[Pure.pure, hp]
+      by_contra hnp
+      simp[hnp] at h2
+    · intro hp
+      intro _ _ _ hfg
+      simp only [hfg x hp]
+  bind_bind := by
+    intro α β x f
+    ext p
+    simp
+    -- have pp x a := ∀ {γ} {g h : β → IO γ}, (∀ a, p a → g a = h a) → f a >>= g = f a >>= h
+    -- have qq x a := ∀ {β} {f₁ f₂ : α → IO β}, (∀ a, pp (f a) → f₁ a = f₂ a) → x >>= f₁ = x >>= f₂
+    constructor
+    · intro h _ g h hfg
+    have h :=
+      calc (Subst x >>= (fun a => Subst (f a))).val p
+        _ = (Subst x).val (fun a => (Subst (f a)).val p) := by rfl
+        _ = ∀ {β} {f₁ f₂ : α → IO β}, (∀ a, (Subst (f a)).val p → f₁ a = f₂ a) → x >>= f₁ = x >>= f₂ := by rfl
+        _ = (Q x (fun a => P (f a))) := by rfl
+        _ = (Q x (fun a => P (f a))) := by rfl
+        _ = P (x >>= f) := by rfl
+        _ = (Subst (x >>= f)).val p := by rfl
+    simp only [h]
 end IO
 
 gen_injective_theorems% ForInStep
