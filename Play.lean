@@ -225,26 +225,125 @@ end PredTrans
 def Loc : Type := Nat
 instance : DecidableEq Loc := instDecidableEqNat
 
-def Heap (Γ : Loc → Type u) := AList Γ
+def AList.lookupDefault {α : Type u} [DecidableEq α] (xs : AList (fun (_ : α) => Type v)) (a : Type v) (l : α) : Type v :=
+  match xs.lookup l with
+  | some b => b
+  | none => a
 
-def Heap.dom (μ : Heap Γ) := AList.keys μ
+def HeapCtxt.{u} := Loc → Option (Type u)
 
-instance : EmptyCollection (Heap Γ) := AList.instEmptyCollection
-def Heap.empty : Heap Γ := ∅
-instance : Inhabited (Heap Γ) := AList.instInhabited
-instance : Membership Loc (Heap Γ) := AList.instMembership
-def Heap.mem : Heap Γ → Loc → Prop := AList.instMembership.mem
+def HeapCtxt.le (a b : HeapCtxt) :=
+  ∀ l α, a l = some α → b l = some α
 
-def Heap.Disjoint : Heap Γ → Heap Γ → Prop := AList.Disjoint
+instance HeapCtxt.instLE : LE HeapCtxt := ⟨HeapCtxt.le⟩
 
-instance : Union (Heap Γ) := AList.instUnion
-def Heap.union (μ₁ μ₂ : Heap Γ) := μ₁ ∪ μ₂
+def HeapCtxt.le_iff_or {a b : HeapCtxt} : a ≤ b ↔ ∀ l, a l = b l ∨ a l = none := by
+  constructor
+  · intro h l
+    cases ha : a l
+    · simp
+    · simp[h l _ ha]
+  · intro h l α ha
+    cases h l <;> simp_all
+
+instance HeapCtxt.instPreorder : Preorder HeapCtxt where
+  le_refl := by simp only [LE.le, le, imp_self, implies_true]
+  le_trans := by intro a b c hab hbc l; simp_all[hab l, hbc l]
+
+instance HeapCtxt.instPartialOrder : PartialOrder HeapCtxt where
+  le_antisymm := by
+    simp only [HeapCtxt.le_iff_or]
+    intro a b hab hba
+    funext l
+    cases hab l <;> cases hba l <;> simp_all
+
+def HeapCtxt.withDefault {Γ : HeapCtxt} (α : Type u) (l : Loc) : Type u :=
+  match Γ l with
+  | some α => α
+  | none => α
+
+theorem HeapCtxt.withDefault_some {Γ : HeapCtxt} (h : Γ l = some α) : Γ.withDefault PEmpty l = α := by
+  simp[HeapCtxt.withDefault]
+  cases hΓ : Γ l <;> simp_all
+
+def Heap.Pre (Γ : HeapCtxt) := ∀ Γ', Γ ≤ Γ' → AList (Γ'.withDefault PEmpty)
+
+private def Heap.Pre.lookup {Γ : HeapCtxt} (m : AList (Γ.withDefault PEmpty)) (l : Loc) (h : Γ l = some α) : Option α :=
+  HeapCtxt.withDefault_some h ▸ m.lookup l
+
+def Heap.Mono (μ : Heap.Pre Γ) :=
+  ∀ Γ' (h : Γ ≤ Γ') (l : Loc) α (ha : Γ l = some α) (a : α),
+  Heap.Pre.lookup (μ Γ (le_refl _)) l ha = some a  →
+  Heap.Pre.lookup (μ Γ' h) l (h l _ ha) = some a
+
+structure Heap (Γ : HeapCtxt) where
+  maps : Heap.Pre Γ
+  mono : Heap.Mono maps
+
+--theorem AList.lookupDefault_good {Γ : HeapCtxt} :
+--  ∀ l ∈ Γ, AList.lookupDefault Γ a l = Γ.lookup l := by
+--  simp[AList.lookupDefault]
+--  intro l hl
+--  cases h : Γ.lookup l
+--  · have := AList.lookup_eq_none.mp h
+--    contradiction
+--  · simp
+
+def Heap.dom (μ : Heap Γ) := (μ.maps Γ (refl _)).keys
+
+def Heap.entries (μ : Heap Γ) := (μ.maps Γ (refl _)).entries
+
+def Heap.lookup (μ : Heap Γ) (l : Loc) (h : Γ l = some α) : Option α :=
+  Heap.Pre.lookup (μ.maps Γ (refl _)) l h
+
+theorem Option.cast_none {α β : Type u} (h : α = β) : h ▸ (none : Option α) = (none : Option β) := by
+  cases h
+  rfl
+
+theorem Option.cast_none_ne_some (h : α = β) : h ▸ (none : Option α) = some x → False := by
+  simp[Option.cast_none]
+
+def Heap.empty : Heap Γ :=
+  { maps := fun _ _ => ∅,
+    mono := fun _ _ _ _ _ _ => by
+      simp[Heap.Pre.lookup]
+      intro h
+      replace h := Option.cast_none_ne_some _ h
+      contradiction
+  }
+
+instance : EmptyCollection (Heap Γ) where
+  emptyCollection := Heap.empty
+
+instance : Inhabited (Heap Γ) where
+  default := Heap.empty
+
+def Heap.mem : Heap Γ → Loc → Prop :=
+  fun μ l => l ∈ μ.dom
+
+instance : Membership Loc (Heap Γ) where
+  mem := Heap.mem
+
+def Heap.Disjoint : Heap Γ → Heap Γ → Prop :=
+  fun μ₁ μ₂ => ∀ l, l ∈ μ₁.dom → l ∉ μ₂.dom
+
+def Heap.union : Heap Γ → Heap Γ → Heap Γ :=
+  fun μ₁ μ₂ Γ' hΓ' => μ₁ Γ' hΓ' ∪ μ₂ Γ' hΓ'
+
+instance : Union (Heap Γ) where
+  union := Heap.union
 
 @[simp]
-theorem Heap.empty_union : Heap.empty ∪ μ = μ := AList.empty_union
+theorem Heap.empty_union : Heap.empty ∪ μ = μ := by
+  funext Γ' hΓ'
+  simp only [Union.union, union, empty]
+  exact AList.empty_union
 
 @[simp]
-theorem Heap.union_empty : μ ∪ Heap.empty = μ := AList.union_empty
+theorem Heap.union_empty : μ ∪ Heap.empty = μ := by
+  funext Γ' hΓ'
+  simp only [Union.union, union, empty]
+  exact AList.union_empty
 
 def Heap.le (μ₁ μ₂ : Heap Γ) :=
   μ₁.entries ⊆ μ₂.entries
@@ -257,10 +356,10 @@ instance Heap.instPreorder : Preorder (Heap Γ) where
   le_trans := fun _ _ _ hab hbc => List.Subset.trans hab hbc
 
 @[simp]
-def Heap.empty_bot : Heap.empty ≤ μ := by
-  simp only [LE.le, le, empty, EmptyCollection.emptyCollection, List.nil_subset]
+theorem Heap.empty_bot : Heap.empty ≤ μ := by
+  simp only [LE.le, le, entries, empty, EmptyCollection.emptyCollection, List.nil_subset]
 
-def HProp (Γ : Loc → Type u) := Heap Γ → Prop
+def HProp (Γ : HeapCtxt) := Heap Γ → Prop
 
 @[ext]
 theorem HProp.ext {Γ} {p q : HProp Γ} (h : ∀ μ, p μ = q μ) : p = q := funext h
@@ -286,8 +385,8 @@ instance HProp.instPartialOrder : PartialOrder (HProp Γ) where
 def HProp.empty : HProp Γ :=
   (· = Heap.empty)
 
-def HProp.single (l : Loc) (a : α) (h : Γ l = α) : HProp Γ := fun μ =>
-  h ▸ μ.lookup l = some a
+def HProp.single (l : Loc) (a : α) (h : Γ l = some α) : HProp Γ := fun μ =>
+  μ.entries.lookup l = some a
 
 def HProp.sep_conj (p q : HProp Γ) : HProp Γ := fun μ =>
   ∃ (μ₁ μ₂ : Heap Γ), Heap.Disjoint μ₁ μ₂ ∧ μ₁ ∪ μ₂ = μ ∧ p μ₁ ∧ q μ₂
@@ -298,18 +397,18 @@ def HProp.exists (p : α → HProp Γ) : HProp Γ := fun μ =>
 def HProp.forall (p : α → HProp Γ) : HProp Γ := fun μ =>
   ∀ a, p a μ
 
-notation "[]" => HProp.empty
+notation "emp" => HProp.empty
 notation l "↦" a => HProp.single l a (by trivial)
 notation:70 p:69 " ⋆ " q:70 => HProp.sep_conj p q
-notation "∃ " x ", " p => HProp.exists (fun x => p)
-notation "∃ " h " : " x ", " p => HProp.exists (fun (h : x) => p)
-notation "∀ " x ", " p => HProp.forall (fun x => p)
-notation "∀ " h " : " x ", " p => HProp.forall (fun (h : x) => p)
+notation "∃' " x ", " p => HProp.exists (fun x => p)
+notation "∃' " h " : " x ", " p => HProp.exists (fun (h : x) => p)
+notation "∀' " x ", " p => HProp.forall (fun x => p)
+notation "∀' " h " : " x ", " p => HProp.forall (fun (h : x) => p)
 
 -- The remaining ones can be derived from the above:
 
 def HProp.persistent (p : Prop) : HProp Γ :=
-  ∃ (_ : p), []
+  ∃' (_ : p), emp
 
 -- The following instance is not a good idea, because
 -- it is crucial that we are precise about the location where we coerce.
@@ -320,10 +419,10 @@ def HProp.persistent (p : Prop) : HProp Γ :=
 notation:max "↟" p:max => HProp.persistent p
 
 def HProp.true : HProp Γ :=
-  ∃ (h : HProp Γ), h
+  ∃' (h : HProp Γ), h
 
 def HProp.sep_imp (p q : HProp Γ) : HProp Γ :=
-  ∃ (h : HProp Γ), h ⋆ ↟(p ⋆ q ≤ h)
+  ∃' (h : HProp Γ), h ⋆ ↟(p ⋆ q ≤ h)
 
 notation:67 p " -⋆ " q => HProp.sep_imp p q
 
@@ -334,7 +433,7 @@ theorem HProp.op_comm {op : HProp Γ → HProp Γ → HProp Γ} :
   exact le_antisymm (h p₁ p₂) (h p₂ p₁)
 
 @[simp]
-theorem HProp.empty_empty : [] μ ↔ μ = Heap.empty := Iff.intro (fun h => h) (fun h => h)
+theorem HProp.empty_empty : emp μ ↔ μ = Heap.empty := Iff.intro (fun h => h) (fun h => h)
 
 @[simp]
 theorem HProp.persistent_intro : ↟p μ ↔ p ∧ μ = Heap.empty :=
@@ -384,8 +483,20 @@ lemma HProp.forall_forall : (HProp.forall p) μ ↔ ∀ x, p x μ := sorry
 @[simp]
 lemma HProp.sep_imp_intro : (HProp.sep_imp p q) μ ↔ ∀ μ', Heap.Disjoint μ μ' → p μ' → q (μ ∪ μ') := sorry
 
-def PredTrans2.Pre (Γ : Loc → Type u) (α : Type u) :=
+def PredTrans2.Pre (Γ : HeapCtxt) (α : Type u) :=
   (α → HProp Γ) → HProp Γ
+
+@[simp]
+theorem tmp {γ : Type v} {β : α → γ → Type v} {a : α} {f : (c : γ) → β a c} (h : a = b) {arg : γ} :
+  Eq.recOn (motive := fun x x_1 => (c : γ) → β x c) h f arg = Eq.recOn h (f arg) := by
+  cases h
+  rfl
+
+@[simp]
+theorem tmp2 {β : α → Type v} {γ : α → Type v} {a : α} {f : γ a → β a} (h : a = b) {arg : γ b} :
+  Eq.recOn (motive := fun x x_1 => γ x → β x) h f arg = Eq.recOn h (f (h ▸ arg)) := by
+  cases h
+  rfl
 
 @[ext]
 def PredTrans2.Pre.ext {a b : PredTrans2.Pre Γ α} : (∀ p, a p = b p) → a = b := by
@@ -394,30 +505,43 @@ def PredTrans2.Pre.ext {a b : PredTrans2.Pre Γ α} : (∀ p, a p = b p) → a =
   ext p : 1
   exact h p
 
-def PredTrans2.Mono (t : PredTrans2.Pre Γ α) : Prop :=
-  ∀ p q, p ≤ q → t p ≤ t q
+def PredTrans2.Mono {Γs : HeapCtxt → Prop} (t : ∀ Γ, Γs Γ → PredTrans2.Pre Γ α) : Prop :=
+  ∀ Γ hΓ p q, p ≤ q → t Γ hΓ p ≤ t Γ hΓ q
 
-def PredTrans2.Frame (t : PredTrans2.Pre Γ α) : Prop :=
-  ∀ μ₁ μ₂ p, Heap.Disjoint μ₁ μ₂ →
-  t p μ₁ →
-  t (fun a => p a ⋆ (· = μ₂)) (μ₁ ∪ μ₂)
+def PredTrans2.Frame {Γs : HeapCtxt → Prop} (t : ∀ Γ, Γs Γ → PredTrans2.Pre Γ α) : Prop :=
+  ∀ Γ hΓ μ₁ μ₂ p, Heap.Disjoint μ₁ μ₂ → t Γ hΓ p μ₁ → t Γ hΓ (fun a => p a ⋆ (· = μ₂)) (μ₁ ∪ μ₂)
 
-structure PredTrans2 (Γ : Loc → Type u) (α : Type u) where
-  trans : PredTrans2.Pre Γ α
+structure PredTrans2 (α : Type u) where
+  Γs : HeapCtxt → Prop
+  trans : ∀ Γ, Γs Γ → PredTrans2.Pre Γ α
   mono : PredTrans2.Mono trans
   frame : PredTrans2.Frame trans
 
 @[ext]
-def PredTrans2.ext {a b : PredTrans2 Γ α} : (∀ p, a.trans p = b.trans p) → a = b := by
-  intro h
+def PredTrans2.ext {a b : PredTrans2 α} : (∃ (h : a.Γs = b.Γs), ∀ Γ hΓ p, a.trans Γ hΓ p = b.trans Γ (h ▸ hΓ) p) → a = b := by
+  simp only [forall_exists_index]
+  intro hΓs
+  intro htrans
+  let atrans := a.trans
+  let btrans := b.trans
   cases a
   cases b
-  simp
-  ext p : 1
-  exact h p
+  simp only [mk.injEq]
+  constructor
+  · exact hΓs
+  · sorry
+  -- argh, I hate HEq
+  --calc Eq.recOn (motive := fun x x_1 => (Γ : HeapCtxt) → x Γ → (α → HProp Γ) → HProp Γ) hfst a.snd Γ hb p
+  --  _ = Eq.recOn (motive := fun x x_1 => (Γ : HeapCtxt) → x Γ → (α → HProp Γ) → HProp Γ) hfst (fun Γ hp p => a.snd Γ hp p) Γ hb p := by simp
+  --  _ = Eq.recOn (motive := fun x x_1 => (Γ : HeapCtxt) → x Γ → (α → HProp Γ) → HProp Γ) hfst (fun Γ hp p => b.snd Γ hp p) Γ hb p := by simp
+  --  _ = Eq.recOn (motive := fun x x_1 => x Γ → (α → HProp Γ) → HProp Γ) hfst (a.snd Γ) hb p := congrFun (congrFun (tmp (f := a.snd) (α := HeapCtxt → Prop) (β:=fun x Γ => x Γ → (α → HProp Γ) → HProp Γ) hfst) hb) p
+  --  _ = a.snd Γ _ p := sorry
+  --  _ = b.snd Γ _ p := by rw[←this]
 
-def PredTrans2.post (post : α → HProp Γ) : PredTrans2 Γ α :=
-  { trans := fun p => ∀ a, post a -⋆ p a -- sep_imp on post conditions
+
+def PredTrans2.post (post : α → HProp Γ) : PredTrans2 α :=
+  { Γs := (· = Γ),
+    trans := fun Γ hΓ p => ∀' a, hΓ ▸ post a -⋆ p a -- sep_imp on post conditions
     mono := by
       intro _ _ hpq μ hp
       simp_all
@@ -436,9 +560,6 @@ def PredTrans2.post (post : α → HProp Γ) : PredTrans2 Γ α :=
 
 def PredTrans2.persistent (post : α → Prop) : PredTrans2 Γ α :=
   PredTrans2.post (fun a => ↟(post a))
-
-def PredTrans2.pure (a : α) : PredTrans2 Γ α :=
-  PredTrans2.persistent (· = a)
 
 @[simp]
 theorem PredTrans2.persistent_elim : (PredTrans2.persistent p).trans q μ ↔ (∀ a, p a → q a μ) := by
@@ -491,6 +612,9 @@ theorem PredTrans2.sep_conj_stuff {t : PredTrans2 Γ α} : (t.trans p ⋆ (· = 
   intro μ₁ hp hdis hunion
   apply hunion ▸ t.frame μ₁ μ₂ _ hdis hp
 
+def PredTrans2.pure (a : α) : PredTrans2 Γ α :=
+  PredTrans2.persistent (· = a)
+
 def PredTrans2.bind {α β} (x : PredTrans2 Γ α) (f : α → PredTrans2 Γ β) : PredTrans2 Γ β :=
   { trans := fun p => x.trans (fun a => (f a).trans p),
     mono := fun _ _ hpq => x.mono _ _ (fun a => (f a).mono _ _ hpq),
@@ -501,6 +625,22 @@ def PredTrans2.bind {α β} (x : PredTrans2 Γ α) (f : α → PredTrans2 Γ β)
       intro a
       simp[PredTrans2.sep_conj_stuff]
   }
+
+instance PredTrans2.instMonad : Monad (PredTrans2 Γ) where
+  pure := PredTrans2.pure
+  bind := PredTrans2.bind
+
+instance PredTrans2.instLawfulMonad : LawfulMonad (PredTrans2 Γ) where
+  bind_pure_comp := by simp[Bind.bind, Pure.pure, Functor.map, Function.comp_def]
+  pure_bind := by intros; ext p; simp[Bind.bind, Pure.pure, PredTrans2.bind, PredTrans2.pure]
+  bind_assoc := by intros; ext p; simp [Bind.bind, PredTrans2.bind]
+  bind_map := by intros; ext p; simp [Bind.bind, PredTrans2.bind, Functor.map, Function.comp_apply, PredTrans2.pure, Seq.seq]
+  map_pure := by intros; ext p; simp [Bind.bind, PredTrans2.bind, Pure.pure, PredTrans2.pure, Functor.map, Function.comp_apply]
+  map_const := sorry
+  id_map := sorry
+  pure_seq := sorry
+  seqLeft_eq := sorry
+  seqRight_eq := sorry
 
 def PredTrans.toSep (x : PredTrans α) : PredTrans2 Γ α :=
   { trans := fun q μ => (x.val (fun a => q a μ)),
@@ -523,9 +663,6 @@ theorem PredTrans2.PredTrans_bind_bind :
   PredTrans2.bind (Γ:=Γ) (PredTrans.toSep x) (fun a => PredTrans.toSep (f a))
   = PredTrans.toSep (PredTrans.bind x f) := by
   simp[PredTrans2.bind, PredTrans.bind, PredTrans.toSep]
-
-def PredTrans.bind2 {α β} (x : PredTrans α) (f : α → PredTrans β) : PredTrans β :=
-  PredTrans.post (fun b => x.val (fun a => (f a).val (· = b)))
 
 section MonadOrdered
 
@@ -559,6 +696,14 @@ instance PredTrans.instMonadOrdered : MonadOrdered PredTrans where
     apply hxy
     exact y.property _ _ (fun a => hfg a p) hyg
 
+instance PredTrans2.instMonadOrdered : MonadOrdered (PredTrans2 Γ) where
+  bind_mono := by
+    intros _ _ x y f g hxy hfg
+    simp[Bind.bind,PredTrans2.bind] at *
+    intro p μ hyg
+    apply hxy
+    exact y.mono _ _ (fun a => hfg a p) μ hyg
+
 instance StateT.instMonadOrdered [∀{α}, Preorder (w α)] [MonadOrdered w] : MonadOrdered (StateT σ w) where
   bind_mono := by
     intros _ _ _ _ _ _ hxy hfg
@@ -573,14 +718,16 @@ end MonadOrdered
 
 section Observation
 
-class Observation (m : Type u → Type v) (w : outParam (Type u → Type x)) [Monad m] [∀{α}, Preorder (w α)] extends MonadOrdered w where
+class Observation (m : Type u → Type v) (w : semiOutParam (Type u → Type x)) [Monad m] [∀{α}, Preorder (w α)] extends MonadOrdered w where
   observe : m α → w α
   pure_pure : observe (Pure.pure a) = Pure.pure a
   bind_bind (x : m α) (f : α → m β) : observe (x >>= f) = observe x >>= (fun a => observe (f a))
+open Observation (observe)
+
 theorem Observation.map_map {m : Type u → Type v} {w : Type u → Type x} [Monad m] [LawfulMonad m] [∀{α}, Preorder (w α)] [Observation m w] {f : α → β} {x : m α} :
-  observe (f <$> x) = f <$> observe x := by simp only [← bind_pure_comp, bind_bind, pure_pure]
+  observe (f <$> x) = f <$> observe (w:=w) x := by simp only [← bind_pure_comp, bind_bind, pure_pure]
 theorem Observation.seq_seq {m : Type u → Type v} {w : Type u → Type x} [Monad m] [LawfulMonad m] [∀{α}, Preorder (w α)] [Observation m w] {f : m (α → β)} {x : m α} :
-  observe (f <*> x) = observe f <*> observe x := by simp only [← bind_map, bind_bind, map_map]
+  observe (f <*> x) = observe f <*> observe (w:=w) x := by simp only [← bind_map, bind_bind, map_map]
 attribute [simp] Observation.pure_pure Observation.bind_bind Observation.map_map Observation.seq_seq
 
 class ObservationState (σ : Type u) (m : Type u → Type v) (w : Type u → Type x) [∀{α}, Preorder (w α)] [Monad m] [MonadStateOf σ m] extends MonadStateOf σ w, Observation m w where
@@ -810,7 +957,7 @@ instance Idd.instObservation : Observation Idd PredTrans where
   pure_pure := by simp[Pure.pure, pure, implies_true]
   bind_bind := by simp only [Bind.bind, bind, ↓pure_bind, implies_true]
 
-theorem Idd.observe_run : (Observation.observe (e : Idd α)).val p ↔ p e.run := by rfl
+theorem Idd.observe_run {p : α → Prop} {e : Idd α} : (Observation.observe (w := PredTrans) (e : Idd α)).val p ↔ p e.run := by rfl
 
 theorem Idd.observe_nf : Observation.observe (e : Idd α) = Pure.pure e.run := by rfl
 
@@ -870,14 +1017,14 @@ theorem EStateM.pure_inj [inh : Inhabited σ] : pure (f := EStateM ε σ) x = pu
 @[simp]
 axiom IO.pure_inj {α} {x y : α} : pure (f := IO) x = pure y ↔ x = y -- just as for EStateM, but unsafe. Yet very reasonable; part of the TCB
 
-axiom IO.observe {α} (x : IO α) : PredTrans α
-axiom IO.observe_pure {α} {x : α} : IO.observe (pure x) = pure x
-axiom IO.observe_bind {α β} (x : IO α) (f : α → IO β) : IO.observe (x >>= f) = IO.observe x >>= fun a => IO.observe (f a)
+axiom IO.observe {Γ} {α} (x : IO α) : PredTrans2 Γ α -- Free Γ here is a bit dangerous; on the other hand, observe cannot compute anyway and we need to axiomatize fitting specs
+axiom IO.observe_pure {Γ} {α} {x : α} : IO.observe (pure x) = PredTrans2.pure (Γ:=Γ) x
+axiom IO.observe_bind {Γ} {α β} (x : IO α) (f : α → IO β) : IO.observe (Γ:=Γ) (x >>= f) = IO.observe (Γ:=Γ) x >>= fun a => IO.observe (Γ:=Γ) (f a)
 
-noncomputable instance IO.instObservation : Observation IO PredTrans where
+noncomputable instance IO.instObservation {Γ} : Observation IO (PredTrans2 Γ) where
   observe := IO.observe
   pure_pure := IO.observe_pure
-  bind_bind := IO.observe_bind
+  bind_bind x f := IO.observe_bind x f
 
 end IO
 
