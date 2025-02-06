@@ -63,7 +63,13 @@ PredTrans that arise from deterministic programs can be represented this way.
 Cousot calls PredTrans proper a "program property" (in Set(Set(α))), whereas
 a the range of post characterizes the "trace properties" (in Set(α)).
 Program properties are traditionally called hyperproperties, and PredTrans
-is able to express all hyperproperties. -/
+is able to express all hyperproperties.
+In fact, this function is exactly the "lift" combinator from the original
+"hyperproperties" paper by Clarkson and Schneider that lifts a trace
+property into a program property.
+There is this paper about "Hyper Hoare Logic" discussing how Hoare triples
+can be generalized to hyperproperties: https://dl.acm.org/doi/10.1145/3656437
+-/
 def PredTrans.post (post : α → Prop) : PredTrans α :=
   ⟨fun p => post ≤ p, fun _ _ hpq hpostp => le_trans hpostp hpq⟩
 
@@ -190,6 +196,15 @@ example : PredTrans.post p ≤ Pure.pure x → p ≤ (· = x) := by
   exact h y
 
 @[simp]
+theorem PredTrans.map_post {f : α → β} {t : PredTrans α} : (f <$> t).val p = t.val (fun a => p (f a)) := by
+  simp only [Functor.map, bind, Function.comp_apply, pure]
+
+@[simp]
+theorem PredTrans.le_map_post {f : α → β} : f <$> t ≤ PredTrans.post p ↔ t ≤ PredTrans.post (fun a => p (f a)) :=
+  ⟨fun h _ hq => t.property _ _ hq (PredTrans.map_post ▸ h p (le_refl _)),
+   fun h _ hq => t.property _ _ (fun a => hq (f a)) (post_elim h)⟩
+
+@[simp]
 theorem PredTrans.post_bind_pure {f : α → β} : f <$> PredTrans.post p = PredTrans.post (fun b => ∃ a, f a = b ∧ p a) := by
   ext q
   simp only [Bind.bind, bind, post, pure]
@@ -206,6 +221,311 @@ theorem PredTrans.bind_post {f : α → PredTrans β} {goal : PredTrans β}
   fun q hq a hp => hgoal a hp q hq
 
 end PredTrans
+
+def Loc : Type := Nat
+instance : DecidableEq Loc := instDecidableEqNat
+
+def Heap (Γ : Loc → Type u) := AList Γ
+
+def Heap.dom (μ : Heap Γ) := AList.keys μ
+
+instance : EmptyCollection (Heap Γ) := AList.instEmptyCollection
+def Heap.empty : Heap Γ := ∅
+instance : Inhabited (Heap Γ) := AList.instInhabited
+instance : Membership Loc (Heap Γ) := AList.instMembership
+def Heap.mem : Heap Γ → Loc → Prop := AList.instMembership.mem
+
+def Heap.Disjoint : Heap Γ → Heap Γ → Prop := AList.Disjoint
+
+instance : Union (Heap Γ) := AList.instUnion
+def Heap.union (μ₁ μ₂ : Heap Γ) := μ₁ ∪ μ₂
+
+@[simp]
+theorem Heap.empty_union : Heap.empty ∪ μ = μ := AList.empty_union
+
+@[simp]
+theorem Heap.union_empty : μ ∪ Heap.empty = μ := AList.union_empty
+
+def Heap.le (μ₁ μ₂ : Heap Γ) :=
+  μ₁.entries ⊆ μ₂.entries
+
+instance Heap.instLE : LE (Heap Γ) where
+  le := Heap.le
+
+instance Heap.instPreorder : Preorder (Heap Γ) where
+  le_refl := by simp only [LE.le, le, List.Subset.refl, implies_true]
+  le_trans := fun _ _ _ hab hbc => List.Subset.trans hab hbc
+
+@[simp]
+def Heap.empty_bot : Heap.empty ≤ μ := by
+  simp only [LE.le, le, empty, EmptyCollection.emptyCollection, List.nil_subset]
+
+def HProp (Γ : Loc → Type u) := Heap Γ → Prop
+
+@[ext]
+theorem HProp.ext {Γ} {p q : HProp Γ} (h : ∀ μ, p μ = q μ) : p = q := funext h
+
+def HProp.implies (p q : HProp Γ) :=
+  ∀ μ, p μ → q μ
+
+instance HProp.instLE : LE (HProp Γ) where
+  le := HProp.implies
+
+instance HProp.instPreorder : Preorder (HProp Γ) where
+  le_refl := by simp only [LE.le, implies, imp_self, implies_true]
+  le_trans := fun _ _ _ hab hbc μ => hbc μ ∘ hab μ
+
+instance HProp.instPartialOrder : PartialOrder (HProp Γ) where
+  le_antisymm := by
+    intro _ _ hab hba
+    ext μ
+    constructor
+    · exact hab μ
+    · exact hba μ
+
+def HProp.empty : HProp Γ :=
+  (· = Heap.empty)
+
+def HProp.single (l : Loc) (a : α) (h : Γ l = α) : HProp Γ := fun μ =>
+  h ▸ μ.lookup l = some a
+
+def HProp.sep_conj (p q : HProp Γ) : HProp Γ := fun μ =>
+  ∃ (μ₁ μ₂ : Heap Γ), Heap.Disjoint μ₁ μ₂ ∧ μ₁ ∪ μ₂ = μ ∧ p μ₁ ∧ q μ₂
+
+def HProp.exists (p : α → HProp Γ) : HProp Γ := fun μ =>
+  ∃ a, p a μ
+
+def HProp.forall (p : α → HProp Γ) : HProp Γ := fun μ =>
+  ∀ a, p a μ
+
+notation "[]" => HProp.empty
+notation l "↦" a => HProp.single l a (by trivial)
+notation:70 p:69 " ⋆ " q:70 => HProp.sep_conj p q
+notation "∃ " x ", " p => HProp.exists (fun x => p)
+notation "∃ " h " : " x ", " p => HProp.exists (fun (h : x) => p)
+notation "∀ " x ", " p => HProp.forall (fun x => p)
+notation "∀ " h " : " x ", " p => HProp.forall (fun (h : x) => p)
+
+-- The remaining ones can be derived from the above:
+
+def HProp.persistent (p : Prop) : HProp Γ :=
+  ∃ (_ : p), []
+
+-- The following instance is not a good idea, because
+-- it is crucial that we are precise about the location where we coerce.
+-- For example, `↑(p * q ⊢ h)` is very different to `p * ↑(q ⊢ h)`, yet
+-- the latter is what we get if we just coerce the proposition `p * q ⊢ h`.
+-- instance HProp.instCoe : Coe Prop (HProp Γ) where
+--   coe := HProp.persistent
+notation:max "↟" p:max => HProp.persistent p
+
+def HProp.true : HProp Γ :=
+  ∃ (h : HProp Γ), h
+
+def HProp.sep_imp (p q : HProp Γ) : HProp Γ :=
+  ∃ (h : HProp Γ), h ⋆ ↟(p ⋆ q ≤ h)
+
+notation:67 p " -⋆ " q => HProp.sep_imp p q
+
+theorem HProp.op_comm {op : HProp Γ → HProp Γ → HProp Γ} :
+  (∀ p₁ p₂, op p₁ p₂ ≤ op p₂ p₁) →
+  (∀ p₁ p₂, op p₁ p₂ = op p₂ p₁) := by
+  intro h p₁ p₂
+  exact le_antisymm (h p₁ p₂) (h p₂ p₁)
+
+@[simp]
+theorem HProp.empty_empty : [] μ ↔ μ = Heap.empty := Iff.intro (fun h => h) (fun h => h)
+
+@[simp]
+theorem HProp.persistent_intro : ↟p μ ↔ p ∧ μ = Heap.empty :=
+  Iff.intro  (fun ⟨hp, he⟩ => ⟨hp, HProp.empty_empty.mp he⟩) (fun h => h.2 ▸ ⟨h.1, rfl⟩)
+
+@[simp]
+theorem HProp.exists_exists : (HProp.exists p) μ ↔ ∃ x, p x μ := by
+  simp only [«exists», imp_self]
+
+@[simp]
+theorem HProp.imp_exists_left : (HProp.exists p) ≤ q ↔ (∀ x, p x ≤ q) := by
+  constructor
+  · intro h x μ hp; exact h μ ⟨x, hp⟩
+  · intro h μ ⟨x, hx⟩; exact h x μ hx
+
+-- Did not manage to prove p ≤ (HProp.exists q) → (∃ x, p ≤ q x) because x may not depend on μ
+theorem HProp.imp_exists_right : (p ≤ q x) → p ≤ (HProp.exists q) := by
+  intro h μ hp
+  exact ⟨x, h μ hp⟩
+
+@[simp]
+theorem HProp.persistent_implies_left {p : Prop} {q' : HProp Γ} : ↟p ≤ q' ↔ (p ≤ q' Heap.empty) := by
+  constructor
+  · intro h hp
+    exact h Heap.empty (by simp[hp])
+  · intro h μ
+    simp
+    intro hp hμ
+    exact hμ ▸ h hp
+
+-- Reverse direction not provable
+theorem HProp.persistent_implies_right {p' : HProp Γ} : p' ≤ ↟q → (p' Heap.empty ≤ q) := by
+  intro h hp
+  have := h Heap.empty hp
+  simp only [persistent_intro, and_true] at this
+  exact this
+
+@[simp]
+theorem HProp.sep_conj_intro : (p ⋆ q) μ ↔ ∃ μ₁ μ₂, p μ₁ ∧ q μ₂ ∧ Heap.Disjoint μ₁ μ₂ ∧ μ = μ₁ ∪ μ₂ := by
+  constructor
+  · sorry
+  · sorry
+
+@[simp]
+lemma HProp.forall_forall : (HProp.forall p) μ ↔ ∀ x, p x μ := sorry
+
+@[simp]
+lemma HProp.sep_imp_intro : (HProp.sep_imp p q) μ ↔ ∀ μ', Heap.Disjoint μ μ' → p μ' → q (μ ∪ μ') := sorry
+
+def PredTrans2.Pre (Γ : Loc → Type u) (α : Type u) :=
+  (α → HProp Γ) → HProp Γ
+
+@[ext]
+def PredTrans2.Pre.ext {a b : PredTrans2.Pre Γ α} : (∀ p, a p = b p) → a = b := by
+  simp[PredTrans2.Pre]
+  intro h
+  ext p : 1
+  exact h p
+
+def PredTrans2.Mono (t : PredTrans2.Pre Γ α) : Prop :=
+  ∀ p q, p ≤ q → t p ≤ t q
+
+def PredTrans2.Frame (t : PredTrans2.Pre Γ α) : Prop :=
+  ∀ μ₁ μ₂ p, Heap.Disjoint μ₁ μ₂ →
+  t p μ₁ →
+  t (fun a => p a ⋆ (· = μ₂)) (μ₁ ∪ μ₂)
+
+structure PredTrans2 (Γ : Loc → Type u) (α : Type u) where
+  trans : PredTrans2.Pre Γ α
+  mono : PredTrans2.Mono trans
+  frame : PredTrans2.Frame trans
+
+@[ext]
+def PredTrans2.ext {a b : PredTrans2 Γ α} : (∀ p, a.trans p = b.trans p) → a = b := by
+  intro h
+  cases a
+  cases b
+  simp
+  ext p : 1
+  exact h p
+
+def PredTrans2.post (post : α → HProp Γ) : PredTrans2 Γ α :=
+  { trans := fun p => ∀ a, post a -⋆ p a -- sep_imp on post conditions
+    mono := by
+      intro _ _ hpq μ hp
+      simp_all
+      intro x μ' hdis hpost
+      exact hpq x (μ ∪ μ') (hp x μ' hdis hpost)
+    frame := by
+      intro μ₁ μ₂ p _hdis hp
+      simp_all
+      intro x μ' hdis hpost
+      use (μ₁ ∪ μ')
+      constructor
+      · apply hp _ _ _ hpost
+        show μ₁.Disjoint μ'; sorry
+      · show (μ₁ ∪ μ').Disjoint μ₂ ∧ μ₁ ∪ μ₂ ∪ μ' = μ₁ ∪ μ' ∪ μ₂; sorry
+  }
+
+def PredTrans2.persistent (post : α → Prop) : PredTrans2 Γ α :=
+  PredTrans2.post (fun a => ↟(post a))
+
+def PredTrans2.pure (a : α) : PredTrans2 Γ α :=
+  PredTrans2.persistent (· = a)
+
+@[simp]
+theorem PredTrans2.persistent_elim : (PredTrans2.persistent p).trans q μ ↔ (∀ a, p a → q a μ) := by
+  simp_all[PredTrans2.persistent, PredTrans2.post]
+  constructor
+  · intro h a hp
+    have := h a Heap.empty sorry hp rfl
+    simp[this]
+  · intro hpq a _ _ hp _
+    exact hpq a hp
+
+@[simp]
+theorem PredTrans.post_le_post_post : (PredTrans.post p).val q ↔ PredTrans.post p ≤ PredTrans.post q := by
+  simp[PredTrans.post]
+  constructor
+  · intro hpq r hqr
+    exact hpq.trans hqr
+  · intro h a hp
+    have := h q
+    simp at this
+    exact this a hp
+
+theorem PredTrans2.PredTrans_persistent_post :
+  ((PredTrans2.persistent (Γ:=Γ) p).trans (fun a => HProp.persistent (q a)) Heap.empty)
+  ↔ (PredTrans.post p).val q := by
+  simp[PredTrans2.persistent_elim]
+
+def PredTrans2.le (a b : PredTrans2 Γ α) :=
+  ∀ p, b.trans p ≤ a.trans p
+
+instance PredTrans2.instLE : LE (PredTrans2 Γ α) where
+  le := PredTrans2.le
+
+instance PredTrans2.instPreorder : Preorder (PredTrans2 Γ α) where
+  le_refl a := by
+    intro p
+    apply le_refl
+  le_trans a b c hab hbc := by
+    intro p
+    apply le_trans (hbc p) (hab p)
+
+instance PredTrans2.instPartialOrder : PartialOrder (PredTrans2 Γ α) where
+  le_antisymm a b hab hba := by
+    ext p : 1
+    apply le_antisymm (hba p) (hab p)
+
+theorem PredTrans2.sep_conj_stuff {t : PredTrans2 Γ α} : (t.trans p ⋆ (· = μ₂)) ≤ t.trans (fun a => p a ⋆ (· = μ₂)) := by
+  intro μ
+  simp
+  intro μ₁ hp hdis hunion
+  apply hunion ▸ t.frame μ₁ μ₂ _ hdis hp
+
+def PredTrans2.bind {α β} (x : PredTrans2 Γ α) (f : α → PredTrans2 Γ β) : PredTrans2 Γ β :=
+  { trans := fun p => x.trans (fun a => (f a).trans p),
+    mono := fun _ _ hpq => x.mono _ _ (fun a => (f a).mono _ _ hpq),
+    frame := by
+      intro μ₁ μ₂ p _hdis hp
+      have := x.frame μ₁ μ₂ _ _hdis hp
+      apply x.mono (fun a => (f a).trans p ⋆ fun x => x = μ₂) (fun a => (f a).trans fun a => p a ⋆ fun x => x = μ₂) _ _ this
+      intro a
+      simp[PredTrans2.sep_conj_stuff]
+  }
+
+def PredTrans.toSep (x : PredTrans α) : PredTrans2 Γ α :=
+  { trans := fun q μ => (x.val (fun a => q a μ)),
+    mono := by intro _ _ hpq μ; simp; exact x.property _ _ (fun a => hpq a μ)
+    frame := by
+      intro μ₁ μ₂ p hdis
+      simp_all
+      intro hp
+      apply x.property _ _ _ hp
+      intro a hp
+      use μ₁
+  }
+
+theorem PredTrans2.PredTrans_pure_pure :
+  PredTrans2.pure (Γ:=Γ) x = PredTrans.toSep (PredTrans.pure x) := by
+  ext p μ
+  simp only [pure, persistent_elim, forall_eq, PredTrans.toSep, PredTrans.pure]
+
+theorem PredTrans2.PredTrans_bind_bind :
+  PredTrans2.bind (Γ:=Γ) (PredTrans.toSep x) (fun a => PredTrans.toSep (f a))
+  = PredTrans.toSep (PredTrans.bind x f) := by
+  simp[PredTrans2.bind, PredTrans.bind, PredTrans.toSep]
+
+def PredTrans.bind2 {α β} (x : PredTrans α) (f : α → PredTrans β) : PredTrans β :=
+  PredTrans.post (fun b => x.val (fun a => (f a).val (· = b)))
 
 section MonadOrdered
 
@@ -263,10 +583,6 @@ theorem Observation.seq_seq {m : Type u → Type v} {w : Type u → Type x} [Mon
   observe (f <*> x) = observe f <*> observe x := by simp only [← bind_map, bind_bind, map_map]
 attribute [simp] Observation.pure_pure Observation.bind_bind Observation.map_map Observation.seq_seq
 
-/-- An expression's spec is a predicate transformer that is an upper bound on the observation of a program -/
-abbrev Observation.Spec [Monad m] [∀{α}, Preorder (w α)] [Observation m w] (x : m α) :=
-  { wp : w α // Observation.observe x ≤ wp }
-
 class ObservationState (σ : Type u) (m : Type u → Type v) (w : Type u → Type x) [∀{α}, Preorder (w α)] [Monad m] [MonadStateOf σ m] extends MonadStateOf σ w, Observation m w where
   get_get : observe MonadState.get = MonadState.get
   set_set : observe (MonadStateOf.set s) = MonadStateOf.set (σ := σ) s
@@ -318,11 +634,21 @@ instance ExceptT.instPreorder [∀{α}, Preorder (w α)] : Preorder (ExceptT ε 
   le_refl := fun x => le_refl (ExceptT.run x)
   le_trans := by intro _ _ _ hxy hyz; simp [LE.le, le] at *; exact le_trans hxy hyz
 
+instance ExceptT.instMonadOrdered [∀{α}, Preorder (w α)] [MonadOrdered w] : MonadOrdered (ExceptT ε w) where
+  bind_mono := by
+    intro _ _ _ _ _ _ hxy hfg
+    simp only [LE.le, le, bind, ExceptT.bind, run_mk]
+    apply MonadOrdered.bind_mono
+    · exact hxy
+    · intro x
+      cases x <;> simp only [ExceptT.bindCont, le_refl]
+      apply hfg
+
 def ExceptT.observe [Monad m] [Monad w] [∀{α}, Preorder (w α)] [base : Observation m w] (x : ExceptT ε m α) : ExceptT ε w α :=
   ExceptT.mk (base.observe (ExceptT.run x))
+
 instance ExceptT.instObservation [Monad m] [∀{α}, Preorder (w α)] [base : Observation m w] :
   Observation (ExceptT ε m) (ExceptT ε w) where
-  bind_mono := sorry
   observe := ExceptT.observe
   pure_pure := base.pure_pure
   bind_bind := by
@@ -684,7 +1010,7 @@ theorem ite_extrude_yield {c : Prop} [Decidable c] {x y : α} :
 lemma correctnessOfGreedySpanner {n:ℕ }(G : FinSimpleGraph n)(t :ℕ ) (u v : Fin n) :
   (greedySpanner G t).dist u v ≤ 2*t-1 := by
     vc_spec_Idd (fun r => SimpleGraph.dist r u v ≤ 2*t-1)
-    apply use_spec_map (Observation.foldlM_list ?inv ?hpre ?hstep) ?hgoal
+    apply le_trans (Observation.foldlM_list ?inv ?hpre ?hstep) ?hgoal
     case inv => exact fun xs => PredTrans.post fun f_H => ∀ i j, f_H i j → 2*t-1 < dist f_H s(i,j)
     case hpre => simp
     case hstep =>
@@ -703,9 +1029,9 @@ lemma correctnessOfGreedySpanner {n:ℕ }(G : FinSimpleGraph n)(t :ℕ ) (u v : 
         sorry
     case hgoal =>
       simp
-      show ∀ (x : SimpleGraph (Fin n)) (x_1 : Fin n → Fin n → Prop),
-        fromRel x_1 = x → (∀ (i j : Fin n), x_1 i j → 2 * t - 1 < _root_.dist x_1 s(i, j)) →
-        x.dist u v ≤ 2 * t - 1
+      show ∀ (x : Fin n → Fin n → Prop),
+        (∀ (i j : Fin n), x i j → 2 * t - 1 < _root_.dist x s(i, j)) →
+        (fromRel x).dist u v ≤ 2 * t - 1
       -- domain-specific, pure proof
       sorry
 
@@ -797,17 +1123,17 @@ theorem addRandomEvens_spec (n k) : Observation.observe (addRandomEvens n k) ≤
     simp -- only [Observation.map_map]
     -- b : Nat
     -- hb : b % 2 = k % 2
-    -- (fun c => b + 2 * c) <$> Observation.observe (liftM (IO.rand 0 37))
-    -- ≤ PredTrans.post fun r => r % 2 = k % 2
-    apply use_spec_map IO.rand_spec -- apply the spec for IO.rand under <$>
+    -- Observation.observe (liftM (IO.rand 0 37))
+    -- ≤ PredTrans.post fun a => b % 2 = k % 2
+    apply le_trans IO.rand_spec -- apply the spec for IO.rand... not that it matters now that `a` does not occur in the post cond
     -- b : Nat
     -- hb : b % 2 = k % 2
-    -- (fun c => b + 2 * c) <$> PredTrans.post (· < 37)
-    -- ≤ PredTrans.post fun r => r % 2 = k % 2
+    -- PredTrans.post (· < 37)
+    -- ≤ PredTrans.post fun a => b % 2 = k % 2
     simp -- only [PredTrans.post_bind_pure, PredTrans.post_mono, forall_exists_index, and_imp]
     -- b : Nat
     -- hb : b % 2 = k % 2
-    -- ∀ (x x_1 : ℕ), b + 2 * x_1 = x → x_1 < 37 → x % 2 = k % 2
+    -- ∀ x < 37, b % 2 = k % 2
     omega
   simp
 
