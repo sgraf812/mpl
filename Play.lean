@@ -230,55 +230,86 @@ def AList.lookupDefault {α : Type u} [DecidableEq α] (xs : AList (fun (_ : α)
   | some b => b
   | none => a
 
-def HeapCtxt.{u} := Loc → Option (Type u)
+#check  Inhabited
+structure HeapCtxt.{u} where
+  dom : Loc → Prop
+  p : (Loc → Type u) → Prop
+  blah : ∀ l, dom l → ∀ γ₁ γ₂, p γ₁ → p γ₂ → γ₁ l = γ₂ l
+  witness : Subtype p
 
-def HeapCtxt.le (a b : HeapCtxt) :=
-  ∀ l α, a l = some α → b l = some α
+@[ext]
+def HeapCtxt.ext {Γ₁ Γ₂ : HeapCtxt} (h : ∀ γ, Γ₁.p γ = Γ₂.p γ) : Γ₁ = Γ₂ := by
+  cases Γ₁
+  cases Γ₂
+  simp only [mk.injEq]
+  funext γ
+  exact h γ
+
+def HeapCtxt.le (Γ₁ Γ₂ : HeapCtxt) :=
+  ∀ γ, Γ₁.p γ → Γ₂.p γ
 
 instance HeapCtxt.instLE : LE HeapCtxt := ⟨HeapCtxt.le⟩
 
-def HeapCtxt.le_iff_or {a b : HeapCtxt} : a ≤ b ↔ ∀ l, a l = b l ∨ a l = none := by
-  constructor
-  · intro h l
-    cases ha : a l
-    · simp
-    · simp[h l _ ha]
-  · intro h l α ha
-    cases h l <;> simp_all
-
 instance HeapCtxt.instPreorder : Preorder HeapCtxt where
   le_refl := by simp only [LE.le, le, imp_self, implies_true]
-  le_trans := by intro a b c hab hbc l; simp_all[hab l, hbc l]
+  le_trans := by intro a b c hab hbc l; simp_all only [hab l, hbc l, implies_true]
 
 instance HeapCtxt.instPartialOrder : PartialOrder HeapCtxt where
   le_antisymm := by
-    simp only [HeapCtxt.le_iff_or]
     intro a b hab hba
-    funext l
-    cases hab l <;> cases hba l <;> simp_all
+    ext γ
+    apply Iff.intro (hab γ) (hba γ)
 
-def HeapCtxt.withDefault {Γ : HeapCtxt} (α : Type u) (l : Loc) : Type u :=
-  match Γ l with
-  | some α => α
-  | none => α
+def HeapCtxt.dom (Γ : HeapCtxt) (l : Loc) : Prop :=
+  ∀ γ₁ γ₂, Γ.p γ₁ → Γ.p γ₂ → γ₁ l = γ₂ l
 
-theorem HeapCtxt.withDefault_some {Γ : HeapCtxt} (h : Γ l = some α) : Γ.withDefault PEmpty l = α := by
-  simp[HeapCtxt.withDefault]
-  cases hΓ : Γ l <;> simp_all
+def HeapCtxt.mem (Γ : HeapCtxt) (l : Loc) : Prop :=
+  Γ.dom l
 
-def Heap.Pre (Γ : HeapCtxt) := ∀ Γ', Γ ≤ Γ' → AList (Γ'.withDefault PEmpty)
+instance HeapCtxt.instMembership : Membership Loc HeapCtxt where
+  mem := HeapCtxt.mem
 
-private def Heap.Pre.lookup {Γ : HeapCtxt} (m : AList (Γ.withDefault PEmpty)) (l : Loc) (h : Γ l = some α) : Option α :=
-  HeapCtxt.withDefault_some h ▸ m.lookup l
+instance HeapCtxt.instGetElem : GetElem (HeapCtxt.{u}) Loc (Type u) (fun Γ l => l ∈ Γ) where
+  getElem Γ l h := Γ.witness.val l
 
-def Heap.Mono (μ : Heap.Pre Γ) :=
-  ∀ Γ' (h : Γ ≤ Γ') (l : Loc) α (ha : Γ l = some α) (a : α),
-  Heap.Pre.lookup (μ Γ (le_refl _)) l ha = some a  →
-  Heap.Pre.lookup (μ Γ' h) l (h l _ ha) = some a
+def HeapCtxt.disjoint (Γ₁ Γ₂ : HeapCtxt) : Prop :=
+  ∀ l, l ∈ Γ₁ → l ∉ Γ₂
+
+def HeapCtxt.agree (Γ₁ Γ₂ : HeapCtxt) : Prop :=
+  ∀ l, (h₁ : l ∈ Γ₁) → (h₂ : l ∈ Γ₂) → Γ₁[l] = Γ₂[l]
+
+def HeapCtxt.union (Γ₁ Γ₂ : HeapCtxt) (h : HeapCtxt.agree Γ₁ Γ₂) : HeapCtxt :=
+  { p := fun γ => Γ₁.p γ ∧ Γ₂.p γ,
+    witness := by
+      obtain ⟨γ₁, h1⟩ := Γ₁.witness
+      obtain ⟨γ₂, h2⟩ := Γ₂.witness
+      open Classical in
+      use (fun l => if h : l ∈ Γ₁ then γ₁ l else γ₂ l)
+      simp
+      constructor
+      · if h : l ∈ Γ₁ then sorry else sorry
+      exact ⟨h1, h1⟩
+  }
+
+def HeapCtxt.empty : HeapCtxt :=
+  fun _ => True
+
+def HeapCtxt.single (l : Loc) (α : Type u) : HeapCtxt :=
+  fun γ => γ l = α
+
+def HeapCtxt.single_dom (l : Loc) (α : Type u) : (HeapCtxt.single l α).dom l := by
+  simp_all +unfoldPartialApp only [dom, single, implies_true]
+
+def HeapCtxt.single_mem (l : Loc) (α : Type u) : l ∈ HeapCtxt.single l α := by
+  simp only [Membership.mem, mem, single_dom]
+
+def Heap.Pre (Γ : HeapCtxt) := ∀ γ, Γ γ → AList γ
 
 structure Heap (Γ : HeapCtxt) where
-  maps : Heap.Pre Γ
-  mono : Heap.Mono maps
+  γ : Loc → Type u
+  hΓ : Γ γ
+  map : AList γ
+  dom_ok : ∀ l, l ∈ map.keys → l ∈ Γ
 
 --theorem AList.lookupDefault_good {Γ : HeapCtxt} :
 --  ∀ l ∈ Γ, AList.lookupDefault Γ a l = Γ.lookup l := by
@@ -289,12 +320,12 @@ structure Heap (Γ : HeapCtxt) where
 --    contradiction
 --  · simp
 
-def Heap.dom (μ : Heap Γ) := (μ.maps Γ (refl _)).keys
+def Heap.dom (μ : Heap Γ) := μ.map.keys
 
-def Heap.entries (μ : Heap Γ) := (μ.maps Γ (refl _)).entries
+def Heap.entries (μ : Heap Γ) := μ.map.entries
 
-def Heap.lookup (μ : Heap Γ) (l : Loc) (h : Γ l = some α) : Option α :=
-  Heap.Pre.lookup (μ.maps Γ (refl _)) l h
+def Heap.lookup (μ : Heap Γ) (l : Loc) (h : μ.γ l = α) : Option α :=
+  h ▸ μ.map.lookup l
 
 theorem Option.cast_none {α β : Type u} (h : α = β) : h ▸ (none : Option α) = (none : Option β) := by
   cases h
@@ -304,15 +335,13 @@ theorem Option.cast_none_ne_some (h : α = β) : h ▸ (none : Option α) = some
   simp[Option.cast_none]
 
 def Heap.empty : Heap Γ :=
-  { maps := fun _ _ => ∅,
-    mono := fun _ _ _ _ _ _ => by
-      simp[Heap.Pre.lookup]
-      intro h
-      replace h := Option.cast_none_ne_some _ h
-      contradiction
+  { γ := fun _ => PEmpty,
+    hΓ := by simp,
+    map := ∅,
+    dom_ok := by simp
   }
 
-instance : EmptyCollection (Heap Γ) where
+instance : EmptyCollection (Heap (fun _ => True)) where
   emptyCollection := Heap.empty
 
 instance : Inhabited (Heap Γ) where
