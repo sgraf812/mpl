@@ -1275,9 +1275,6 @@ theorem test_spec : Observation.observe test ≤ PredTrans2.pure 2 := by
   simp
   set_option pp.explicit true in
   refine use_spec_bind Counter.new_spec ?_
-  apply PredTrans.bind_post; intro r₁ h₁
-  apply use_spec_map Counter.incr_spec
-  simp
 
 end Counter
 
