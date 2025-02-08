@@ -221,6 +221,8 @@ theorem PredTrans.bind_post {f : α → PredTrans β} {goal : PredTrans β}
 
 end PredTrans
 
+section PredTrans2
+
 def Loc : Type := Nat
 instance : DecidableEq Loc := instDecidableEqNat
 
@@ -229,8 +231,8 @@ def AList.lookupDefault {α : Type u} [DecidableEq α] (xs : AList (fun (_ : α)
   | some b => b
   | none => a
 
-def Dyn := Sigma (fun α => α)
-def Heap := AList (fun (_ : Loc) => Dyn)
+def Dyn.{u} : Type (u + 1) := Sigma (fun α => α)
+def Heap.{u} : Type (u + 1) := AList (fun (_ : Loc) => Dyn)
 
 def Heap.dom (μ : Heap) := μ.keys
 
@@ -269,6 +271,8 @@ def Heap.union : Heap → Heap → Heap :=
 instance : Union Heap where
   union := Heap.union
 
+def Heap.single : Loc → Dyn → Heap := AList.singleton
+
 @[simp]
 theorem Heap.empty_union : Heap.empty ∪ μ = μ := by
   simp only [Union.union, union, empty]
@@ -293,7 +297,7 @@ instance Heap.instPreorder : Preorder Heap where
 theorem Heap.empty_bot : Heap.empty ≤ μ := by
   simp only [LE.le, le, entries, empty, EmptyCollection.emptyCollection, List.nil_subset]
 
-def HProp := Heap → Prop
+def HProp : Type (u + 1) := Heap.{u} → Prop
 
 @[ext]
 theorem HProp.ext {p q : HProp} (h : ∀ μ, p μ = q μ) : p = q := funext h
@@ -319,6 +323,7 @@ instance HProp.instPartialOrder : PartialOrder HProp where
 def HProp.empty : HProp :=
   (· = Heap.empty)
 
+set_option pp.universes true in
 def HProp.single (l : Loc) (a : α) : HProp := fun μ =>
   μ.lookup l = some (Sigma.mk α a)
 
@@ -374,6 +379,10 @@ theorem HProp.persistent_intro : ↟p μ ↔ p ∧ μ = Heap.empty :=
   Iff.intro  (fun ⟨hp, he⟩ => ⟨hp, HProp.empty_empty.mp he⟩) (fun h => h.2 ▸ ⟨h.1, rfl⟩)
 
 @[simp]
+theorem HProp.single_intro : (l ↦ x) μ ↔ μ = Heap.single l (Sigma.mk _ x) :=
+  sorry
+
+@[simp]
 theorem HProp.exists_exists : (HProp.exists p) μ ↔ ∃ x, p x μ := by
   simp only [«exists», imp_self]
 
@@ -387,6 +396,11 @@ theorem HProp.imp_exists_left : (HProp.exists p) ≤ q ↔ (∀ x, p x ≤ q) :=
 theorem HProp.imp_exists_right : (p ≤ q x) → p ≤ (HProp.exists q) := by
   intro h μ hp
   exact ⟨x, h μ hp⟩
+
+@[simp]
+theorem HProp.persistent_true_eq_empty : ↟True = emp := by
+  ext μ
+  simp only [persistent, exists_exists, empty_empty, exists_const]
 
 @[simp]
 theorem HProp.persistent_implies_left {p : Prop} {q' : HProp} : ↟p ≤ q' ↔ (p ≤ q' Heap.empty) := by
@@ -417,8 +431,30 @@ lemma HProp.forall_forall : (HProp.forall p) μ ↔ ∀ x, p x μ := sorry
 @[simp]
 lemma HProp.sep_imp_intro : (HProp.sep_imp p q) μ ↔ ∀ μ', Heap.Disjoint μ μ' → p μ' → q (μ ∪ μ') := sorry
 
-def PredTrans2.Pre (α : Type u) :=
-  (α → HProp) → HProp
+@[simp]
+theorem HProp.sep_conj_exists {p : α → HProp} : (∃' x, p x) ⋆ q = ∃' x, (p x ⋆ q) := by
+  ext μ
+  simp [HProp.exists, HProp.sep_conj]
+  constructor
+  · intro h
+    rcases h with ⟨μ₁, μ₂, hdis, hunion, hp, hq⟩
+    obtain ⟨a, hp⟩ := hp
+    exact ⟨a, μ₁, μ₂, hdis, hunion, hp, hq⟩
+  · intro h
+    rcases h with ⟨a, μ₁, μ₂, hdis, hunion, hp, hq⟩
+    exact ⟨μ₁, μ₂, hdis, hunion, ⟨a, hp⟩, hq⟩
+
+@[simp]
+theorem HProp.persistent_sep_conj : (↟p ⋆ q) μ ↔ p ∧ q μ := by
+  simp[HProp.persistent]
+  constructor
+  · intro h
+    obtain ⟨μ', hq⟩ := h
+    sorry
+  · sorry
+
+def PredTrans2.Pre (α : Type u) : Type (u + 1) :=
+  (α → HProp.{u}) → HProp.{u}
 
 @[simp]
 theorem tmp {γ : Type v} {β : α → γ → Type v} {a : α} {f : (c : γ) → β a c} (h : a = b) {arg : γ} :
@@ -445,7 +481,7 @@ def PredTrans2.Mono (t : PredTrans2.Pre α) : Prop :=
 def PredTrans2.Frame (t : PredTrans2.Pre α) : Prop :=
   ∀ μ₁ μ₂ p, Heap.Disjoint μ₁ μ₂ → t p μ₁ → t (fun a => p a ⋆ (· = μ₂)) (μ₁ ∪ μ₂)
 
-structure PredTrans2 (α : Type u) where
+structure PredTrans2 (α : Type u) : Type (u + 1)where
   trans : PredTrans2.Pre α
   mono : PredTrans2.Mono trans
   frame : PredTrans2.Frame trans
@@ -577,6 +613,8 @@ theorem PredTrans2.PredTrans_bind_bind :
   PredTrans2.bind (PredTrans.toSep x) (fun a => PredTrans.toSep (f a))
   = PredTrans.toSep (PredTrans.bind x f) := by
   simp[PredTrans2.bind, PredTrans.bind, PredTrans.toSep]
+
+end PredTrans2
 
 section MonadOrdered
 
@@ -935,6 +973,7 @@ axiom IO.observe {α} (x : IO α) : PredTrans2 α
 axiom IO.observe_pure {α} {x : α} : IO.observe (pure x) = PredTrans2.pure x
 axiom IO.observe_bind {α β} (x : IO α) (f : α → IO β) : IO.observe (x >>= f) = IO.observe x >>= fun a => IO.observe (f a)
 
+set_option pp.universes true in
 noncomputable instance IO.instObservation : Observation IO PredTrans2 where
   observe := IO.observe
   pure_pure := IO.observe_pure
@@ -1246,6 +1285,59 @@ theorem program_spec_old (n k) : SatisfiesM (fun r => r % 2 = 0) (program n k) :
 
 end KimsBabySteps
 
+def PredTrans2.Triple [Monad m] [Observation m PredTrans2] (P : HProp) (x : m α) (Q : α → HProp) : Prop :=
+  ∀ μ, P μ → (Observation.observe x).trans Q μ
+notation "<<" P ">> " x " <<" Q ">>" => PredTrans2.Triple P x Q
+notation:lead "⦃" P "⦄ " x:lead " ⦃" Q "⦄" => PredTrans2.Triple P x Q
+notation:lead "⦃" P "⦄ " x:lead " ⦃" v ", " Q "⦄" => PredTrans2.Triple P x (fun v => Q)
+
+theorem weaken {P₁ P₂ : HProp} {x : IO α} {Q₁ Q₂ : α → HProp}
+  (hspec : ⦃P₂⦄ x ⦃Q₂⦄) (himp₁ : P₁ ≤ P₂ := by rfl) (himp₂ : Q₂ ≤ Q₁ := by rfl) :
+  ⦃ P₁ ⦄ x ⦃ Q₁ ⦄ := by
+  intro μ hp
+  apply (Observation.observe x).mono _ _ himp₂
+  exact hspec μ (himp₁ μ hp)
+
+theorem spec {P₁ P₂ : HProp} {x : IO α} {f : α → IO β} {Q₁ : α → HProp} {Q₂ : β → HProp}
+  (hspec : ⦃P₂⦄ x ⦃Q₁⦄) (himp₁ : P₁ ≤ P₂ := by simp) (himp₂ : Q₂ ≤ Q₃ := by rfl) (hgoal : ∀ a, ⦃ Q₁ a ⦄ f a ⦃ Q₂ ⦄) :
+  ⦃ P₁ ⦄ (do let a ← x; f a) ⦃ Q₃ ⦄ := by
+  intro μ hp
+  rw[Observation.bind_bind]
+  apply (do let a ← Observation.observe x; Observation.observe (f a)).mono _ _ himp₂
+  apply (Observation.observe x).mono _ _ hgoal _ (hspec μ (himp₁ μ hp))
+
+@[simp]
+theorem PredTrans2.Triple.persistent_sep_conj {p : Prop} {q : HProp} {x : IO α} :
+  ⦃↟p ⋆ q⦄ x ⦃r⦄ ↔ p → ⦃q⦄ x ⦃r⦄ := by
+  constructor
+  · intro h hp μ hq; replace h := h μ; simp at h; exact h hp μ hq sorry rfl
+  · intro h μ; simp; intro hp μ hq hdis hμ; subst hμ; exact h hp μ hq
+
+@[simp]
+theorem PredTrans2.Triple.exists {p : α → HProp} {x : IO β} {q : β → HProp} :
+  ⦃∃' a, p a⦄ x ⦃q⦄ ↔ ∀ a, ⦃p a⦄ x ⦃q⦄ := by
+  constructor
+  · intro h a μ hp; exact h μ (HProp.exists_exists.mpr ⟨a, hp⟩)
+  · intro h μ; simp; exact (fun a => h a μ)
+
+@[simp]
+theorem PredTrans2.map_post {f : α → β} {t : PredTrans2 α} : (f <$> t).trans p = t.trans (fun a => p (f a)) := by
+  sorry -- simp only [Functor.map, bind, Function.comp_apply, pure, persistent, post]
+
+@[simp]
+theorem PredTrans2.Triple.map {p : HProp} {x : IO α} {q : β → HProp} :
+  ⦃p⦄ (f <$> x) ⦃q⦄ ↔ ⦃p⦄ x ⦃fun a => q (f a)⦄ := by
+  constructor
+  · intro h μ hp; have h := h μ hp; simp at h; exact h
+  · intro h μ hp; have h := h μ hp; simp; exact h
+
+@[simp]
+theorem HProp.single_implies {l : Loc} {x y : α} :
+  ((l ↦ x) ≤ (l ↦ y)) ↔ x = y := by
+  constructor
+  · intro h; have h := h (Heap.single l (Sigma.mk α x)); simp at h; have h := congrArg AList.entries h; simp[Heap.single] at h; injection h
+  · intro h; exact h ▸ le_refl _
+
 section Counter
 
 def Counter := IO.Ref Nat
@@ -1256,26 +1348,45 @@ def Counter.incr (c : Counter) : IO Unit := (c : IO.Ref Nat).modify (· + 1)
 
 def Counter.get (c : Counter) : IO Nat := ST.Prim.Ref.get c
 
+def Counter.free (c : Counter) : IO Unit := pure ()
+
 def test : IO Nat := do
   let c ← Counter.new
-  Counter.incr c
-  Counter.incr c
-  Counter.get c
+  c.incr
+  c.incr
+  let n ← c.get
+  c.free
+  pure n
 
 axiom IO.refAt {α} : Loc → IO.Ref α
 
-axiom IO.mkRef_spec {α} {x : α} : Observation.observe (IO.mkRef x : IO (IO.Ref α)) ≤ PredTrans2.post (fun (r : IO.Ref α) => ∃' l, ↟(r = IO.refAt l) ⋆ l ↦ x)
+axiom IO.mkRef_spec {α : Type} {x : α} :
+  ⦃ emp ⦄ (IO.mkRef x : IO (IO.Ref α)) ⦃fun (r : IO.Ref α) => ∃' l, ↟(r = IO.refAt l) ⋆ l ↦ x⦄
 
-theorem Counter.new_spec : Observation.observe Counter.new ≤ PredTrans2.post (fun (r : Counter) => ∃' l, ↟(r = IO.refAt l) ⋆ l ↦ (0 : Nat)) :=
+axiom IO.modify_spec {α : Type} {l : Loc} {x : α} {f : α → α} :
+  ⦃l ↦ x⦄ ((IO.refAt l).modify f : IO Unit) ⦃fun _ => l ↦ f x⦄
+
+axiom IO.get_spec {α : Type} {l : Loc} {x : α} :
+  ⦃l ↦ x⦄ (ST.Prim.Ref.get (IO.refAt l) : IO α) ⦃fun r => ↟(r = x) ⋆ l ↦ x⦄
+
+theorem Counter.new_spec : ⦃ emp ⦄ Counter.new ⦃fun (c : Counter) => ∃' l, ↟(c = IO.refAt l) ⋆ l ↦ 0⦄ :=
   IO.mkRef_spec
 
-#check (rfl : PredTrans2.instLE = PredTrans2.instPreorder.toLE)
-theorem test_spec : Observation.observe test ≤ PredTrans2.pure 2 := by
-  unfold test
-  simp
-  set_option pp.explicit true in
-  refine use_spec_bind Counter.new_spec ?_
+theorem Counter.incr_spec : ⦃l ↦ n⦄ Counter.incr (IO.refAt l) ⦃fun _ => l ↦ n+1⦄ :=
+  IO.modify_spec
 
+theorem Counter.get_spec : ⦃l ↦ n⦄ Counter.get (IO.refAt l) ⦃fun r => ↟(r = n) ⋆ l ↦ n⦄ :=
+  IO.get_spec
+
+axiom Counter.free_spec {α : Type} {l : Loc} {x : α} :
+  ⦃l ↦ x⦄ (Counter.free (IO.refAt l) : IO Unit) ⦃fun _ => emp⦄
+
+theorem test_spec : ⦃ emp ⦄ test ⦃fun r => ↟(r = 2)⦄ := by
+  apply spec Counter.new_spec (by simp); simp; intro c l hp; subst hp
+  apply spec (Counter.incr_spec (n := 0)) (by simp); simp
+  apply spec (Counter.incr_spec (n := 1)) (by simp); simp
+  apply spec (Counter.get_spec (n := 2)) (by simp); simp
+  apply Counter.free_spec
 end Counter
 
 section NITest
