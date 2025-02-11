@@ -221,7 +221,7 @@ theorem PredTrans.bind_post {f : α → PredTrans β} {goal : PredTrans β}
 
 end PredTrans
 
-section PredTrans2
+section HPredTrans
 
 def Loc : Type := Nat
 instance : DecidableEq Loc := instDecidableEqNat
@@ -264,6 +264,12 @@ instance : Membership Loc Heap where
 
 def Heap.Disjoint : Heap → Heap → Prop :=
   fun μ₁ μ₂ => ∀ l, l ∈ μ₁.dom → l ∉ μ₂.dom
+
+@[simp]
+theorem Heap.Disjoint_empty_left : Disjoint empty μ := sorry
+
+@[simp]
+theorem Heap.Disjoint_empty_right : Disjoint μ empty := sorry
 
 def Heap.union : Heap → Heap → Heap :=
   fun μ₁ μ₂ => AList.union μ₁ μ₂
@@ -357,11 +363,14 @@ def HProp.persistent (p : Prop) : HProp :=
 --   coe := HProp.persistent
 notation:max "↟" p:max => HProp.persistent p
 
-def HProp.true : HProp :=
+protected def HProp.True : HProp :=
   ∃' (h : HProp), h
 
+instance : Inhabited HProp where
+  default := HProp.True
+
 def HProp.sep_imp (p q : HProp) : HProp :=
-  ∃' (h : HProp), h ⋆ ↟(p ⋆ q ≤ h)
+  ∃' (h : HProp), h ⋆ ↟(p ⋆ h ≤ q)
 
 notation:67 p " -⋆ " q => HProp.sep_imp p q
 
@@ -398,6 +407,11 @@ theorem HProp.imp_exists_right : (p ≤ q x) → p ≤ (HProp.exists q) := by
   exact ⟨x, h μ hp⟩
 
 @[simp]
+theorem HProp.True_intro : HProp.True μ ↔ True := by
+  simp[HProp.True]
+  use (fun _ => True)
+
+@[simp]
 theorem HProp.persistent_true_eq_empty : ↟True = emp := by
   ext μ
   simp only [persistent, exists_exists, empty_empty, exists_const]
@@ -419,17 +433,48 @@ theorem HProp.persistent_implies_right {p' : HProp} : p' ≤ ↟q → (p' Heap.e
   simp only [persistent_intro, and_true] at this
   exact this
 
-@[simp]
+-- this is too brutal
+-- @[simp]
 theorem HProp.sep_conj_intro : (p ⋆ q) μ ↔ ∃ μ₁ μ₂, p μ₁ ∧ q μ₂ ∧ Heap.Disjoint μ₁ μ₂ ∧ μ = μ₁ ∪ μ₂ := by
   constructor
   · sorry
   · sorry
 
 @[simp]
+theorem HProp.sep_conj_frame_left : (p ⋆ h) ≤ (q ⋆ h) ↔ p ≤ q := by
+  constructor
+  · sorry
+  · sorry
+
+@[simp]
+theorem HProp.sep_conj_frame_right : (h ⋆ p) ≤ (h ⋆ q) ↔ p ≤ q := by
+  constructor
+  · sorry
+  · sorry
+
+@[simp]
+theorem HProp.sep_conj_empty : (emp ⋆ h) = h := by
+  sorry
+
+@[simp]
 lemma HProp.forall_forall : (HProp.forall p) μ ↔ ∀ x, p x μ := sorry
 
 @[simp]
+lemma HProp.sep_conj_forall : ((HProp.forall p) ⋆ q) = HProp.forall (fun a => p a ⋆ q) := sorry
+
+@[simp]
 lemma HProp.sep_imp_intro : (HProp.sep_imp p q) μ ↔ ∀ μ', Heap.Disjoint μ μ' → p μ' → q (μ ∪ μ') := sorry
+
+theorem HProp.sep_imp_conj : ((p -⋆ q) ⋆ h) μ → (p -⋆ (q ⋆ h)) μ := by
+  intro hp
+  simp_all[HProp.sep_conj_intro]
+  obtain ⟨μ₁, hpq, μ₂, hh, hdis₁₂, hunion₁₂⟩ := hp
+  intro μ' hdis hp
+  have : μ₁.Disjoint μ' := sorry -- follows from hdis : μ.Disjoint μ' and hunion₁₂ : μ = μ₁ ∪ μ₂
+  have hq := hpq μ' this hp
+  use μ₁ ∪ μ', hq, μ₂, hh
+  have : (μ₁ ∪ μ').Disjoint μ₂ := sorry -- follows from hdis : hunion₁₂ ▸ (μ₁ ∪ μ₂).Disjoint μ' and hdis₁₂ : μ₁.Disjoint μ₂
+  use this, sorry -- by simp[hunion₁₂] and commutativity of ∪
 
 @[simp]
 theorem HProp.sep_conj_exists {p : α → HProp} : (∃' x, p x) ⋆ q = ∃' x, (p x ⋆ q) := by
@@ -446,14 +491,9 @@ theorem HProp.sep_conj_exists {p : α → HProp} : (∃' x, p x) ⋆ q = ∃' x,
 
 @[simp]
 theorem HProp.persistent_sep_conj : (↟p ⋆ q) μ ↔ p ∧ q μ := by
-  simp[HProp.persistent]
-  constructor
-  · intro h
-    obtain ⟨μ', hq⟩ := h
-    sorry
-  · sorry
+  simp only [persistent, sep_conj_exists, sep_conj_empty, exists_exists, exists_prop]
 
-def PredTrans2.Pre (α : Type u) : Type (u + 1) :=
+def HPredTrans.Pre (α : Type u) : Type (u + 1) :=
   (α → HProp.{u}) → HProp.{u}
 
 @[simp]
@@ -469,28 +509,28 @@ theorem tmp2 {β : α → Type v} {γ : α → Type v} {a : α} {f : γ a → β
   rfl
 
 @[ext]
-def PredTrans2.Pre.ext {a b : PredTrans2.Pre α} : (∀ p, a p = b p) → a = b := by
-  simp[PredTrans2.Pre]
+def HPredTrans.Pre.ext {a b : HPredTrans.Pre α} : (∀ p, a p = b p) → a = b := by
+  simp[HPredTrans.Pre]
   intro h
   ext p : 1
   exact h p
 
-def PredTrans2.Mono (t : PredTrans2.Pre α) : Prop :=
+def HPredTrans.Mono (t : HPredTrans.Pre α) : Prop :=
   ∀ p q, p ≤ q → t p ≤ t q
 
-def PredTrans2.Frame (t : PredTrans2.Pre α) : Prop :=
-  ∀ μ₁ μ₂ p, Heap.Disjoint μ₁ μ₂ → t p μ₁ → t (fun a => p a ⋆ (· = μ₂)) (μ₁ ∪ μ₂)
+def HPredTrans.Frame (t : HPredTrans.Pre α) : Prop :=
+  ∀ p frame, t p ⋆ frame ≤ t (fun a => p a ⋆ frame)
 
-structure PredTrans2 (α : Type u) : Type (u + 1)where
-  trans : PredTrans2.Pre α
-  mono : PredTrans2.Mono trans
-  frame : PredTrans2.Frame trans
+structure HPredTrans (α : Type u) : Type (u + 1)where
+  trans : HPredTrans.Pre α
+  mono : HPredTrans.Mono trans
+  frame : HPredTrans.Frame trans
 
 @[ext]
-def PredTrans2.ext {a b : PredTrans2 α} : (∀ p, a.trans p = b.trans p) → a = b := by
+def HPredTrans.ext {a b : HPredTrans α} : (∀ p, a.trans p = b.trans p) → a = b := by
   sorry  -- recover from history
 
-def PredTrans2.post (post : α → HProp) : PredTrans2 α :=
+def HPredTrans.post (post : α → HProp) : HPredTrans α :=
   { trans := fun p => ∀' a, post a -⋆ p a -- sep_imp on post conditions
     mono := by
       intro _ _ hpq μ hp
@@ -498,22 +538,106 @@ def PredTrans2.post (post : α → HProp) : PredTrans2 α :=
       intro x μ' hdis hpost
       exact hpq x (μ ∪ μ') (hp x μ' hdis hpost)
     frame := by
-      intro μ₁ μ₂ p _hdis hp
-      simp_all
-      intro x μ' hdis hpost
-      use (μ₁ ∪ μ')
-      constructor
-      · apply hp _ _ _ hpost
-        show μ₁.Disjoint μ'; sorry
-      · show (μ₁ ∪ μ').Disjoint μ₂ ∧ μ₁ ∪ μ₂ ∪ μ' = μ₁ ∪ μ' ∪ μ₂; sorry
+      intro p h μ hp
+      simp at hp
+      intro a
+      exact HProp.sep_imp_conj (hp a)
   }
 
-def PredTrans2.persistent (post : α → Prop) : PredTrans2 α :=
-  PredTrans2.post (fun a => ↟(post a))
+-- I'll leave these for educational purposes
+def HPredTrans.post_attempt_1 (post : α → HProp) : HPredTrans α :=
+  { trans := fun p μ => ∀ a, post a μ ≤ p a μ
+    mono := by
+      intro _ _ hpq μ hp a hpost
+      exact hpq a μ (hp a hpost)
+    frame := by
+      intro μ₁ μ₂ p _hdis hp a hpost
+      simp
+      use μ₁
+      simp_all only [le_Prop_eq, and_self, and_true]
+      apply hp a
+      show post a μ₁
+      sorry -- but we only have post a (μ₁ ∪ μ₂)
+  }
+
+def HPredTrans.post_attempt_2 (post : α → HProp) : HPredTrans α :=
+  { trans := fun p => ↟(∀ a h, (post a ⋆ h) ≤ (p a ⋆ h))
+    mono := by
+      intro _ _ hpq μ hp
+      simp_all
+      intro a μ hpost
+      exact hpq a μ (hp.1 a μ hpost)
+    frame := by
+      intro μ₁ μ₂ p _hdis hp
+      simp_all
+      sorry -- need to show μ₂ = Heap.empty but can't
+  }
+
+def HPredTrans.post_attempt_3 (post : α → HProp) : HPredTrans α :=
+  { trans := fun p μ => (∀ a h, (post a ⋆ h) ≤ (p a ⋆ h))
+    mono := by
+      intro _ _ hpq μ hp
+      simp_all
+      intro a μ hpost
+      exact hpq a μ (hp a μ hpost)
+    frame := by
+      intro μ₁ μ₂ p _hdis hp
+      simp_all
+      sorry -- need to show (post a ≤ p a) → (post a ≤ p a ⋆ fun x => x = μ₂) but can't
+  }
+
+def HPredTrans.post_attempt_4 (post : α → HProp) : HPredTrans α :=
+  { trans := fun p μ => (∀ a h, (post a ⋆ h) μ ≤ (p a ⋆ h) μ)
+    mono := by
+      intro _ _ hpq μ hp
+      simp_all
+      intro a h hpost
+      have := hp a h hpost
+      exact HProp.sep_conj_frame_left.mpr (hpq a) μ this
+    frame := by
+      intro μ₁ μ₂ p _hdis hp a h hpost
+      simp_all
+      sorry -- need to show ((post a ⋆ h) (μ₁ ∪ μ₂)) → ((p a ⋆ fun x => x = μ₂) ⋆ h) (μ₁ ∪ μ₂) but can't
+  }
+
+def HPredTrans.post_attempt_5 (post : α → HProp) : HPredTrans α :=
+  { trans := fun p μ => (∀ a h μ₂ (_ : Heap.Disjoint μ μ₂), (post a ⋆ h) ≤ p a)
+    mono := by
+      intro _ _ hpq μ hp
+      simp_all
+      intro a h μ₂ hdis hpost
+      have := hp a h μ₂ hdis hpost
+      exact HProp.sep_conj_frame_left.mpr (hpq a) _ this
+    frame := by
+      intro μ₁ μ₂ p _hdis hp a h μ hdis hpost
+      simp_all
+      sorry -- need to show (post a (μ₁ ∪ μ₂)) → (post a μ₁), but can't
+  }
+
+def HPredTrans.post_attempt_6 (post : α → HProp) : HPredTrans α :=
+  { trans := fun p μ => (∃ h, h μ ∧ ∀ a, (post a ⋆ h) ≤ p a)
+    mono := by
+      intro _ _ hpq μ hp
+      sorry --doable
+    frame := by
+      intro μ₁ μ₂ p _hdis hp
+      simp_all
+      obtain ⟨h, hh, hpost⟩ := hp
+      use h ⋆ fun x => x = μ₂
+      constructor
+      · simp[HProp.sep_conj_intro]
+        use μ₁
+      · intro a
+        sorry
+        -- apply HProp.sep_conj_frame_left.mpr (hpost a) -- need to reassociate ⋆ here, otherwise done
+  }
+
+def HPredTrans.persistent (post : α → Prop) : HPredTrans α :=
+  HPredTrans.post (fun a => ↟(post a))
 
 @[simp]
-theorem PredTrans2.persistent_elim : (PredTrans2.persistent p).trans q μ ↔ (∀ a, p a → q a μ) := by
-  simp_all[PredTrans2.persistent, PredTrans2.post]
+theorem HPredTrans.persistent_elim : (HPredTrans.persistent p).trans q μ ↔ (∀ a, p a → q a μ) := by
+  simp_all[HPredTrans.persistent, HPredTrans.post]
   constructor
   · intro h a hp
     have := h a Heap.empty sorry hp rfl
@@ -532,18 +656,18 @@ theorem PredTrans.post_le_post_post : (PredTrans.post p).val q ↔ PredTrans.pos
     simp at this
     exact this a hp
 
-theorem PredTrans2.PredTrans_persistent_post :
-  ((PredTrans2.persistent p).trans (fun a => HProp.persistent (q a)) Heap.empty)
+theorem HPredTrans.PredTrans_persistent_post :
+  ((HPredTrans.persistent p).trans (fun a => HProp.persistent (q a)) Heap.empty)
   ↔ (PredTrans.post p).val q := by
-  simp[PredTrans2.persistent_elim]
+  simp[HPredTrans.persistent_elim]
 
-def PredTrans2.le (a b : PredTrans2 α) :=
+def HPredTrans.le (a b : HPredTrans α) :=
   ∀ p, b.trans p ≤ a.trans p
 
-instance PredTrans2.instLE : LE (PredTrans2 α) where
-  le := PredTrans2.le
+instance HPredTrans.instLE : LE (HPredTrans α) where
+  le := HPredTrans.le
 
-instance PredTrans2.instPreorder : Preorder (PredTrans2 α) where
+instance HPredTrans.instPreorder : Preorder (HPredTrans α) where
   le_refl a := by
     intro p
     apply le_refl
@@ -551,21 +675,21 @@ instance PredTrans2.instPreorder : Preorder (PredTrans2 α) where
     intro p
     apply le_trans (hbc p) (hab p)
 
-instance PredTrans2.instPartialOrder : PartialOrder (PredTrans2 α) where
+instance HPredTrans.instPartialOrder : PartialOrder (HPredTrans α) where
   le_antisymm a b hab hba := by
     ext p : 1
     apply le_antisymm (hba p) (hab p)
 
-theorem PredTrans2.sep_conj_stuff {t : PredTrans2 α} : (t.trans p ⋆ (· = μ₂)) ≤ t.trans (fun a => p a ⋆ (· = μ₂)) := by
+theorem HPredTrans.sep_conj_stuff {t : HPredTrans α} : (t.trans p ⋆ (· = μ₂)) ≤ t.trans (fun a => p a ⋆ (· = μ₂)) := by
   intro μ
-  simp
+  simp[HProp.sep_conj_intro]
   intro μ₁ hp hdis hunion
   apply hunion ▸ t.frame μ₁ μ₂ _ hdis hp
 
-def PredTrans2.pure (a : α) : PredTrans2 α :=
-  PredTrans2.persistent (· = a)
+def HPredTrans.pure (a : α) : HPredTrans α :=
+  HPredTrans.persistent (· = a)
 
-def PredTrans2.bind {α β} (x : PredTrans2 α) (f : α → PredTrans2 β) : PredTrans2 β :=
+def HPredTrans.bind {α β} (x : HPredTrans α) (f : α → HPredTrans β) : HPredTrans β :=
   { trans := fun p => x.trans (fun a => (f a).trans p),
     mono := fun _ _ hpq => x.mono _ _ (fun a => (f a).mono _ _ hpq),
     frame := by
@@ -573,48 +697,181 @@ def PredTrans2.bind {α β} (x : PredTrans2 α) (f : α → PredTrans2 β) : Pre
       have := x.frame μ₁ μ₂ _ _hdis hp
       apply x.mono (fun a => (f a).trans p ⋆ fun x => x = μ₂) (fun a => (f a).trans fun a => p a ⋆ fun x => x = μ₂) _ _ this
       intro a
-      simp[PredTrans2.sep_conj_stuff]
+      simp[HPredTrans.sep_conj_stuff]
   }
 
-instance PredTrans2.instMonad : Monad PredTrans2 where
-  pure := PredTrans2.pure
-  bind := PredTrans2.bind
+instance HPredTrans.instMonad : Monad HPredTrans where
+  pure := HPredTrans.pure
+  bind := HPredTrans.bind
 
-instance PredTrans2.instLawfulMonad : LawfulMonad PredTrans2 where
+instance HPredTrans.instLawfulMonad : LawfulMonad HPredTrans where
   bind_pure_comp := by simp[Bind.bind, Pure.pure, Functor.map, Function.comp_def]
-  pure_bind := by intros; ext p; simp[Bind.bind, Pure.pure, PredTrans2.bind, PredTrans2.pure]
-  bind_assoc := by intros; ext p; simp [Bind.bind, PredTrans2.bind]
-  bind_map := by intros; ext p; simp [Bind.bind, PredTrans2.bind, Functor.map, Function.comp_apply, PredTrans2.pure, Seq.seq]
-  map_pure := by intros; ext p; simp [Bind.bind, PredTrans2.bind, Pure.pure, PredTrans2.pure, Functor.map, Function.comp_apply]
+  pure_bind := by intros; ext p; simp[Bind.bind, Pure.pure, HPredTrans.bind, HPredTrans.pure]
+  bind_assoc := by intros; ext p; simp [Bind.bind, HPredTrans.bind]
+  bind_map := by intros; ext p; simp [Bind.bind, HPredTrans.bind, Functor.map, Function.comp_apply, HPredTrans.pure, Seq.seq]
+  map_pure := by intros; ext p; simp [Bind.bind, HPredTrans.bind, Pure.pure, HPredTrans.pure, Functor.map, Function.comp_apply]
   map_const := sorry
   id_map := sorry
   pure_seq := sorry
   seqLeft_eq := sorry
   seqRight_eq := sorry
 
-def PredTrans.toSep (x : PredTrans α) : PredTrans2 α :=
+-- observe incr = fun q s => q () (s + 1)
+-- { s := 0 } incr {(), s := 1}
+-- = (fun s => s = 0) → observe incr fun () s => s = 1
+-- = (fun s => s = 0) → fun s => (fun () s => (s = 1)) () (s + 1)
+--
+-- Insight: It is likely that all interesting observations are of the form
+--   fun q xs => f xs ⊆ q
+-- for vanilla PredTrans, this is just post.
+-- for StateT σ PredTrans, this is `fun q s => (a,s') ∈ f s → q a s'`
+-- for HPredTrans, this is `fun q μ => (a, μ') ∈ f μ → q a μ'`
+
+def HPredTrans.select (f : Heap → α → HProp) : HPredTrans α :=
+  { trans := fun q μ => ∀(frame : HProp), ∃ μ₁ μ₂, μ₁.Disjoint μ₂ ∧ μ = μ₁ ∪ μ₂ ∧ ∀ a μ₁', μ₁'.Disjoint μ₂ → f μ₁ a μ₁' → frame μ₂ → q a (μ₁' ∪ μ₂),
+    mono := by
+      intro _ _ hpq μ hp frame
+      obtain ⟨μ₁,μ₂,hdis,hunion,hp⟩ := hp frame
+      use μ₁, μ₂, hdis, hunion
+      intro a μ₁' hdis' hf hframe
+      exact hpq _ _ (hp a μ₁' hdis' hf hframe)
+    frame := by
+      intro q frame₁ μ h frame₂
+      simp at h
+      obtain ⟨μ₁, μ₂, hdis, hunion, h, hframe₁⟩ := h
+      obtain ⟨μ₁₁, μ₁₂, hdis₁, hunion₁, h⟩ := h (fun μ₁₂ => frame₂ (μ₁₂ ∪ μ₂)) --(frame₁ -⋆ frame₂)
+      have hdis' : μ₁₁.Disjoint (μ₁₂ ∪ μ₂) := sorry -- follows from hdis₁ : μ₁₁.Disjoint μ₁₂, hdis : (μ₁₁ ∪ μ₁₂).Disjoint μ₂
+      have hunion' : μ = μ₁₁ ∪ (μ₁₂ ∪ μ₂) := sorry -- follows from hunion₁ : μ₁ = μ₁₁ ∪ μ₁₂ and hunion : μ₁ ∪ μ₂ = μ
+      use μ₁₁, (μ₁₂ ∪ μ₂), hdis', hunion'
+      intro a μ₁' hdis₁' hf hframe₂
+      have hdis₂' : μ₁'.Disjoint μ₁₂ := sorry -- follows from hdis₁' : μ₁'.Disjoint (μ₁₂ ∪ μ₂)
+      apply HProp.sep_conj_intro.mpr
+      have hassoc : μ₁' ∪ (μ₁₂ ∪ μ₂) = μ₁' ∪ μ₁₂ ∪ μ₂ := sorry -- associativity of ∪
+      have hdis₃' : (μ₁' ∪ μ₁₂).Disjoint μ₂ := sorry -- follows from hdis₁' : μ₁'.Disjoint (μ₁₂ ∪ μ₂)
+      use (μ₁' ∪ μ₁₂), μ₂, h a μ₁' hdis₂' hf hframe₂
+  }
+
+def HPredTrans.pure' (a : α) : HPredTrans α :=
+  HPredTrans.select (fun μ a' μ' => μ = μ' ∧ a = a')
+
+theorem HPredTrans.pure'_pure : HPredTrans.pure' a = HPredTrans.pure a := by
+  ext q μ
+  simp[HPredTrans.pure',HPredTrans.pure, HPredTrans.select]
+  constructor
+  · intro h
+    obtain ⟨μ₁,μ₂,hdis,hunion,h⟩ := h HProp.True
+    replace h :=  h a μ₁ hdis rfl rfl
+    simp[hunion,h]
+  · intro h frame
+    use μ, Heap.empty, sorry, sorry
+    intro a _ hdis' hμ ha hframe
+    subst hμ ha
+    simp[h]
+
+def HPredTrans.bind' {α β} (x : HPredTrans α) (f : α → HPredTrans β) : HPredTrans β :=
+  HPredTrans.select (fun μ b₁ μ₁' => x.trans (fun a => (f a).trans (fun b₂ μ₂' => b₁ = b₂ ∧ μ₁' = μ₂')) μ)
+
+theorem HPredTrans.blah : bind' (select s) f = select (fun μ b₁ μ₁' => ∀ a μ', s μ a μ' → (f a).trans (fun b₂ μ₂' => b₁ = b₂ ∧ μ₁' = μ₂') μ') := by
+  simp only [HPredTrans.bind',HPredTrans.select]
+  simp only [forall_exists_index, and_imp, mk.injEq]
+  ext p μ
+  constructor
+  · intro h frame₁
+    obtain ⟨μ₁,μ₂,hdis,hunion,h⟩ := h frame₁
+    use μ₁, μ₂, hdis, hunion
+    intro b₁ μ₁' hdis' hsf hframe₁
+    refine h b₁ μ₁' hdis' ?_ hframe₁
+    clear h
+    intro frame₂
+    use μ₁, Heap.empty, (by simp), (by simp)
+    intro a₂ μ₁' _ hs' hframe₂
+    apply hsf
+    simp[hs']
+  · intro h frame₁
+    obtain ⟨μ₁,μ₂,hdis,hunion,h⟩ := h frame₁
+    use μ₁, μ₂, hdis, hunion
+    intro b₁ μ₁' hdis' hsf hframe₁
+    obtain ⟨μ₁'',μ₂'', hdis'', hunion'', hsf⟩ := hsf frame₁
+    refine h _ μ₁' hdis' ?_ hframe₁
+    clear h
+    intro a₁ μ₁''' hs
+    have := hsf a₁ μ₁'''
+    simp[hs']
+
+
+theorem HPredTrans.bind'_bind : bind' (select s) (select ∘ f) = bind (select s) (select ∘ f) := by
+  ext q μ
+--  generalize h : HPredTrans.select s = x
+--  rw (occs := .pos [2]) [HPredTrans.select]
+  simp only [bind', bind, select]
+--  rw (occs := .pos [1]) [HPredTrans.select]
+--  simp[HPredTrans.select, HPredTrans.bind]
+--  subst h
+  constructor
+  · intro h frame₁
+    obtain ⟨μ₁,μ₂,hdis,hunion,h⟩ := h frame₁
+    use μ₁, μ₂, hdis, hunion
+    intro a μ₁' hdis' hs hframe₁
+    simp[select]
+    intro frame₂
+    use μ₁', μ₂, hdis', (by rfl)
+    intro b μ₁'' hdis'' hf hframe₂
+    apply h b μ₁'' hdis'' ?_ hframe₁
+    intro frame₃
+    use μ₁, μ₂, hdis, hunion
+    simp[select]
+    replace h :=  h _ μ₁ hdis
+    simp[hunion,h]
+  · intro h frame
+    use μ, Heap.empty, sorry, sorry
+    intro a _ hdis' hμ ha hframe
+    subst hμ ha
+    simp[h]
+
+def HPredTrans.select2 (f : Heap → α → HProp) : HPredTrans α :=
+  { trans := fun q μ => ∃(frame : HProp), ∃ μ₁ μ₂, μ₁.Disjoint μ₂ ∧ μ = μ₁ ∪ μ₂ ∧ ∀ a μ₁', μ₁'.Disjoint μ₂ → f μ₁ a μ₁' → frame μ₂ → q a (μ₁' ∪ μ₂),
+    mono := by
+      intro _ _ hpq μ hp
+      intro a μ' hpost
+      exact hpq a μ' (hp a μ' hpost)
+    frame := by
+      intro q frame₁ μ h
+      simp at h
+      obtain ⟨μ₁, μ₂, hdis, hunion, ⟨frame₂, μ₁₁, μ₁₂, hdis₁, hunion₁, h⟩, hframe₁⟩ := h
+      have hdis' : μ₁₁.Disjoint (μ₁₂ ∪ μ₂) := sorry -- follows from hdis₁ : μ₁₁.Disjoint μ₁₂, hdis : (μ₁₁ ∪ μ₁₂).Disjoint μ₂
+      have hunion' : μ = μ₁₁ ∪ (μ₁₂ ∪ μ₂) := sorry -- follows from hunion₁ : μ₁ = μ₁₁ ∪ μ₁₂ and hunion : μ₁ ∪ μ₂ = μ
+      use (frame₁ ⋆ frame₂), μ₁₁, (μ₁₂ ∪ μ₂), hdis', hunion'
+      intro a μ₁' hdis₁' hf hframe
+      have hdis₂' : μ₁'.Disjoint μ₁₂ := sorry -- follows from hdis₁' : μ₁'.Disjoint (μ₁₂ ∪ μ₂)
+      apply HProp.sep_conj_intro.mpr
+      have hassoc : μ₁' ∪ (μ₁₂ ∪ μ₂) = μ₁' ∪ μ₁₂ ∪ μ₂ := sorry -- associativity of ∪
+      have hdis₃' : (μ₁' ∪ μ₁₂).Disjoint μ₂ := sorry -- follows from hdis₁' : μ₁'.Disjoint (μ₁₂ ∪ μ₂)
+      use (μ₁' ∪ μ₁₂), μ₂, h a μ₁' hdis₂' hf ?hframe
+  }
+
+def PredTrans.toSep (x : PredTrans α) : HPredTrans α :=
   { trans := fun q μ => (x.val (fun a => q a μ)),
     mono := by intro _ _ hpq μ; simp; exact x.property _ _ (fun a => hpq a μ)
     frame := by
       intro μ₁ μ₂ p hdis
-      simp_all
+      simp_all[HProp.sep_conj_intro]
       intro hp
       apply x.property _ _ _ hp
       intro a hp
       use μ₁
   }
 
-theorem PredTrans2.PredTrans_pure_pure :
-  PredTrans2.pure x = PredTrans.toSep (PredTrans.pure x) := by
+theorem HPredTrans.PredTrans_pure_pure :
+  HPredTrans.pure x = PredTrans.toSep (PredTrans.pure x) := by
   ext p μ
   simp only [pure, persistent_elim, forall_eq, PredTrans.toSep, PredTrans.pure]
 
-theorem PredTrans2.PredTrans_bind_bind :
-  PredTrans2.bind (PredTrans.toSep x) (fun a => PredTrans.toSep (f a))
+theorem HPredTrans.PredTrans_bind_bind :
+  HPredTrans.bind (PredTrans.toSep x) (fun a => PredTrans.toSep (f a))
   = PredTrans.toSep (PredTrans.bind x f) := by
-  simp[PredTrans2.bind, PredTrans.bind, PredTrans.toSep]
+  simp[HPredTrans.bind, PredTrans.bind, PredTrans.toSep]
 
-end PredTrans2
+end HPredTrans
 
 section MonadOrdered
 
@@ -648,10 +905,10 @@ instance PredTrans.instMonadOrdered : MonadOrdered PredTrans where
     apply hxy
     exact y.property _ _ (fun a => hfg a p) hyg
 
-instance PredTrans2.instMonadOrdered : MonadOrdered PredTrans2 where
+instance HPredTrans.instMonadOrdered : MonadOrdered HPredTrans where
   bind_mono := by
     intros _ _ x y f g hxy hfg
-    simp[Bind.bind,PredTrans2.bind] at *
+    simp[Bind.bind,HPredTrans.bind] at *
     intro p μ hyg
     apply hxy
     exact y.mono _ _ (fun a => hfg a p) μ hyg
@@ -969,12 +1226,12 @@ theorem EStateM.pure_inj [inh : Inhabited σ] : pure (f := EStateM ε σ) x = pu
 @[simp]
 axiom IO.pure_inj {α} {x y : α} : pure (f := IO) x = pure y ↔ x = y -- just as for EStateM, but unsafe. Yet very reasonable; part of the TCB
 
-axiom IO.observe {α} (x : IO α) : PredTrans2 α
-axiom IO.observe_pure {α} {x : α} : IO.observe (pure x) = PredTrans2.pure x
+axiom IO.observe {α} (x : IO α) : HPredTrans α
+axiom IO.observe_pure {α} {x : α} : IO.observe (pure x) = HPredTrans.pure x
 axiom IO.observe_bind {α β} (x : IO α) (f : α → IO β) : IO.observe (x >>= f) = IO.observe x >>= fun a => IO.observe (f a)
 
 set_option pp.universes true in
-noncomputable instance IO.instObservation : Observation IO PredTrans2 where
+noncomputable instance IO.instObservation : Observation IO HPredTrans where
   observe := IO.observe
   pure_pure := IO.observe_pure
   bind_bind x f := IO.observe_bind x f
@@ -1201,13 +1458,13 @@ def program (n : Nat) (k : Nat) : IO Nat := do
   let r₂ ← addRandomEvens n k
   return r₁ + r₂
 
-axiom IO.rand_spec {n : Nat} : Observation.observe (IO.rand 0 n : IO Nat) ≤ PredTrans2.persistent (· < n)
+axiom IO.rand_spec {n : Nat} : Observation.observe (IO.rand 0 n : IO Nat) ≤ HPredTrans.persistent (· < n)
 
 /-- The result has the same parity as the input. -/
-theorem addRandomEvens_spec (n k) : Observation.observe (addRandomEvens n k) ≤ PredTrans2.persistent (fun r => r % 2 = k % 2) := by
+theorem addRandomEvens_spec (n k) : Observation.observe (addRandomEvens n k) ≤ HPredTrans.persistent (fun r => r % 2 = k % 2) := by
   simp only [addRandomEvens, bind_pure_comp, map_pure, List.forIn_yield_eq_foldlM, bind_pure]
   apply le_trans (Observation.foldlM_list ?inv ?hpre ?hstep) ?hgoal
-  case inv => exact fun xs => PredTrans2.persistent fun r => r % 2 = k % 2
+  case inv => exact fun xs => HPredTrans.persistent fun r => r % 2 = k % 2
   case hpre => simp
   case hstep =>
     intro hd tl
@@ -1239,7 +1496,7 @@ theorem addRandomEvens_spec (n k) : Observation.observe (addRandomEvens n k) ≤
 
 /-- Since we're adding even numbers to our number twice, and summing,
 the entire result is even. -/
-theorem program_spec (n k) : Observation.observe (program n k) ≤ PredTrans2.persistent (fun r => r % 2 = 0) := by
+theorem program_spec (n k) : Observation.observe (program n k) ≤ HPredTrans.persistent (fun r => r % 2 = 0) := by
   -- unfold program
   simp[program] -- only [program, bind_pure_comp, Observation.bind_bind, Observation.map_map]
   -- apply the spec for addRandomEvens
@@ -1285,11 +1542,38 @@ theorem program_spec_old (n k) : SatisfiesM (fun r => r % 2 = 0) (program n k) :
 
 end KimsBabySteps
 
-def PredTrans2.Triple [Monad m] [Observation m PredTrans2] (P : HProp) (x : m α) (Q : α → HProp) : Prop :=
-  ∀ μ, P μ → (Observation.observe x).trans Q μ
-notation "<<" P ">> " x " <<" Q ">>" => PredTrans2.Triple P x Q
-notation:lead "⦃" P "⦄ " x:lead " ⦃" Q "⦄" => PredTrans2.Triple P x Q
-notation:lead "⦃" P "⦄ " x:lead " ⦃" v ", " Q "⦄" => PredTrans2.Triple P x (fun v => Q)
+def PredTrans.Triple [Monad m] [Observation m PredTrans] (P : Prop) (x : m α) (Q : α → Prop) : Prop :=
+  P ≤ (Observation.observe x).val Q
+
+theorem blah {x : Idd α} : PredTrans.Triple P x Q ↔ (Observation.observe x).val (fun a => P ≤ Q a) := by
+  rfl
+
+def HPredTrans.Triple [Monad m] [Observation m HPredTrans] (P : HProp) (x : m α) (Q : α → HProp) : Prop :=
+  P ≤ (Observation.observe x).trans Q
+notation "<<" P ">> " x " <<" Q ">>" => HPredTrans.Triple P x Q
+notation:lead "⦃" P "⦄ " x:lead " ⦃" Q "⦄" => HPredTrans.Triple P x Q
+notation:lead "⦃" P "⦄ " x:lead " ⦃" v ", " Q "⦄" => HPredTrans.Triple P x (fun v => Q)
+
+theorem blue {x : IO α} : HPredTrans.Triple P x Q = ∀ μ, (Observation.observe x).trans (fun a => ↟(P ≤ Q a)) μ := by
+  simp[HPredTrans.Triple]
+  constructor
+  · intro h μ
+    replace h := h μ
+    simp
+  · intro h μ
+    exact h μ
+
+theorem blue2 {x : IO α} : (P ≤ (HPredTrans.post R).trans Q) ↔ ∀ μ, (HPredTrans.post R).trans (fun a => P -⋆ Q a) μ := by
+  constructor
+  · intro h μ
+    simp[HPredTrans.post]
+    intro a μ' hdis hR μ'' hdis' hp
+    replace h := h μ'' hp
+    simp[HPredTrans.post] at h
+    replace h := h a (μ ∪ μ') sorry hR
+    exact h
+  · intro h μ
+    exact h μ
 
 theorem weaken {P₁ P₂ : HProp} {x : IO α} {Q₁ Q₂ : α → HProp}
   (hspec : ⦃P₂⦄ x ⦃Q₂⦄) (himp₁ : P₁ ≤ P₂ := by rfl) (himp₂ : Q₂ ≤ Q₁ := by rfl) :
@@ -1307,25 +1591,25 @@ theorem spec {P₁ P₂ : HProp} {x : IO α} {f : α → IO β} {Q₁ : α → H
   apply (Observation.observe x).mono _ _ hgoal _ (hspec μ (himp₁ μ hp))
 
 @[simp]
-theorem PredTrans2.Triple.persistent_sep_conj {p : Prop} {q : HProp} {x : IO α} :
+theorem HPredTrans.Triple.persistent_sep_conj {p : Prop} {q : HProp} {x : IO α} :
   ⦃↟p ⋆ q⦄ x ⦃r⦄ ↔ p → ⦃q⦄ x ⦃r⦄ := by
   constructor
   · intro h hp μ hq; replace h := h μ; simp at h; exact h hp μ hq sorry rfl
   · intro h μ; simp; intro hp μ hq hdis hμ; subst hμ; exact h hp μ hq
 
 @[simp]
-theorem PredTrans2.Triple.exists {p : α → HProp} {x : IO β} {q : β → HProp} :
+theorem HPredTrans.Triple.exists {p : α → HProp} {x : IO β} {q : β → HProp} :
   ⦃∃' a, p a⦄ x ⦃q⦄ ↔ ∀ a, ⦃p a⦄ x ⦃q⦄ := by
   constructor
   · intro h a μ hp; exact h μ (HProp.exists_exists.mpr ⟨a, hp⟩)
   · intro h μ; simp; exact (fun a => h a μ)
 
 @[simp]
-theorem PredTrans2.map_post {f : α → β} {t : PredTrans2 α} : (f <$> t).trans p = t.trans (fun a => p (f a)) := by
+theorem HPredTrans.map_post {f : α → β} {t : HPredTrans α} : (f <$> t).trans p = t.trans (fun a => p (f a)) := by
   sorry -- simp only [Functor.map, bind, Function.comp_apply, pure, persistent, post]
 
 @[simp]
-theorem PredTrans2.Triple.map {p : HProp} {x : IO α} {q : β → HProp} :
+theorem HPredTrans.Triple.map {p : HProp} {x : IO α} {q : β → HProp} :
   ⦃p⦄ (f <$> x) ⦃q⦄ ↔ ⦃p⦄ x ⦃fun a => q (f a)⦄ := by
   constructor
   · intro h μ hp; have h := h μ hp; simp at h; exact h
