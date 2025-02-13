@@ -72,6 +72,9 @@ can be generalized to hyperproperties: https://dl.acm.org/doi/10.1145/3656437
 def PredTrans.post (post : α → Prop) : PredTrans α :=
   ⟨fun p => post ≤ p, fun _ _ hpq hpostp => le_trans hpostp hpq⟩
 
+def PredTrans.pre (pre : Prop) : PredTrans α :=
+  ⟨fun _ => pre, fun _ _ _ hpostp => hpostp⟩
+
 -- In case we have a trace property, the following function is injective and right-inverse to PredTrans.post, i.e.,
 --   post t.get = t.
 -- In fact, this is perhaps the characteristic property of deterministic program semantics.
@@ -1178,7 +1181,349 @@ theorem Idd.observe_push_post : Observation.observe (e : Idd α) ≤ PredTrans.p
 
 end Idd
 
+section Triple
+
+inductive TransStack : Type 1 where
+  | pure : TransStack
+  | state : (σ : Type) → TransStack → TransStack
+  | except : (ε : Type) → TransStack → TransStack
+
+@[reducible]
+def PreCond : TransStack → Type → Type
+  | .pure => Id
+  | .state σ s => ReaderT σ (PreCond s)
+  | .except _ s => PreCond s
+
+@[reducible]
+def FailConds : TransStack → Type
+  | .pure => Unit
+  | .state σ s => FailConds s
+  | .except ε s => (ε → PreCond s Prop) × FailConds s
+
+-- Translate a transformer stack to a multi-barreled postcondition
+@[reducible]
+def PostCond (α : Type) (s : TransStack) (r : Type) : Type :=
+  (α → PreCond s r) × FailConds s
+
+open TransStack in
+example {ρ ε σ} : PreCond (state σ (state ρ (except ε pure))) Prop = (σ → ρ → Prop) := rfl
+
+section PostCondExamples
+open TransStack
+
+variable (α ρ ε ε₁ ε₂ σ σ₁ σ₂ : Type)
+#reduce (types:=true) PostCond α (except ε₂ (state σ₂ (except ε₁ (state σ₁ pure)))) ρ
+-- at one point I also had TransStack.reader, but it's simpler to implement it as state
+-- because then we can turn a precondition into a postcondition without complicated traversals.
+-- Same for writer (presumably).
+example : PostCond α (state ρ pure) Prop = ((α → ρ → Prop) × Unit) := rfl
+example : PostCond α (except ε pure) Prop = ((α → Prop) × (ε → Prop) × Unit) := rfl
+example : PostCond α (state σ (except ε pure)) Prop = ((α → σ → Prop) × (ε → Prop) × Unit) := rfl
+example : PostCond α (except ε (state σ₁ pure)) Prop = ((α → σ₁ → Prop) × (ε → σ₁ → Prop) × Unit) := rfl
+example : PostCond α (state σ₂ (except ε (state σ₁ pure))) Prop = ((α → σ₂ → σ₁ → Prop) × (ε → σ₁ → Prop) × Unit) := rfl
+example : PostCond α (except ε₂ (state σ₂ (except ε₁ (state σ₁ pure)))) Prop = ((α → σ₂ → σ₁ → Prop) × (ε₂ → σ₂ → σ₁ → Prop) × (ε₁ → σ₁ → Prop) × Unit) := rfl
+example : PostCond α (except ε₂ (state σ₂ (except ε₁ (state σ₁ pure)))) β = ((α → σ₂ → σ₁ → β) × (ε₂ → σ₂ → σ₁ → Prop) × (ε₁ → σ₁ → Prop) × Unit) := rfl
+
+#reduce (types := true) ((do pure ((← MonadReaderOf.read) < 13 ∧ (← MonadReaderOf.read) = "hi")) : PreCond (state Nat (state String pure)) Prop)
+
+end PostCondExamples
+
+instance PreCond.instMonad : (stack : TransStack) → Monad (PreCond stack)
+  | .pure => inferInstance
+  | .state σ s => let _ := instMonad s; inferInstance
+  | .except ε s => let _ := instMonad s; inferInstance
+
+instance PreCond.instPreorder : {stack : TransStack} → Preorder (PreCond stack Prop)
+  | .pure => ((inferInstance : Preorder Prop) : Preorder (PreCond .pure Prop))
+  | .state σ s => let _ := @instPreorder s; (inferInstance : Preorder (σ → PreCond s Prop))
+  | .except ε s => let _ := @instPreorder s; inferInstance
+
+instance PreCond.instLE {stack : TransStack} : LE (PreCond stack Prop) := PreCond.instPreorder.toLE
+
+def FailConds.const (p : Prop) : FailConds stack :=
+  match stack with
+  | .pure => ()
+  | .state σ s => @FailConds.const s p
+  | .except ε s => (fun _ε => pure p, @FailConds.const s p)
+
+def FailConds.true : FailConds stack := FailConds.const True
+def FailConds.false : FailConds stack := FailConds.const False
+
+instance FailConds.instPreorder : {stack : TransStack} → Preorder (FailConds stack)
+  | .pure => inferInstance
+  | .state _ s => let _ := @instPreorder s; inferInstance
+  | .except _ s => let _ := @instPreorder s; inferInstance
+
+instance FailConds.instLE {stack : TransStack} : LE (FailConds stack) := FailConds.instPreorder.toLE
+
+instance PostCond.instPreorder : {stack : TransStack} → Preorder (PostCond α stack Prop) := inferInstance
+instance PostCond.instLE {stack : TransStack} : LE (PostCond α stack Prop) := PostCond.instPreorder.toLE
+
+@[simp]
+lemma PreCond.bot_le {x : PreCond stack Prop} : pure False ≤ x := by
+  induction stack
+  case pure => exact False.elim
+  case state σ s ih => intro; exact ih
+  case except ε s ih => exact ih
+
+@[simp]
+lemma PreCond.le_top {x : PreCond stack Prop} : x ≤ pure True := by
+  induction stack
+  case pure => exact fun _ => True.intro
+  case state σ s ih => intro; exact ih
+  case except ε s ih => exact ih
+
+@[simp]
+lemma FailConds.bot_le {x : FailConds stack} : FailConds.false ≤ x := by
+  simp only [false]
+  induction stack
+  case pure => simp
+  case state σ s ih => exact ih
+  case except ε s ih => simp only [const, Prod.le_def, ih, and_true]; intro ε; exact PreCond.bot_le
+
+@[simp]
+lemma FailConds.le_top {x : FailConds stack} : x ≤ FailConds.true := by
+  simp only [true]
+  induction stack
+  case pure => simp
+  case state σ s ih => exact ih
+  case except ε s ih => simp only [const, Prod.le_def, ih, and_true]; intro ε; exact PreCond.le_top
+
+-- A postcondition expressing total correctness
+def PostCond.total (p : α → PreCond stack β) : PostCond α stack β :=
+  (p, FailConds.false)
+
+-- A postcondition expressing partial correctness
+def PostCond.partial (p : α → PreCond stack β) : PostCond α stack β :=
+  (p, FailConds.true)
+
+@[simp]
+lemma PostCond.total_fst : (PostCond.total p).1 = p := by rfl
+@[simp]
+lemma PostCond.partial_fst : (PostCond.partial p).1 = p := by rfl
+
+@[simp]
+lemma PostCond.total_snd : (PostCond.total p).2 = FailConds.false := by rfl
+@[simp]
+lemma PostCond.partial_snd : (PostCond.partial p).2 = FailConds.true := by rfl
+
+
+@[simp]
+lemma PostCond.le_total (p q : α → PreCond stack Prop) : PostCond.total p ≤ PostCond.total q ↔ ∀ a, p a ≤ q a := by
+  simp only [total, Prod.le_def, le_refl, and_true]
+  rfl
+
+@[simp]
+lemma PostCond.le_partial (p q : α → PreCond stack Prop) : PostCond.partial p ≤ PostCond.partial q ↔ ∀ a, p a ≤ q a := by
+  simp only [PostCond.partial, Prod.le_def, le_refl, and_true]
+  rfl
+
+-- notation "test[ s < 13]" => (do pure ((← read) < 13))
+syntax "test[" hygieneInfo term "]" : term
+macro_rules
+| `(test[ $hy:hygieneInfo $e ]) => do
+  -- Replace all occurrences of `s` with `(← MonadReaderOf.read)`
+  let s := HygieneInfo.mkIdent hy `s (canonical := true)
+  let e' ← e.replaceM fun
+    | `($x:ident) => if s.getId = x.getId then `(← MonadReaderOf.read) else pure none
+    | _ => pure none
+  `(do pure $e')
+
+#check test[s < 13 ∧ s = "hi"]
+
+class MonadTriple (m : Type → Type) (stack : outParam TransStack) where
+  triple (x : m α) (P : PreCond stack Prop) (Q : PostCond α stack Prop) : Prop
+open MonadTriple (triple)
+
+instance Idd.instMonadTriple : MonadTriple Idd .pure where
+  triple {α} (x : Idd α) (P : Prop) (Q : (α → Prop) × Unit) := P ≤ Q.1 x.run
+
+-- universe error due to Heap : Type 1:
+--instance HPredTrans.instMonadTriple' : MonadTriple' HPredTrans [Heap] [] where
+--  triple x (P : Prop) Q := P ≤ x.val Q
+
+instance StateT.instMonadTriple [Monad m] [MonadTriple m stack] : MonadTriple (StateT σ m) (.state σ stack) where
+  triple x P Q :=
+     ∀ s, MonadTriple.triple (x s) (P s) (fun (a, s') => Q.1 a s', Q.2)
+
+instance ReaderT.instMonadTriple [Monad m] [MonadTriple m stack] : MonadTriple (ReaderT ρ m) (.state ρ stack) where
+  triple x P Q :=
+     ∀ r, MonadTriple.triple (x r) (P r) (fun a => Q.1 a r, Q.2) -- NB: Q.1 gets passed r as well; simpler that way
+
+#reduce (types:=true) StateT Bool (Except Int) String
+#reduce (types:=true) ExceptT Int (StateM Bool) String
+#reduce (types:=true) StateT Char (ExceptT Int (StateM Bool)) String
+
+instance ExceptT.instMonadTriple [MonadTriple m stack] : MonadTriple (ExceptT ε m) (.except ε stack) where
+  triple {α} (x : ExceptT ε m α) (P : PreCond (.except ε stack) Prop) (Q : PostCond α (.except ε stack) Prop) :=
+    MonadTriple.triple (stack:=stack) x.run P (fun | .ok a => Q.1 a | .error e => Q.2.1 e, Q.2.2)
+
+instance EStateM.instMonadTriple : MonadTriple (EStateM ε σ) (.except ε (.state σ .pure)) where
+  triple {α} (x : EStateM ε σ α) (P : PreCond (.except ε (.state σ .pure)) Prop) (Q : PostCond α (.except ε (.state σ .pure)) Prop) :=
+    ∀ s, P s → match x s with
+      | .ok a s'    => Q.1 a s'
+      | .error e s' => Q.2.1 e s'
+
+class LawfulMonadTriple (m : Type → Type) (stack : outParam TransStack)
+  [Monad m] [LawfulMonad m] [MonadTriple m stack] where
+  triple_cons {P P' : PreCond stack Prop} {Q Q' : PostCond α stack Prop} (x : m α)
+    (hp : P ≤ P' := by simp) (hq : Q' ≤ Q := by simp)
+    (h : triple x P' Q') :
+    triple x P Q
+  triple_pure {α} {Q : PostCond α stack Prop} (a : α) (himp : P ≤ Q.1 a):
+    triple (pure (f:=m) a) P Q
+  triple_bind {α β} {Q : PostCond α stack Prop} {R : PostCond β stack Prop} (x : m α) (f : α → m β)
+    (hx : triple x P Q) (herror : Q.2 ≤ R.2 := by simp)
+    (hf : ∀ b, triple (f b) (Q.1 b) R) :
+    triple (x >>= f) P R
+
+theorem LawfulMonadTriple.triple_map {m : Type → Type} [Monad m] [LawfulMonad m] [MonadTriple m stack] [LawfulMonadTriple m stack] (f : α → β) (x : m α)
+  (h : triple x P (fun a => Q.1 (f a), Q.2)) :
+  triple (f <$> x) P Q := by
+    simp only [← bind_pure_comp]
+    apply triple_bind _ _ h
+    intro b
+    apply triple_pure
+    simp only [le_refl]
+
+theorem LawfulMonadTriple.triple_seq {m : Type → Type} [Monad m] [LawfulMonad m] [MonadTriple m stack] [LawfulMonadTriple m stack] (f : m (α → β)) (x : m α)
+  (hf : triple f P Q) (herror : Q.2 ≤ R.2 := by simp)
+  (hx : ∀ f, triple x (Q.1 f) (fun a => R.1 (f a), R.2)) :
+  triple (f <*> x) P R := by
+    simp only [← bind_map]
+    apply triple_bind _ _ hf herror ?_
+    intro f
+    apply triple_map _ _ (hx f)
+
+open LawfulMonadTriple
+
+instance Idd.instLawfulMonadTriple : LawfulMonadTriple Idd .pure where
+  triple_pure _ himp := by simp[triple, Pure.pure, Idd.pure, himp]
+  triple_bind x f hspec herror hrest := by
+    simp_all only [triple, le_Prop_eq, le_refl, Bind.bind, bind, implies_true]
+
+instance StateT.instLawfulMonadTriple [Monad m] [LawfulMonad m] [MonadTriple m stack] [LawfulMonadTriple m stack] :
+  LawfulMonadTriple (StateT σ m) (.state σ stack) where
+  triple_pure _ himp := by
+    simp only [triple, pure, StateT.pure]
+    intro s
+    apply LawfulMonadTriple.triple_pure
+    exact (himp s)
+  triple_bind x f hspec herror hrest := by
+    simp_all only [triple, bind, StateT.bind]
+    intros
+    apply_rules [LawfulMonadTriple.triple_bind, hspec]
+    intros
+    apply hrest
+
+instance ReaderT.instLawfulMonadTriple [Monad m] [LawfulMonad m] [MonadTriple m stack] [LawfulMonadTriple m stack] :
+  LawfulMonadTriple (ReaderT ρ m) (.state ρ stack) where
+  triple_pure _ himp := by
+    simp only [triple, pure, ReaderT.pure]
+    intro r
+    apply LawfulMonadTriple.triple_pure
+    exact (himp r)
+  triple_bind x f hspec herror hrest := by
+    simp_all only [triple, bind, ReaderT.bind]
+    intros
+    apply_rules [LawfulMonadTriple.triple_bind, hspec]
+    intros
+    apply hrest
+
+instance ExceptT.instLawfulMonadTriple [Monad m] [LawfulMonad m] [MonadTriple m stack] [LawfulMonadTriple m stack] :
+  LawfulMonadTriple (ExceptT ε m) (.except ε stack) where
+  triple_pure _ himp := by
+    simp only [triple, pure, ExceptT.pure, run_mk]
+    apply LawfulMonadTriple.triple_pure
+    exact himp
+  triple_bind x f hspec herror hrest := by
+    simp_all only [triple, bind, ExceptT.bind]
+    apply_rules [LawfulMonadTriple.triple_bind]
+    · intro b
+      cases b
+      case error a =>
+        apply LawfulMonadTriple.triple_pure
+        simp only [ExceptT.bindCont]
+        exact (Prod.le_def.mp herror).1 a
+      case ok a =>
+        simp only [ExceptT.bindCont]
+        exact hrest a
+    · exact (Prod.le_def.mp herror).2
+
+notation:lead "⦃" P "⦄ " x:lead " ⦃" Q "⦄" =>
+  MonadTriple.triple x P Q
+notation:lead "⦃" P "⦄ " x:lead " ⦃" v ", " Q "⦄" =>
+  ⦃P⦄ x ⦃PostCond.total fun v => Q⦄
+
+theorem Triple.forIn_list {α β} {m : Type → Type}
+  [Monad m] [LawfulMonad m] [MonadTriple m stack] [LawfulMonadTriple m stack]
+  {xs : List α} {init : β} {f : α → β → m (ForInStep β)} {P : PreCond stack Prop} {Q : PostCond β stack Prop}
+  (inv : List α → β → PreCond stack Prop)
+  (hpre : P ≤ inv xs init)
+  (hpost : inv [] ≤ Q.1)
+  (hstep : ∀ hd tl b,
+      ⦃inv (hd :: tl) b⦄
+      (f hd b)
+      ⦃r, match r with | .yield b' => inv tl b' | .done b' => inv [] b'⦄) :
+  ⦃P⦄ (forIn xs init f) ⦃Q⦄ := by
+    replace hpost : PostCond.total (inv []) ≤ Q := by simp[Prod.le_def, hpost]
+    apply triple_cons _ hpre hpost
+    clear hpre hpost
+    induction xs generalizing init
+    case nil => apply LawfulMonadTriple.triple_pure; simp
+    case cons hd tl ih =>
+      simp only [List.forIn_cons]
+      apply LawfulMonadTriple.triple_bind
+      case hx => exact hstep hd tl init
+      case herror => simp
+      case hf =>
+        intro b
+        split
+        · apply LawfulMonadTriple.triple_pure; simp
+        · exact ih
+
+theorem Triple.foldlM_list {α β} {m : Type → Type}
+  [Monad m] [LawfulMonad m] [MonadTriple m stack] [LawfulMonadTriple m stack]
+  {xs : List α} {init : β} {f : β → α → m β} {P : PreCond stack Prop} {Q : PostCond β stack Prop}
+  (inv : List α → β → PreCond stack Prop)
+  (hpre : P ≤ inv xs init := by simp)
+  (hpost : inv [] ≤ Q.1 := by simp)
+  (hstep : ∀ hd tl b,
+      ⦃inv (hd :: tl) b⦄
+      (f b hd)
+      ⦃b', inv tl b'⦄) :
+  ⦃P⦄ (List.foldlM f init xs) ⦃Q⦄ := by
+  have : xs.foldlM f init = forIn xs init (fun a b => .yield <$> f b a) := by
+    simp only [List.forIn_yield_eq_foldlM, id_map']
+  rw[this]
+  apply Triple.forIn_list inv hpre hpost
+  intro hd tl b
+  apply LawfulMonadTriple.triple_map _ _ (hstep hd tl b)
+
+end Triple
+
 section IO
+
+axiom IO.satisfies_post {α ε} (x : EIO ε α) (p : Except ε α → Prop) : Prop
+axiom IO.satisfies_pure {α ε} {Q : Except ε α → Prop} (a : α) (h : Q (.ok a)) :
+  IO.satisfies_post (pure a) Q
+axiom IO.satisfies_bind {α β ε} {P : Except ε α → Prop} {Q : Except ε β → Prop} {x : EIO ε α} {f : α → EIO ε β}
+  (hx : IO.satisfies_post x P)
+  (herror : ∀ e, P (.error e) → Q (.error e))
+  (hf : ∀ a, P (.ok a) → IO.satisfies_post (f a) Q) :
+  IO.satisfies_post (x >>= f) Q
+
+instance IO.instMonadTriple : MonadTriple (EIO ε) (.except ε .pure) where
+  triple x P Q :=
+    P → IO.satisfies_post x (fun | .ok a => Q.1 a | .error e => Q.2.1 e)
+
+instance IO.instLawfulMonadTriple : LawfulMonadTriple (EIO ε) (.except ε .pure) where
+  triple_pure _ himp := by intro hp; apply IO.satisfies_pure; exact (himp hp)
+  triple_bind x f hspec herror hrest := by
+    intro hp
+    apply IO.satisfies_bind (hspec hp) _ hrest
+    let _ := PreCond.instPreorder .pure
+    exact (Prod.le_def.mp herror).1
 
 /-- Backward predicate transformer derived from a substitution property of monads.
 A generic effect observation that can be used to observe many monads.
@@ -1458,11 +1803,19 @@ def program (n : Nat) (k : Nat) : IO Nat := do
   let r₂ ← addRandomEvens n k
   return r₁ + r₂
 
-axiom IO.rand_spec {n : Nat} : Observation.observe (IO.rand 0 n : IO Nat) ≤ HPredTrans.persistent (· < n)
+axiom IO.rand_spec {n : Nat} : ⦃True⦄ (IO.rand 0 n : IO Nat) ⦃r, r < n⦄
 
 /-- The result has the same parity as the input. -/
-theorem addRandomEvens_spec (n k) : Observation.observe (addRandomEvens n k) ≤ HPredTrans.persistent (fun r => r % 2 = k % 2) := by
+theorem addRandomEvens_spec (n k) : ⦃True⦄ (addRandomEvens n k) ⦃r, r % 2 = k % 2⦄ := by
   simp only [addRandomEvens, bind_pure_comp, map_pure, List.forIn_yield_eq_foldlM, bind_pure]
+  apply Triple.foldlM_list (m := IO) (fun xs r => r % 2 = k % 2) _ ?post ?step
+  case post => simp; exact le_rfl
+  case step =>
+    intro hd tl b;
+    apply LawfulMonadTriple.triple_map
+    apply LawfulMonadTriple.triple_cons _ _ _ IO.rand_spec
+    · simp[LE.le, le_top]
+    · simp[Prod.le_def]
   apply le_trans (Observation.foldlM_list ?inv ?hpre ?hstep) ?hgoal
   case inv => exact fun xs => HPredTrans.persistent fun r => r % 2 = k % 2
   case hpre => simp
@@ -1542,23 +1895,16 @@ theorem program_spec_old (n k) : SatisfiesM (fun r => r % 2 = 0) (program n k) :
 
 end KimsBabySteps
 
-def PredTrans.Triple [Monad m] [Observation m PredTrans] (P : Prop) (x : m α) (Q : α → Prop) : Prop :=
-  P ≤ (Observation.observe x).val Q
-
-theorem blah {x : Idd α} : PredTrans.Triple P x Q ↔ (Observation.observe x).val (fun a => P ≤ Q a) := by
-  rfl
-
 def HPredTrans.Triple [Monad m] [Observation m HPredTrans] (P : HProp) (x : m α) (Q : α → HProp) : Prop :=
-  P ≤ (Observation.observe x).trans Q
-notation "<<" P ">> " x " <<" Q ">>" => HPredTrans.Triple P x Q
-notation:lead "⦃" P "⦄ " x:lead " ⦃" Q "⦄" => HPredTrans.Triple P x Q
-notation:lead "⦃" P "⦄ " x:lead " ⦃" v ", " Q "⦄" => HPredTrans.Triple P x (fun v => Q)
+  ∀ μ, (P -⋆ (Observation.observe x).trans Q) μ
 
-theorem blue {x : IO α} : HPredTrans.Triple P x Q = ∀ μ, (Observation.observe x).trans (fun a => ↟(P ≤ Q a)) μ := by
-  simp[HPredTrans.Triple]
+-- not true; P looks at wrong heap in the RHS
+theorem blue {x : IO α} : HPredTrans.Triple P x Q = ∀ μ, (Observation.observe x).trans (fun a => (P -⋆ Q a)) μ := by
+  simp only [HPredTrans.Triple, HProp.sep_imp_intro, eq_iff_iff]
   constructor
   · intro h μ
-    replace h := h μ
+    replace h := h Heap.empty μ (by simp)
+    simp at h
     simp
   · intro h μ
     exact h μ
