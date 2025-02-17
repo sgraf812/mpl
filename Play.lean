@@ -1186,119 +1186,124 @@ end Idd
 
 section Triple
 
-inductive TransStack : Type 1 where
-  | pure : TransStack
-  | state : (σ : Type) → TransStack → TransStack
-  | except : (ε : Type) → TransStack → TransStack
+inductive PredShape : Type 1 where
+  | pure : PredShape
+  | arg : (σ : Type) → PredShape → PredShape
+  | except : (ε : Type) → PredShape → PredShape
 
 @[reducible]
-def PreCond : TransStack → Type → Type
-  | .pure => Id
-  | .state σ s => ReaderT σ (PreCond s)
+def PreCond : PredShape → Type
+  | .pure => Prop
+  | .arg σ s => σ → PreCond s
   | .except _ s => PreCond s
 
 @[reducible]
-def FailConds : TransStack → Type
+def FailConds : PredShape → Type
   | .pure => Unit
-  | .state σ s => FailConds s
-  | .except ε s => (ε → PreCond s Prop) × FailConds s
+  | .arg _ s => FailConds s
+  | .except ε s => (ε → PreCond s) × FailConds s
 
--- Translate a transformer stack to a multi-barreled postcondition
+-- Translate a predicate shape to a multi-barreled postcondition
 @[reducible]
-def PostCond (α : Type) (s : TransStack) (r : Type) : Type :=
-  (α → PreCond s r) × FailConds s
+def PostCond (α : Type) (s : PredShape) : Type :=
+  (α → PreCond s) × FailConds s
 
-open TransStack in
-example {ρ ε σ} : PreCond (state σ (state ρ (except ε pure))) Prop = (σ → ρ → Prop) := rfl
+open PredShape in
+example {ρ ε σ : Type} : PreCond (arg σ (arg ρ (except ε pure))) = (σ → ρ → Prop) := rfl
 
 section PostCondExamples
-open TransStack
+open PredShape
 
 variable (α ρ ε ε₁ ε₂ σ σ₁ σ₂ : Type)
-#reduce (types:=true) PostCond α (except ε₂ (state σ₂ (except ε₁ (state σ₁ pure)))) ρ
--- at one point I also had TransStack.reader, but it's simpler to implement it as state
+#reduce (types:=true) PreCond (except ε₂ (arg σ₂ (except ε₁ (arg σ₁ pure))))
+#reduce (types:=true) PostCond α (except ε₂ (arg σ₂ (except ε₁ (arg σ₁ pure))))
+-- at one point I also had PredShape.reader, but it's simpler to implement it as state
 -- because then we can turn a precondition into a postcondition without complicated traversals.
 -- Same for writer (presumably).
-example : PostCond α (state ρ pure) Prop = ((α → ρ → Prop) × Unit) := rfl
-example : PostCond α (except ε pure) Prop = ((α → Prop) × (ε → Prop) × Unit) := rfl
-example : PostCond α (state σ (except ε pure)) Prop = ((α → σ → Prop) × (ε → Prop) × Unit) := rfl
-example : PostCond α (except ε (state σ₁ pure)) Prop = ((α → σ₁ → Prop) × (ε → σ₁ → Prop) × Unit) := rfl
-example : PostCond α (state σ₂ (except ε (state σ₁ pure))) Prop = ((α → σ₂ → σ₁ → Prop) × (ε → σ₁ → Prop) × Unit) := rfl
-example : PostCond α (except ε₂ (state σ₂ (except ε₁ (state σ₁ pure)))) Prop = ((α → σ₂ → σ₁ → Prop) × (ε₂ → σ₂ → σ₁ → Prop) × (ε₁ → σ₁ → Prop) × Unit) := rfl
-example : PostCond α (except ε₂ (state σ₂ (except ε₁ (state σ₁ pure)))) β = ((α → σ₂ → σ₁ → β) × (ε₂ → σ₂ → σ₁ → Prop) × (ε₁ → σ₁ → Prop) × Unit) := rfl
+example : PostCond α (arg ρ pure) = ((α → ρ → Prop) × Unit) := rfl
+example : PostCond α (except ε pure) = ((α → Prop) × (ε → Prop) × Unit) := rfl
+example : PostCond α (arg σ (except ε pure)) = ((α → σ → Prop) × (ε → Prop) × Unit) := rfl
+example : PostCond α (except ε (arg σ₁ pure)) = ((α → σ₁ → Prop) × (ε → σ₁ → Prop) × Unit) := rfl
+example : PostCond α (arg σ₂ (except ε (arg σ₁ pure))) = ((α → σ₂ → σ₁ → Prop) × (ε → σ₁ → Prop) × Unit) := rfl
+example : PostCond α (except ε₂ (arg σ₂ (except ε₁ (arg σ₁ pure)))) = ((α → σ₂ → σ₁ → Prop) × (ε₂ → σ₂ → σ₁ → Prop) × (ε₁ → σ₁ → Prop) × Unit) := rfl
 
 -- #reduce (types := true) ((do pure ((← MonadReaderOf.read) < 13 ∧ (← MonadReaderOf.read) = "hi")) : PreCond (state Nat (state String pure)) Prop)
 
 end PostCondExamples
 
-instance PreCond.instMonad : {stack : TransStack} → Monad (PreCond stack)
-  | .pure => (inferInstance : Monad Id)
-  | .state σ s => let _ := @instMonad s; (inferInstance : Monad (ReaderT σ (PreCond s)))
-  | .except ε s => @instMonad s
+-- instance PreCond.instMonad : {ps : PredShape} → Monad (PreCond ps)
+--   | .pure => (inferInstance : Monad Id)
+--   | .arg σ s => let _ := @instMonad s; (inferInstance : Monad (ReaderT σ (PreCond s)))
+--   | .except ε s => @instMonad s
 
-noncomputable instance PreCond.instLattice : {stack : TransStack} → CompleteLattice (PreCond stack Prop)
-  | .pure => ((inferInstance : CompleteLattice Prop) : CompleteLattice (PreCond .pure Prop))
-  | .state σ s => let _ := @instLattice s; (inferInstance : CompleteLattice (σ → PreCond s Prop))
+def PreCond.pure : {ps : PredShape} → Prop → PreCond ps
+  | .pure => fun p => p
+  | .arg σ s => fun p (_s : σ) => @PreCond.pure s p
+  | .except _ s => @PreCond.pure s
+
+noncomputable instance PreCond.instLattice : {ps : PredShape} → CompleteLattice (PreCond ps)
+  | .pure => ((inferInstance : CompleteLattice Prop) : CompleteLattice (PreCond .pure))
+  | .arg σ s => let _ := @instLattice s; (inferInstance : CompleteLattice (σ → PreCond s))
   | .except ε s => @instLattice s
 
-noncomputable instance PreCond.instPreorder {stack : TransStack} : Preorder (PreCond stack Prop) := inferInstance
-noncomputable instance PreCond.instLE {stack : TransStack} : LE (PreCond stack Prop) := inferInstance
+noncomputable instance PreCond.instPreorder {ps : PredShape} : Preorder (PreCond ps) := inferInstance
+noncomputable instance PreCond.instLE {ps : PredShape} : LE (PreCond ps) := inferInstance
 
-def FailConds.const (p : Prop) : FailConds stack :=
-  match stack with
+def FailConds.const (p : Prop) : FailConds ps :=
+  match ps with
   | .pure => ()
-  | .state σ s => @FailConds.const s p
-  | .except ε s => (fun _ε => pure p, @FailConds.const s p)
+  | .arg σ s => @FailConds.const s p
+  | .except ε s => (fun _ε => PreCond.pure p, @FailConds.const s p)
 
-def FailConds.true : FailConds stack := FailConds.const True
-def FailConds.false : FailConds stack := FailConds.const False
+def FailConds.true : FailConds ps := FailConds.const True
+def FailConds.false : FailConds ps := FailConds.const False
 
-noncomputable instance FailConds.instPreorder : {stack : TransStack} → Preorder (FailConds stack)
+noncomputable instance FailConds.instPreorder : {ps : PredShape} → Preorder (FailConds ps)
   | .pure => inferInstance
-  | .state _ s => let _ := @instPreorder s; inferInstance
+  | .arg _ s => let _ := @instPreorder s; inferInstance
   | .except _ s => let _ := @instPreorder s; inferInstance
 
--- instance FailConds.instLE {stack : TransStack} : LE (FailConds stack) := FailConds.instPreorder.toLE
+-- instance FailConds.instLE {ps : PredShape} : LE (FailConds ps) := FailConds.instPreorder.toLE
 
-noncomputable instance PostCond.instPreorder : {stack : TransStack} → Preorder (PostCond α stack Prop) := inferInstance
-noncomputable instance PostCond.instLE {stack : TransStack} : LE (PostCond α stack Prop) := inferInstance
+noncomputable instance PostCond.instPreorder : {ps : PredShape} → Preorder (PostCond α ps) := inferInstance
+noncomputable instance PostCond.instLE {ps : PredShape} : LE (PostCond α ps) := inferInstance
 
 @[simp]
-lemma PreCond.bot_le {x : PreCond stack Prop} : pure False ≤ x := by
-  induction stack
+lemma PreCond.bot_le {x : PreCond ps} : pure False ≤ x := by
+  induction ps
   case pure => exact False.elim
-  case state σ s ih => intro; exact ih
+  case arg σ s ih => intro; exact ih
   case except ε s ih => exact ih
 
 @[simp]
-lemma PreCond.le_top {x : PreCond stack Prop} : x ≤ pure True := by
-  induction stack
+lemma PreCond.le_top {x : PreCond ps} : x ≤ pure True := by
+  induction ps
   case pure => exact fun _ => True.intro
-  case state σ s ih => intro; exact ih
+  case arg σ s ih => intro; exact ih
   case except ε s ih => exact ih
 
 @[simp]
-lemma FailConds.bot_le {x : FailConds stack} : FailConds.false ≤ x := by
+lemma FailConds.bot_le {x : FailConds ps} : FailConds.false ≤ x := by
   simp only [false]
-  induction stack
+  induction ps
   case pure => simp
-  case state σ s ih => exact ih
+  case arg σ s ih => exact ih
   case except ε s ih => simp only [const, Prod.le_def, ih, and_true]; intro ε; exact PreCond.bot_le
 
 @[simp]
-lemma FailConds.le_top {x : FailConds stack} : x ≤ FailConds.true := by
+lemma FailConds.le_top {x : FailConds ps} : x ≤ FailConds.true := by
   simp only [true]
-  induction stack
+  induction ps
   case pure => simp
-  case state σ s ih => exact ih
+  case arg σ s ih => exact ih
   case except ε s ih => simp only [const, Prod.le_def, ih, and_true]; intro ε; exact PreCond.le_top
 
 -- A postcondition expressing total correctness
-def PostCond.total (p : α → PreCond stack β) : PostCond α stack β :=
+def PostCond.total (p : α → PreCond ps) : PostCond α ps :=
   (p, FailConds.false)
 
 -- A postcondition expressing partial correctness
-def PostCond.partial (p : α → PreCond stack β) : PostCond α stack β :=
+def PostCond.partial (p : α → PreCond ps) : PostCond α ps :=
   (p, FailConds.true)
 
 @[simp]
@@ -1312,17 +1317,17 @@ lemma PostCond.total_snd : (PostCond.total p).2 = FailConds.false := by rfl
 lemma PostCond.partial_snd : (PostCond.partial p).2 = FailConds.true := by rfl
 
 @[simp]
-lemma PostCond.total_def {p : α → PreCond stack β} : (p, FailConds.false) = PostCond.total p := rfl
+lemma PostCond.total_def {p : α → PreCond ps} : (p, FailConds.false) = PostCond.total p := rfl
 @[simp]
-lemma PostCond.partial_def {p : α → PreCond stack β} : (p, FailConds.true) = PostCond.partial p := rfl
+lemma PostCond.partial_def {p : α → PreCond ps} : (p, FailConds.true) = PostCond.partial p := rfl
 
 @[simp]
-lemma PostCond.le_total (p q : α → PreCond stack Prop) : PostCond.total p ≤ PostCond.total q ↔ ∀ a, p a ≤ q a := by
+lemma PostCond.le_total (p q : α → PreCond ps) : PostCond.total p ≤ PostCond.total q ↔ ∀ a, p a ≤ q a := by
   simp only [total, Prod.le_def, le_refl, and_true]
   rfl
 
 @[simp]
-lemma PostCond.le_partial (p q : α → PreCond stack Prop) : PostCond.partial p ≤ PostCond.partial q ↔ ∀ a, p a ≤ q a := by
+lemma PostCond.le_partial (p q : α → PreCond ps) : PostCond.partial p ≤ PostCond.partial q ↔ ∀ a, p a ≤ q a := by
   simp only [PostCond.partial, Prod.le_def, le_refl, and_true]
   rfl
 
@@ -1339,8 +1344,23 @@ macro_rules
 
 #check test[s < 13 ∧ s = "hi"]
 
-class MonadTriple (m : Type → Type) (stack : outParam TransStack) where
-  triple (x : m α) (P : PreCond stack Prop) (Q : PostCond α stack Prop) : Prop
+@[reducible]
+def RelPreCond (ps : PredShape) : Type := PreCond ps → Prop
+
+@[reducible]
+def RelFailConds : PredShape → Type
+  | .pure => Unit
+  | .arg _ s => RelFailConds s
+  | .except ε s => ((ε → PreCond s) → Prop) × RelFailConds s
+
+-- Translate a predicate shape to a multi-barreled postcondition
+@[reducible]
+def RelPostCond (α : Type) (s : PredShape) : Type :=
+  ((α → PreCond s) → Prop) × RelFailConds s
+
+class MonadTriple (m : Type → Type) (ps : outParam PredShape) where
+  triple (x : m α) (P : PreCond ps) (Q : PostCond α ps) : Prop
+  --rel_triple (x : m α) (P : PreCond ps Prop) (Q : PostCond α ps Prop) : Prop
 open MonadTriple (triple)
 
 instance Idd.instMonadTriple : MonadTriple Idd .pure where
@@ -1350,11 +1370,11 @@ instance Idd.instMonadTriple : MonadTriple Idd .pure where
 --instance HPredTrans.instMonadTriple' : MonadTriple' HPredTrans [Heap] [] where
 --  triple x (P : Prop) Q := P ≤ x.val Q
 
-instance StateT.instMonadTriple [Monad m] [MonadTriple m stack] : MonadTriple (StateT σ m) (.state σ stack) where
+instance StateT.instMonadTriple [Monad m] [MonadTriple m ps] : MonadTriple (StateT σ m) (.arg σ ps) where
   triple x P Q :=
      ∀ s, MonadTriple.triple (x s) (P s) (fun (a, s') => Q.1 a s', Q.2)
 
-instance ReaderT.instMonadTriple [Monad m] [MonadTriple m stack] : MonadTriple (ReaderT ρ m) (.state ρ stack) where
+instance ReaderT.instMonadTriple [Monad m] [MonadTriple m ps] : MonadTriple (ReaderT ρ m) (.arg ρ ps) where
   triple x P Q :=
      ∀ r, MonadTriple.triple (x r) (P r) (fun a => Q.1 a r, Q.2) -- NB: Q.1 gets passed r as well; simpler that way
 
@@ -1362,33 +1382,33 @@ instance ReaderT.instMonadTriple [Monad m] [MonadTriple m stack] : MonadTriple (
 #reduce (types:=true) ExceptT Int (StateM Bool) String
 #reduce (types:=true) StateT Char (ExceptT Int (StateM Bool)) String
 
-instance ExceptT.instMonadTriple [MonadTriple m stack] : MonadTriple (ExceptT ε m) (.except ε stack) where
-  triple {α} (x : ExceptT ε m α) (P : PreCond (.except ε stack) Prop) (Q : PostCond α (.except ε stack) Prop) :=
-    MonadTriple.triple (stack:=stack) x.run P (fun | .ok a => Q.1 a | .error e => Q.2.1 e, Q.2.2)
+instance ExceptT.instMonadTriple [MonadTriple m ps] : MonadTriple (ExceptT ε m) (.except ε ps) where
+  triple {α} (x : ExceptT ε m α) (P : PreCond (.except ε ps)) (Q : PostCond α (.except ε ps)) :=
+    MonadTriple.triple (ps:=ps) x.run P (fun | .ok a => Q.1 a | .error e => Q.2.1 e, Q.2.2)
 
-instance EStateM.instMonadTriple : MonadTriple (EStateM ε σ) (.except ε (.state σ .pure)) where
-  triple {α} (x : EStateM ε σ α) (P : PreCond (.except ε (.state σ .pure)) Prop) (Q : PostCond α (.except ε (.state σ .pure)) Prop) :=
+instance EStateM.instMonadTriple : MonadTriple (EStateM ε σ) (.except ε (.arg σ .pure)) where
+  triple {α} (x : EStateM ε σ α) (P : PreCond (.except ε (.arg σ .pure))) (Q : PostCond α (.except ε (.arg σ .pure))) :=
     ∀ s, P s → match x s with
       | .ok a s'    => Q.1 a s'
       | .error e s' => Q.2.1 e s'
 
-class LawfulMonadTriple (m : Type → Type) (stack : outParam TransStack)
-  [Monad m] [LawfulMonad m] [MonadTriple m stack] where
-  triple_conseq {P P' : PreCond stack Prop} {Q Q' : PostCond α stack Prop} (x : m α)
+class LawfulMonadTriple (m : Type → Type) (ps : outParam PredShape)
+  [Monad m] [LawfulMonad m] [MonadTriple m ps] where
+  triple_conseq {P P' : PreCond ps} {Q Q' : PostCond α ps} (x : m α)
     (hp : P ≤ P' := by simp) (hq : Q' ≤ Q := by simp)
     (h : triple x P' Q') :
     triple x P Q
-  triple_extract_persistent {P : Prop} {P' : PreCond stack Prop} {Q : PostCond α stack Prop}
+  triple_extract_persistent {P : Prop} {P' : PreCond ps} {Q : PostCond α ps}
     (x : m α) (h : P → triple x P' Q) :
-    triple x (pure P ⊓ P') Q
-  triple_pure {α} {Q : PostCond α stack Prop} (a : α) (himp : P ≤ Q.1 a):
+    triple x (PreCond.pure P ⊓ P') Q
+  triple_pure {α} {Q : PostCond α ps} (a : α) (himp : P ≤ Q.1 a):
     triple (pure (f:=m) a) P Q
-  triple_bind {α β} {Q : PostCond α stack Prop} {R : PostCond β stack Prop} (x : m α) (f : α → m β)
+  triple_bind {α β} {Q : PostCond α ps} {R : PostCond β ps} (x : m α) (f : α → m β)
     (hx : triple x P Q) (herror : Q.2 ≤ R.2 := by simp)
     (hf : ∀ b, triple (f b) (Q.1 b) R) :
     triple (x >>= f) P R
 
-theorem LawfulMonadTriple.triple_map {m : Type → Type} [Monad m] [LawfulMonad m] [MonadTriple m stack] [LawfulMonadTriple m stack] (f : α → β) (x : m α)
+theorem LawfulMonadTriple.triple_map {m : Type → Type} [Monad m] [LawfulMonad m] [MonadTriple m ps] [LawfulMonadTriple m ps] (f : α → β) (x : m α)
   (h : triple x P (fun a => Q.1 (f a), Q.2)) :
   triple (f <$> x) P Q := by
     simp only [← bind_pure_comp]
@@ -1397,7 +1417,7 @@ theorem LawfulMonadTriple.triple_map {m : Type → Type} [Monad m] [LawfulMonad 
     apply triple_pure
     simp only [le_refl]
 
-theorem LawfulMonadTriple.triple_seq {m : Type → Type} [Monad m] [LawfulMonad m] [MonadTriple m stack] [LawfulMonadTriple m stack] (f : m (α → β)) (x : m α)
+theorem LawfulMonadTriple.triple_seq {m : Type → Type} [Monad m] [LawfulMonad m] [MonadTriple m ps] [LawfulMonadTriple m ps] (f : m (α → β)) (x : m α)
   (hf : triple f P Q) (herror : Q.2 ≤ R.2 := by simp)
   (hx : ∀ f, triple x (Q.1 f) (fun a => R.1 (f a), R.2)) :
   triple (f <*> x) P R := by
@@ -1406,10 +1426,10 @@ theorem LawfulMonadTriple.triple_seq {m : Type → Type} [Monad m] [LawfulMonad 
     intro f
     apply triple_map _ _ (hx f)
 
-theorem LawfulMonadTriple.triple_extract_persistent_true {m : Type → Type} [Monad m] [LawfulMonad m] [MonadTriple m stack] [LawfulMonadTriple m stack] {P : Prop} {Q : PostCond α stack Prop}
-  (x : m α) (h : P → triple x (pure True) Q) :
-  triple x (pure P) Q := by
-    have : pure P = (pure P ⊓ pure True : PreCond stack Prop) := by simp
+theorem LawfulMonadTriple.triple_extract_persistent_true {m : Type → Type} [Monad m] [LawfulMonad m] [MonadTriple m ps] [LawfulMonadTriple m ps] {P : Prop} {Q : PostCond α ps}
+  (x : m α) (h : P → triple x (PreCond.pure True) Q) :
+  triple x (PreCond.pure P) Q := by
+    have : PreCond.pure P = (PreCond.pure P ⊓ PreCond.pure True : PreCond ps) := by simp
     rw[this]
     exact triple_extract_persistent x h
 
@@ -1422,8 +1442,8 @@ instance Idd.instLawfulMonadTriple : LawfulMonadTriple Idd .pure where
   triple_bind x f hspec herror hrest := by
     simp_all only [triple, le_Prop_eq, le_refl, Bind.bind, bind, implies_true]
 
-instance StateT.instLawfulMonadTriple [Monad m] [LawfulMonad m] [MonadTriple m stack] [LawfulMonadTriple m stack] :
-  LawfulMonadTriple (StateT σ m) (.state σ stack) where
+instance StateT.instLawfulMonadTriple [Monad m] [LawfulMonad m] [MonadTriple m ps] [LawfulMonadTriple m ps] :
+  LawfulMonadTriple (StateT σ m) (.arg σ ps) where
   triple_conseq x hp hq h := by
     intro s
     apply triple_conseq (x s) (hp s) ?_ (h s)
@@ -1445,8 +1465,8 @@ instance StateT.instLawfulMonadTriple [Monad m] [LawfulMonad m] [MonadTriple m s
     intros
     apply hrest
 
-instance ReaderT.instLawfulMonadTriple [Monad m] [LawfulMonad m] [MonadTriple m stack] [LawfulMonadTriple m stack] :
-  LawfulMonadTriple (ReaderT ρ m) (.state ρ stack) where
+instance ReaderT.instLawfulMonadTriple [Monad m] [LawfulMonad m] [MonadTriple m ps] [LawfulMonadTriple m ps] :
+  LawfulMonadTriple (ReaderT ρ m) (.arg ρ ps) where
   triple_conseq x hp hq h := by
     intro r
     apply triple_conseq (x r) (hp r) ?_ (h r)
@@ -1468,16 +1488,16 @@ instance ReaderT.instLawfulMonadTriple [Monad m] [LawfulMonad m] [MonadTriple m 
     intros
     apply hrest
 
-instance ExceptT.instLawfulMonadTriple [Monad m] [LawfulMonad m] [MonadTriple m stack] [LawfulMonadTriple m stack] :
-  LawfulMonadTriple (ExceptT ε m) (.except ε stack) where
+instance ExceptT.instLawfulMonadTriple [Monad m] [LawfulMonad m] [MonadTriple m ps] [LawfulMonadTriple m ps] :
+  LawfulMonadTriple (ExceptT ε m) (.except ε ps) where
   triple_conseq x hp hq h := by
     simp_all [triple, bind, ExceptT.bind]
-    apply triple_conseq (stack := stack) x.run hp ?hq h
+    apply triple_conseq (ps := ps) x.run hp ?hq h
     have h21 := (Prod.le_def.mp (Prod.le_def.mp hq).2).1
     have h22 := (Prod.le_def.mp (Prod.le_def.mp hq).2).2
     exact ⟨fun | Except.ok a => (Prod.le_def.mp hq).1 a | Except.error e => h21 e, h22⟩
   triple_extract_persistent x h := by
-    apply triple_extract_persistent (stack := stack) x.run (fun hp => h hp)
+    apply triple_extract_persistent (ps := ps) x.run (fun hp => h hp)
   triple_pure _ himp := by
     simp only [triple, pure, ExceptT.pure, run_mk]
     apply LawfulMonadTriple.triple_pure
@@ -1498,23 +1518,18 @@ instance ExceptT.instLawfulMonadTriple [Monad m] [LawfulMonad m] [MonadTriple m 
 
 notation:lead "⦃" P "⦄ " x:lead " ⦃" Q "⦄" =>
   MonadTriple.triple x P Q
-notation:lead "⦃" P "⦄ " x:lead " ⦃" v ", " Q "⦄" =>
+notation:lead "⦃" P "⦄ " x:lead " ⦃⇓" v " | " Q "⦄" =>
   ⦃P⦄ x ⦃PostCond.total fun v => Q⦄
 
 theorem Triple.forIn_list {α β} {m : Type → Type}
-  [Monad m] [LawfulMonad m] [MonadTriple m stack] [LawfulMonadTriple m stack]
-  {xs : List α} {init : β} {f : α → β → m (ForInStep β)} {P : PreCond stack Prop} {Q : PostCond β stack Prop}
-  (inv : List α → β → PreCond stack Prop)
-  (hpre : P ≤ inv xs init)
-  (hpost : inv [] ≤ Q.1)
+  [Monad m] [LawfulMonad m] [MonadTriple m ps] [LawfulMonadTriple m ps]
+  {xs : List α} {init : β} {f : α → β → m (ForInStep β)}
+  (inv : List α → β → PreCond ps)
   (hstep : ∀ hd tl b,
       ⦃inv (hd :: tl) b⦄
       (f hd b)
-      ⦃r, match r with | .yield b' => inv tl b' | .done b' => inv [] b'⦄) :
-  ⦃P⦄ (forIn xs init f) ⦃Q⦄ := by
-    replace hpost : PostCond.total (inv []) ≤ Q := by simp[Prod.le_def, hpost]
-    apply triple_conseq _ hpre hpost
-    clear hpre hpost
+      ⦃⇓r | match r with | .yield b' => inv tl b' | .done b' => inv [] b'⦄) :
+  ⦃inv xs init⦄ (forIn xs init f) ⦃⇓b' | inv [] b'⦄ := by
     induction xs generalizing init
     case nil => apply LawfulMonadTriple.triple_pure; simp
     case cons hd tl ih =>
@@ -1529,20 +1544,18 @@ theorem Triple.forIn_list {α β} {m : Type → Type}
         · exact ih
 
 theorem Triple.foldlM_list {α β} {m : Type → Type}
-  [Monad m] [LawfulMonad m] [MonadTriple m stack] [LawfulMonadTriple m stack]
-  {xs : List α} {init : β} {f : β → α → m β} {P : PreCond stack Prop} {Q : PostCond β stack Prop}
-  (inv : List α → β → PreCond stack Prop)
-  (hpre : P ≤ inv xs init := by simp)
-  (hpost : inv [] ≤ Q.1 := by simp)
+  [Monad m] [LawfulMonad m] [MonadTriple m ps] [LawfulMonadTriple m ps]
+  {xs : List α} {init : β} {f : β → α → m β}
+  (inv : List α → β → PreCond ps)
   (hstep : ∀ hd tl b,
       ⦃inv (hd :: tl) b⦄
       (f b hd)
-      ⦃b', inv tl b'⦄) :
-  ⦃P⦄ (List.foldlM f init xs) ⦃Q⦄ := by
+      ⦃⇓b' | inv tl b'⦄) :
+  ⦃inv xs init⦄ (List.foldlM f init xs) ⦃⇓b' | inv [] b'⦄ := by
   have : xs.foldlM f init = forIn xs init (fun a b => .yield <$> f b a) := by
     simp only [List.forIn_yield_eq_foldlM, id_map']
   rw[this]
-  apply Triple.forIn_list inv hpre hpost
+  apply Triple.forIn_list inv
   intro hd tl b
   apply LawfulMonadTriple.triple_map _ _ (hstep hd tl b)
 
@@ -1855,14 +1868,13 @@ def program (n : Nat) (k : Nat) : IO Nat := do
   let r₂ ← addRandomEvens n k
   return r₁ + r₂
 
-axiom IO.rand_spec {n : Nat} : ⦃True⦄ (IO.rand 0 n : IO Nat) ⦃r, r < n⦄
+axiom IO.rand_spec {n : Nat} : ⦃True⦄ (IO.rand 0 n : IO Nat) ⦃⇓r | r < n⦄
 
 /-- The result has the same parity as the input. -/
-theorem addRandomEvens_spec (n k) : ⦃True⦄ (addRandomEvens n k) ⦃r, r % 2 = k % 2⦄ := by
-  let _ := (PreCond.instPreorder : Preorder (PreCond (.except IO.Error .pure) Prop))
+theorem addRandomEvens_spec (n k) : ⦃True⦄ (addRandomEvens n k) ⦃⇓r | r % 2 = k % 2⦄ := by
+  let _ := (PreCond.instPreorder : Preorder (PreCond (.except IO.Error .pure)))
   simp only [addRandomEvens, bind_pure_comp, map_pure, List.forIn_yield_eq_foldlM, bind_pure]
-  apply Triple.foldlM_list (m := IO) (fun xs r => r % 2 = k % 2) ?hpre le_rfl ?step
-  case hpre => simp
+  apply LawfulMonadTriple.triple_conseq _ _ le_rfl (Triple.foldlM_list (m:=IO) (fun xs r => r % 2 = k % 2) ?step)
   case step =>
     intro hd tl b; dsimp
     -- ⦃b % 2 = k % 2⦄
@@ -1885,11 +1897,12 @@ theorem addRandomEvens_spec (n k) : ⦃True⦄ (addRandomEvens n k) ⦃r, r % 2 
     -- (PostCond.total fun r => r < 37) ≤ (PostCond.total fun a => (b + 2 * a) % 2 = k % 2)
     simp[PostCond.total]
     intro _ _; exact h
+  simp
 
 /-- Since we're adding even numbers to our number twice, and summing,
 the entire result is even. -/
-theorem program_spec (n k) : ⦃True⦄ program n k ⦃r, r % 2 = 0⦄ := by
-  let _ := (PreCond.instPreorder : Preorder (PreCond (.except IO.Error .pure) Prop))
+theorem program_spec (n k) : ⦃True⦄ program n k ⦃⇓r | r % 2 = 0⦄ := by
+  let _ := (PreCond.instPreorder : Preorder (PreCond (.except IO.Error .pure)))
   -- unfold program
   simp[program] -- only [program, bind_pure_comp, Observation.bind_bind, Observation.map_map]
   -- apply the spec for addRandomEvens
@@ -1949,6 +1962,44 @@ theorem program_spec_old (n k) : SatisfiesM (fun r => r % 2 = 0) (program n k) :
 
 end KimsBabySteps
 
+section Counter
+
+def withNewCounter : StateT Nat Idd α → Idd α := fun s => (·.1) <$> s.run 0
+
+def Counter.incr : StateT Nat Idd Unit := fun n => pure ((), n+1)
+
+def Counter.get : StateT Nat Idd Nat := fun n => pure n
+
+def test : Idd Nat := withNewCounter do
+  Counter.incr
+  Counter.incr
+  Counter.get
+
+#check Dynamic
+
+theorem Counter.withNewCounter_spec {P : α → Nat → Prop}
+  (h : ⦃(· = 0)⦄ m ⦃⇓r | fun s => s = n ∧ P r n⦄) :
+  ⦃True⦄ withNewCounter m ⦃⇓r | P r n⦄ := by
+  simp only [MonadTriple.triple, withNewCounter, Functor.map, Idd.bind, Function.comp_apply,
+    Idd.pure, PostCond.total_fst, le_Prop_eq, forall_const]
+  exact (h 0 rfl).2
+
+theorem Counter.incr_spec : ⦃fun c => c = n⦄ Counter.incr ⦃⇓_ | fun c => c = n+1⦄ := by
+  simp only [MonadTriple.triple, incr, pure, Idd.pure, PostCond.total_fst, add_left_inj, le_refl,
+    implies_true]
+
+theorem Counter.get_spec : ⦃fun c => c = n⦄ Counter.get ⦃⇓r | fun c => c = n ∧ r = n⦄ := by
+  simp only [MonadTriple.triple, get, pure, Idd.pure, Prod.fst_natCast, Nat.cast_id,
+    Prod.snd_natCast, PostCond.total_fst, and_self, le_refl, implies_true]
+
+theorem test_spec : ⦃True⦄ test ⦃⇓r | r = 2⦄ := by
+  apply Counter.withNewCounter_spec
+  apply LawfulMonadTriple.triple_bind _ _ Counter.incr_spec; intro _; dsimp
+  apply LawfulMonadTriple.triple_bind _ _ Counter.incr_spec; intro _; dsimp
+  apply Counter.get_spec
+
+end Counter
+
 @[simp]
 theorem HPredTrans.Triple.persistent_sep_conj {p : Prop} {q : HProp} {x : IO α} :
   ⦃↟p ⋆ q⦄ x ⦃r⦄ ↔ p → ⦃q⦄ x ⦃r⦄ := by
@@ -1980,42 +2031,6 @@ theorem HProp.single_implies {l : Loc} {x y : α} :
   constructor
   · intro h; have h := h (Heap.single l (Sigma.mk α x)); simp at h; have h := congrArg AList.entries h; simp[Heap.single] at h; injection h
   · intro h; exact h ▸ le_refl _
-
-section Counter
-
-def withNewCounter : StateT Nat Idd α → Idd α := fun s => (·.1) <$> s.run 0
-
-def Counter.incr : StateT Nat Idd Unit := fun n => pure ((), n+1)
-
-def Counter.get : StateT Nat Idd Nat := fun n => pure n
-
-def test : Idd Nat := withNewCounter do
-  Counter.incr
-  Counter.incr
-  Counter.get
-
-theorem Counter.withNewCounter_spec {P : α → Nat → Prop}
-  (h : ⦃(· = 0)⦄ m ⦃r, fun s => s = n ∧ P r n⦄) :
-  ⦃True⦄ withNewCounter m ⦃r, P r n⦄ := by
-  simp only [MonadTriple.triple, withNewCounter, Functor.map, Idd.bind, Function.comp_apply,
-    Idd.pure, PostCond.total_fst, le_Prop_eq, forall_const]
-  exact (h 0 rfl).2
-
-theorem Counter.incr_spec : ⦃fun c => c = n⦄ Counter.incr ⦃_, fun c => c = n+1⦄ := by
-  simp only [MonadTriple.triple, incr, pure, Idd.pure, PostCond.total_fst, add_left_inj, le_refl,
-    implies_true]
-
-theorem Counter.get_spec : ⦃fun c => c = n⦄ Counter.get ⦃r, fun c => c = n ∧ r = n⦄ := by
-  simp only [MonadTriple.triple, get, pure, Idd.pure, Prod.fst_natCast, Nat.cast_id,
-    Prod.snd_natCast, PostCond.total_fst, and_self, le_refl, implies_true]
-
-theorem test_spec : ⦃True⦄ test ⦃r, r = 2⦄ := by
-  apply Counter.withNewCounter_spec
-  apply LawfulMonadTriple.triple_bind _ _ Counter.incr_spec; intro _; dsimp
-  apply LawfulMonadTriple.triple_bind _ _ Counter.incr_spec; intro _; dsimp
-  apply Counter.get_spec
-
-end Counter
 
 section HCounter
 
