@@ -59,15 +59,6 @@ def PredTrans (α : Type u) : Type u :=
 /-- Construct a PredTrans from a (single) postcondition of a (single) trace.
 Note that not every PredTrans can be constructed this way, but all the
 PredTrans that arise from deterministic programs can be represented this way.
-Cousot calls PredTrans proper a "program property" (in Set(Set(α))), whereas
-a the range of post characterizes the "trace properties" (in Set(α)).
-Program properties are traditionally called hyperproperties, and PredTrans
-is able to express all hyperproperties.
-In fact, this function is exactly the "lift" combinator from the original
-"hyperproperties" paper by Clarkson and Schneider that lifts a trace
-property into a program property.
-There is this paper about "Hyper Hoare Logic" discussing how Hoare triples
-can be generalized to hyperproperties: https://dl.acm.org/doi/10.1145/3656437
 -/
 def PredTrans.post (post : α → Prop) : PredTrans α :=
   ⟨fun p => post ≤ p, fun _ _ hpq hpostp => le_trans hpostp hpq⟩
@@ -581,10 +572,22 @@ end PostCondExamples
 --   | .arg σ s => let _ := @instMonad s; (inferInstance : Monad (ReaderT σ (PreCond s)))
 --   | .except ε s => @instMonad s
 
+@[reducible]
 def PreCond.pure : {ps : PredShape} → Prop → PreCond ps
   | .pure => fun p => p
   | .arg σ s => fun p (_s : σ) => @PreCond.pure s p
   | .except _ s => @PreCond.pure s
+
+@[simp]
+theorem PreCond.pure_except : @PreCond.pure (.except ε ps) p = (@PreCond.pure ps p : PreCond (.except ε ps)) := by
+  rfl
+
+@[simp]
+theorem PreCond.pure_arg_apply {ps} {σ} {s:σ} :
+  @PreCond.pure (.arg σ ps) p s = @PreCond.pure ps p := rfl
+
+@[simp]
+theorem PreCond.pure_pure : @PreCond.pure .pure p = p := rfl
 
 noncomputable instance PreCond.instLattice : {ps : PredShape} → CompleteLattice (PreCond ps)
   | .pure => ((inferInstance : CompleteLattice Prop) : CompleteLattice (PreCond .pure))
@@ -628,6 +631,14 @@ lemma PreCond.le_top {x : PreCond ps} : x ≤ pure True := by
   case except ε s ih => exact ih
 
 @[simp]
+lemma PreCond.glb_apply {x y : PreCond (.arg σ ps)} {s : σ} : (x ⊓ y) s = x s ⊓ y s := by
+  rfl
+
+@[simp]
+lemma PreCond.lub_apply {x y : PreCond (.arg σ ps)} {s : σ} : (x ⊔ y) s = x s ⊔ y s := by
+  rfl
+
+@[simp]
 lemma FailConds.bot_le {x : FailConds ps} : FailConds.false ≤ x := by
   simp only [false]
   induction ps
@@ -644,11 +655,11 @@ lemma FailConds.le_top {x : FailConds ps} : x ≤ FailConds.true := by
   case except ε s ih => simp only [const, Prod.le_def, ih, and_true]; intro ε; exact PreCond.le_top
 
 -- A postcondition expressing total correctness
-def PostCond.total (p : α → PreCond ps) : PostCond α ps :=
+abbrev PostCond.total (p : α → PreCond ps) : PostCond α ps :=
   (p, FailConds.false)
 
 -- A postcondition expressing partial correctness
-def PostCond.partial (p : α → PreCond ps) : PostCond α ps :=
+abbrev PostCond.partial (p : α → PreCond ps) : PostCond α ps :=
   (p, FailConds.true)
 
 @[simp]
@@ -734,7 +745,7 @@ instance EStateM.instMonadTriple : MonadTriple (EStateM ε σ) (.except ε (.arg
       | .error e s' => Q.2.1 e s'
 
 class LawfulMonadTriple (m : Type → Type) (ps : outParam PredShape)
-  [Monad m] [LawfulMonad m] [MonadTriple m ps] where
+  [Monad m] [MonadTriple m ps] where
   triple_conseq {P P' : PreCond ps} {Q Q' : PostCond α ps} (x : m α)
     (hp : P ≤ P' := by simp) (hq : Q' ≤ Q := by simp)
     (h : triple x P' Q') :
@@ -748,6 +759,14 @@ class LawfulMonadTriple (m : Type → Type) (ps : outParam PredShape)
     (hx : triple x P Q) (herror : Q.2 ≤ R.2 := by simp)
     (hf : ∀ b, triple (f b) (Q.1 b) R) :
     triple (x >>= f) P R
+
+theorem LawfulMonadTriple.triple_conseq_l {m : Type → Type} [Monad m] [LawfulMonad m] [MonadTriple m ps] [LawfulMonadTriple m ps] {P P' : PreCond ps} {Q : PostCond α ps}
+  (x : m α) (hp : P ≤ P') (h : triple x P' Q) :
+  triple x P Q := triple_conseq x hp le_rfl h
+
+theorem LawfulMonadTriple.triple_conseq_r {m : Type → Type} [Monad m] [LawfulMonad m] [MonadTriple m ps] [LawfulMonadTriple m ps] {P : PreCond ps} {Q Q' : PostCond α ps}
+  (x : m α) (hq : Q ≤ Q') (h : triple x P Q) :
+  triple x P Q' := triple_conseq x le_rfl hq h
 
 theorem LawfulMonadTriple.triple_map {m : Type → Type} [Monad m] [LawfulMonad m] [MonadTriple m ps] [LawfulMonadTriple m ps] (f : α → β) (x : m α)
   (h : triple x P (fun a => Q.1 (f a), Q.2)) :
@@ -774,7 +793,106 @@ theorem LawfulMonadTriple.triple_extract_persistent_true {m : Type → Type} [Mo
     rw[this]
     exact triple_extract_persistent x h
 
+theorem LawfulMonadTriple.triple_dite {c : Prop} [Decidable c] {t : c → m α} {e : ¬c → m α} {P : PreCond ps} {Q : PostCond α ps} [Monad m] [MonadTriple m ps]
+  (htrue : (h : c) → triple (t h) P Q)
+  (hfalse : (h : ¬c) → triple (e h) P Q) :
+  triple (dite c t e) P Q := by
+    split <;> simp only [htrue, hfalse]
+
+theorem LawfulMonadTriple.triple_ite {c : Prop} [Decidable c] {t : m α} {e : m α} {P : PreCond ps} {Q : PostCond α ps} [Monad m] [MonadTriple m ps]
+  (htrue : c → triple t P Q)
+  (hfalse : ¬c → triple e P Q) :
+  triple (ite c t e) P Q := by
+    change triple (dite c (fun _ => t) (fun _ => e)) P Q
+    exact triple_dite htrue hfalse
+
 open LawfulMonadTriple
+
+structure LiftPredImpl (m : PredShape) (n : PredShape) where
+  lift_pre : PreCond m → PreCond n
+  lift_fail_conds : FailConds m → FailConds n
+
+def LiftPredImpl.lift_post {m n : PredShape} (impl : LiftPredImpl m n) (Q : PostCond α m) : PostCond α n :=
+  (fun a => impl.lift_pre (Q.1 a), impl.lift_fail_conds Q.2)
+
+def LiftPredImpl.compose {m n o : PredShape} (impl₂ : LiftPredImpl n o) (impl₁ : LiftPredImpl m n) : LiftPredImpl m o :=
+  ⟨impl₂.lift_pre ∘ impl₁.lift_pre, impl₂.lift_fail_conds ∘ impl₁.lift_fail_conds⟩
+
+@[simp]
+theorem LiftPredImpl.compose_lift_pre {m n o : PredShape} (impl₂ : LiftPredImpl n o) (impl₁ : LiftPredImpl m n) :
+  (compose impl₂ impl₁).lift_pre = impl₂.lift_pre ∘ impl₁.lift_pre := rfl
+
+@[simp]
+theorem LiftPredImpl.compose_lift_fail_conds {m n o : PredShape} (impl₂ : LiftPredImpl n o) (impl₁ : LiftPredImpl m n) :
+  (compose impl₂ impl₁).lift_fail_conds = impl₂.lift_fail_conds ∘ impl₁.lift_fail_conds := rfl
+
+@[simp]
+theorem LiftPredImpl.compose_lift_post {m n o : PredShape} {α : Type} (impl₂ : LiftPredImpl n o) (impl₁ : LiftPredImpl m n) :
+  (compose impl₂ impl₁).lift_post (α := α) = impl₂.lift_post ∘ impl₁.lift_post := rfl
+
+class LawfulMonadLiftTriple (m : semiOutParam (Type → Type)) (n : Type → Type) (psm : outParam PredShape) (psn : outParam PredShape)
+  [MonadLift m n] [MonadTriple m psm] [MonadTriple n psn] where
+  lift_pred_impl : LiftPredImpl psm psn
+  triple_lift {x : m α} {P : PreCond psm} {Q : PostCond α psm}
+    (h : triple x P Q) :
+    triple (m:=n) (liftM x) (lift_pred_impl.lift_pre P) (lift_pred_impl.lift_post Q)
+
+class LawfulMonadLiftTripleT (m : Type → Type) (n : Type → Type) (psm : outParam PredShape) (psn : outParam PredShape)
+  [MonadLiftT m n] [MonadTriple m psm] [MonadTriple n psn] where
+  lift_pred_impl : LiftPredImpl psm psn
+  triple_lift {x : m α} {P : PreCond psm} {Q : PostCond α psm}
+    (h : triple x P Q) :
+    triple (m:=n) (liftM x) (lift_pred_impl.lift_pre P) (lift_pred_impl.lift_post Q)
+
+open LawfulMonadLiftTripleT (triple_lift)
+
+instance (m n o) [MonadTriple m psm] [MonadTriple n psn] [MonadTriple o pso]
+  [MonadLift n o] [inst1 : LawfulMonadLiftTriple n o psn pso]
+  [MonadLiftT m n] [instT : LawfulMonadLiftTripleT m n psm psn] : LawfulMonadLiftTripleT m o psm pso where
+  lift_pred_impl := LiftPredImpl.compose inst1.lift_pred_impl instT.lift_pred_impl
+  triple_lift h := by
+    simp only [liftM, monadLift, LiftPredImpl.compose_lift_pre, Function.comp_apply,
+      LiftPredImpl.compose_lift_post]
+    apply LawfulMonadLiftTriple.triple_lift
+    apply LawfulMonadLiftTripleT.triple_lift
+    assumption
+
+instance (m) [MonadTriple m psm] : LawfulMonadLiftTripleT m m psm psm where
+  lift_pred_impl :=
+  { lift_pre P := P
+    lift_fail_conds fc := fc }
+  triple_lift h := h
+
+instance StateT.instLawfulMonadLiftTriple [Monad m] [MonadTriple m ps] [LawfulMonadTriple m ps] :
+  LawfulMonadLiftTriple m (StateT σ m) ps (.arg σ ps) where
+  lift_pred_impl :=
+  { lift_pre P := fun _s => P
+    lift_fail_conds fc := fc }
+  triple_lift h := by
+    simp only [triple, liftM, monadLift, MonadLift.monadLift, StateT.lift, LiftPredImpl.lift_post]
+    intros
+    apply LawfulMonadTriple.triple_bind _ _ h
+    simp[LawfulMonadTriple.triple_pure]
+
+instance ReaderT.instLawfulMonadLiftTriple [Monad m] [MonadTriple m ps] [LawfulMonadTriple m ps] :
+  LawfulMonadLiftTriple m (ReaderT ρ m) ps (.arg ρ ps) where
+  lift_pred_impl :=
+  { lift_pre P := fun _r => P
+    lift_fail_conds fc := fc }
+  triple_lift h := by
+    simp only [triple, liftM, monadLift, MonadLift.monadLift, LiftPredImpl.lift_post]
+    intros
+    apply h
+
+instance ExceptT.instLawfulMonadLiftTriple [Monad m] [LawfulMonad m] [MonadTriple m ps] [LawfulMonadTriple m ps] :
+  LawfulMonadLiftTriple m (ExceptT ε m) ps (.except ε ps) where
+  lift_pred_impl :=
+  { lift_pre P := P
+    lift_fail_conds fc := (fun _e => PreCond.pure False, fc) }
+  triple_lift h := by
+    simp only [triple, liftM, monadLift, MonadLift.monadLift, run_lift, LiftPredImpl.lift_post]
+    apply triple_map
+    apply h
 
 instance Idd.instLawfulMonadTriple : LawfulMonadTriple Idd .pure where
   triple_conseq x hp' hq h := by intro; apply_rules [(Prod.le_def.mp hq).1]
@@ -865,12 +983,15 @@ notation:lead "⦃" P "⦄ " x:lead " ⦃⇓" v " | " Q "⦄" =>
 theorem Triple.forIn_list {α β} {m : Type → Type}
   [Monad m] [LawfulMonad m] [MonadTriple m ps] [LawfulMonadTriple m ps]
   {xs : List α} {init : β} {f : α → β → m (ForInStep β)}
-  (inv : List α → β → PreCond ps)
+  (inv : PostCond (List α × β) ps)
+  (hpre : P ≤ inv.1 (xs, init))
   (hstep : ∀ hd tl b,
-      ⦃inv (hd :: tl) b⦄
+      ⦃inv.1 (hd :: tl, b)⦄
       (f hd b)
-      ⦃⇓r | match r with | .yield b' => inv tl b' | .done b' => inv [] b'⦄) :
-  ⦃inv xs init⦄ (forIn xs init f) ⦃⇓b' | inv [] b'⦄ := by
+      ⦃(fun r => match r with | .yield b' => inv.1 (tl, b') | .done b' => inv.1 ([], b'), inv.2)⦄) :
+  ⦃P⦄ (forIn xs init f) ⦃(fun b' => inv.1 ([], b'), inv.2)⦄ := by
+    apply triple_conseq _ hpre le_rfl
+    clear hpre
     induction xs generalizing init
     case nil => apply LawfulMonadTriple.triple_pure; simp
     case cons hd tl ih =>
@@ -887,18 +1008,19 @@ theorem Triple.forIn_list {α β} {m : Type → Type}
 theorem Triple.foldlM_list {α β} {m : Type → Type}
   [Monad m] [LawfulMonad m] [MonadTriple m ps] [LawfulMonadTriple m ps]
   {xs : List α} {init : β} {f : β → α → m β}
-  (inv : List α → β → PreCond ps)
+  (inv : PostCond (List α × β) ps)
+  (hpre : P ≤ inv.1 (xs, init))
   (hstep : ∀ hd tl b,
-      ⦃inv (hd :: tl) b⦄
+      ⦃inv.1 (hd :: tl, b)⦄
       (f b hd)
-      ⦃⇓b' | inv tl b'⦄) :
-  ⦃inv xs init⦄ (List.foldlM f init xs) ⦃⇓b' | inv [] b'⦄ := by
+      ⦃(fun b' => inv.1 (tl, b'), inv.2)⦄) :
+  ⦃P⦄ (List.foldlM f init xs) ⦃(fun b' => inv.1 ([], b'), inv.2)⦄ := by
   have : xs.foldlM f init = forIn xs init (fun a b => .yield <$> f b a) := by
     simp only [List.forIn_yield_eq_foldlM, id_map']
   rw[this]
-  apply Triple.forIn_list inv
+  apply Triple.forIn_list inv hpre
   intro hd tl b
-  apply LawfulMonadTriple.triple_map _ _ (hstep hd tl b)
+  apply LawfulMonadTriple.triple_map ForInStep.yield _ (hstep hd tl b)
 
 end Triple
 
@@ -992,44 +1114,202 @@ theorem use_spec_map {w : Type u → Type x} {f : α → β} {x y : w α} {goal 
 --  (hrw : x ≤ y) (hgoal : f <*> y ≤ goal) : f <*> x ≤ goal :=
 --  le_trans (MonadOrdered.seq_mono (by rfl) hrw) hgoal
 
-macro (name := vc_spec_Idd) "vc_spec_Idd " post:term : tactic =>
-  `(tactic|(apply (Idd.observe_post (p := $post)).mp; simp))
-
-theorem test_3 : Observation.observe (do let mut x := 0; for i in [1:5] do { x := x + i }; pure (f := Idd) (); return x) ≤ PredTrans.post (· < 30) := by
+theorem test_3 : ⦃True⦄ (do let mut x := 0; for i in [1:5] do { x := x + i }; pure (f := Idd) (); return x) ⦃⇓r | r < 30⦄ := by
+  open LawfulMonadTriple in
   simp
-  apply le_trans (Observation.forIn_list ?inv ?hpre ?hstep) ?hgoal
-  case inv => exact fun xs => PredTrans.post fun r => (∀ x, x ∈ xs → x ≤ 5) ∧ r + xs.length * 5 ≤ 25
-  case hpre => simp_arith
-  case hstep => simp_arith; intro hd tl; left; intro r x h h1 h2; subst h; simp_all; omega
-  case hgoal => simp_arith
+  apply triple_conseq_r _ ?hpost (Triple.forIn_list (m:=Idd) (PostCond.total fun (xs, r) => (∀ x, x ∈ xs → x ≤ 5) ∧ r + xs.length * 5 ≤ 25) ?hpre ?hstep)
+  case hpre => intro xs; simp; omega
+  case hpost => simp; intro; simp; omega
+  case hstep => intros; apply triple_pure; simp_all; omega
 
-theorem test_3_2 : Observation.observe (do let mut x := 0; for i in [1:5] do { x := x + i }; pure (f := Idd) (); return x) ≤ pure 10 := by
+theorem test_3_2 : ⦃True⦄ (do let mut x := 0; for i in [1:5] do { x := x + i }; pure (f := Idd) (); return x) ⦃⇓r | r = 10⦄ := by
+  open LawfulMonadTriple in
   simp
-  apply le_trans (Observation.forIn_list ?inv ?hpre ?hstep) ?hgoal
-  case inv => exact fun xs => PredTrans.post fun r => r + xs.sum = 10
-  case hpre => simp_arith
-  -- sigh. the following could be much better! TODO
-  case hstep => simp_arith; intro hd tl; left; intro r x h h1; subst h; simp_all
-  case hgoal => simp
+  apply triple_conseq_r _ ?hpost (Triple.forIn_list (m:=Idd) (PostCond.total fun (xs, r) => r + xs.sum = 10) ?hpre ?hstep)
+  case hpre => simp; rfl
+  case hpost => simp
+  case hstep => intros; apply triple_pure; simp_all; omega
 
 -- TBD: Figure out while loops
-theorem test_4 : Observation.observe (do let mut x := 0; let mut i := 0; while i < 4 do { x := x + i; i := i + 1 }; pure (f := Idd) (); return x) ≤ pure 6 := by
+theorem test_4 : ⦃True⦄ (do let mut x := 0; let mut i := 0; while i < 4 do { x := x + i; i := i + 1 }; pure (f := Idd) (); return x) ⦃⇓r | r = 6⦄ := by
+  open LawfulMonadTriple in
   simp
-  apply use_spec_map (Observation.forIn_loop ?term ?inv ?hpre ?hstep) ?hgoal
-  case term => sorry
-  case inv => exact PredTrans.post fun | ⟨i, x⟩ => x + (List.range' i (4-i) 1).sum = 6
-  case hpre => simp_arith
-  case hstep => sorry
-  case hgoal => simp; sorry -- later: conv => lhs; arg 1; intro x; tactic =>
+  sorry
 
-theorem test_1 : Observation.observe (do let mut id := 5; id := 3; pure (f := Idd) id) ≤ pure 3 := by
+theorem test_1 : ⦃True⦄ (do let mut id := 5; id := 3; pure (f := Idd) id) ⦃⇓r | r = 3⦄ := by
+  simp[LawfulMonadTriple.triple_pure]
+
+theorem test_2 : ⦃True⦄ (do let mut x := 5; if x > 1 then { x := 1 } else { x := x }; pure (f:=Idd) x) ⦃⇓r | r = 1⦄ := by
+  simp[LawfulMonadTriple.triple_pure]
+
+theorem test_2_2 : ⦃True⦄ (do let mut id := 5; id := 3; pure (f := Idd) id) ⦃⇓r | r < 20⦄ := by
+  simp[LawfulMonadTriple.triple_pure]
+
+-- theorem StateT.get_spec2 [Monad m] [MonadState σ m] [MonadTriple m stack] [LawfulMonad m] [LawfulMonadTriple m stack] {P : PreCond stack} :
+--   ⦃LawfulMonadLiftTriple.lift_pred_impl.lift_pre P⦄
+--   (get : m σ)
+--   ⦃⇓r | do pure (P (← read) ⊓ P r)⦄ := by
+--   simp [MonadTriple.triple, get, getThe, MonadStateOf.get, StateT.get, PostCond.total_fst, LawfulMonadTriple.triple_pure]
+
+⦃True⦄ (set x : StateT σ m PUnit) ⦃⇓_ | fun s => PreCond.pure (s = x)⦄
+theorem StateT.set_spec [Monad m] [MonadTriple m stack] [LawfulMonad m] [LawfulMonadTriple m stack] {P : σ → PreCond stack} :
+  ⦃P⦄ (set x : StateT σ m PUnit) ⦃⇓_ | fun s => PreCond.pure (s = x) ⊓ (⨆ s', P s')⦄ := by
+  simp only [MonadTriple.triple, set, StateT.set, PostCond.total_fst, PostCond.total_snd]
+  intro s
+  apply LawfulMonadTriple.triple_pure
+  simp only [iSup_le_iff, PreCond.le_top, implies_true, inf_of_le_right]
+  apply CompleteLattice.le_sSup
   simp
 
-theorem test_2 : Observation.observe (do let mut x := 5; if x > 1 then { x := 1 } else { x := x }; pure (f:=Idd) x) ≤ pure 1 := by
-  simp
+theorem StateT.get_spec [Monad m] [MonadTriple m stack] [LawfulMonadTriple m stack] {P : σ → PreCond stack} :
+  ⦃P⦄
+  (get : StateT σ m σ)
+  ⦃⇓r | fun s => P s ⊓ P r⦄ := by
+  simp [MonadTriple.triple, get, getThe, MonadStateOf.get, StateT.get, PostCond.total_fst, LawfulMonadTriple.triple_pure]
 
-theorem test_2_2 : Observation.observe (do let mut id := 5; id := 3; pure (f := Idd) id) ≤ PredTrans.post (· < 20) := by
+theorem StateT.get_spec' [Monad m] [MonadTriple m stack] [LawfulMonadTriple m stack] {P : σ → PreCond stack} :
+  ⦃P⦄
+  (get : StateT σ m σ)
+  ⦃⇓r | fun s => PreCond.pure (s = r) ⊓ P r⦄ := by
+  simp [MonadTriple.triple, get, getThe, MonadStateOf.get, StateT.get, PostCond.total_fst, LawfulMonadTriple.triple_pure]
+
+theorem StateT.get_spec_bwd [Monad m] [MonadTriple m stack] [LawfulMonadTriple m stack] {P : σ → PreCond stack} :
+  ⦃fun s => Q.1 s s⦄
+  (get : StateT σ m σ)
+  ⦃Q⦄ := by
+  simp [MonadTriple.triple, get, getThe, MonadStateOf.get, StateT.get, PostCond.total_fst, LawfulMonadTriple.triple_pure]
+
+theorem ExceptT.throw_spec [Monad m] [MonadTriple m stack] [LawfulMonadTriple m stack] {P : PreCond (.except ε stack)} :
+  ⦃P⦄
+  (throw e : ExceptT ε m σ)
+  ⦃(fun _ => PreCond.pure False, fun e' => PreCond.pure (e = e') ⊓ P, FailConds.false)⦄ := by
+  simp only [MonadTriple.triple, run_throw, PostCond.total_def, PreCond.le_top, inf_of_le_right,
+    le_refl, LawfulMonadTriple.triple_pure]
+
+theorem ExceptT.throw_spec_bwd [Monad m] [MonadTriple m stack] [LawfulMonadTriple m stack] :
+  ⦃Q.2.1 e⦄
+  (throw e : ExceptT ε m σ)
+  ⦃Q⦄ := by
+  simp only [MonadTriple.triple, run_throw, PostCond.total_def, PreCond.le_top, inf_of_le_right,
+    le_refl, LawfulMonadTriple.triple_pure]
+
+theorem test_ex :
+  ⦃fun s => s = 4⦄
+  (do let mut x := 0; let s ← get; for i in [1:s] do { x := x + i; if x > 4 then throw 42 }; pure (f := ExceptT Nat (StateT Nat Idd)) (); return x)
+  ⦃(fun r s => False,
+    fun e s => e = 42 ∧ s = 4,
+    ())⦄ := by
+  open LawfulMonadTriple in
+  open LawfulMonadLiftTriple in
   simp
+  apply triple_bind _ _ (triple_lift (StateT.get_spec (m := Idd))) ?herror ?_
+  case herror =>
+    simp only [LiftPredImpl.lift_post, lift_pred_impl, inf_Prop_eq, PostCond.total_fst,
+    PostCond.total_snd, Prod.mk_le_mk, le_refl, and_true]
+    intro e s
+    simp
+  intro s
+  simp only [LiftPredImpl.lift_post, lift_pred_impl, inf_Prop_eq, PostCond.total_fst,
+    PostCond.total_snd]
+  let inv : PostCond (List Nat × Nat) (.except Nat (.arg Nat .pure)) :=
+    (fun (xs, r) s => r ≤ 4 ∧ s = 4 ∧ r + xs.sum > 4, fun e s => e = 42 ∧ s = 4, ())
+  apply triple_conseq_r _ ?hpost (Triple.forIn_list (m:=ExceptT Nat (StateT Nat Idd)) inv ?hpre ?hstep)
+  case hpre =>
+    intro _ h
+    simp[h,inv]
+    conv in (List.sum _) => whnf
+    simp
+  case hpost =>
+    simp only [List.sum_nil, add_zero, gt_iff_lt, Prod.mk_le_mk, le_refl, and_true, inv]
+    intro r s
+    simp_all
+  case hstep =>
+    intro hd tl x
+    simp[inv]
+    apply triple_dite
+    case htrue =>
+      intro h
+      apply triple_conseq_r _ ?hpost (ExceptT.throw_spec (m := StateT Nat Idd) (P := fun s => x ≤ 4 ∧ s = 4 ∧ 4 < x + (hd + tl.sum)))
+      simp only [Prod.mk_le_mk, le_refl, and_true, inv]
+      constructor
+      · intro; apply PreCond.bot_le
+      · intro _ _; simp_all
+    case hfalse =>
+      intro h
+      apply triple_pure
+      intro s
+      simp_all
+      omega
+
+theorem Triple.forIn_list_bwd {α β} {m : Type → Type}
+  [Monad m] [LawfulMonad m] [MonadTriple m ps] [LawfulMonadTriple m ps]
+  {xs : List α} {init : β} {f : α → β → m (ForInStep β)} {Q : PostCond β ps}
+  (inv : PostCond (List α × β) ps)
+  (hpost1 : ∀ b, inv.1 ([], b) ≤ Q.1 b)
+  (hpost2 : inv.2 ≤ Q.2)
+  (hstep : ∀ hd tl b,
+      ⦃inv.1 (hd :: tl, b)⦄
+      (f hd b)
+      ⦃(fun r => match r with | .yield b' => inv.1 (tl, b') | .done b' => inv.1 ([], b'), inv.2)⦄) :
+  ⦃inv.1 (xs, init)⦄ (forIn xs init f) ⦃Q⦄ := by
+    let inv' := (fun b => inv.1 ([], b), inv.2)
+    have hpost : inv' ≤ Q := ⟨hpost1, hpost2⟩
+    apply LawfulMonadTriple.triple_conseq _ le_rfl hpost
+    apply Triple.forIn_list inv le_rfl hstep
+
+theorem triple_bind_bwd [Monad m] [MonadTriple m stack] [LawfulMonadTriple m stack] {P : PreCond stack} {Q : PostCond β stack}
+  (x : m α) (f : α → m β)
+  (hx : ⦃P⦄ x ⦃(R, Q.2)⦄)
+  (hf : ∀ a, ⦃R a⦄ f a ⦃Q⦄) :
+  ⦃P⦄ (x >>= f) ⦃Q⦄ := LawfulMonadTriple.triple_bind x f hx le_rfl hf
+
+--theorem triple_lift_bwd {x : m α} {P : PreCond psm} {Q : PostCond α psm}
+--    (h : triple x P Q) :
+--    triple (m:=n) (liftM x) (lift_pred_impl.lift_pre P) (lift_pred_impl.lift_post Q)
+
+theorem test_ex_bwd :
+  ⦃fun s => s = 4⦄
+  (do let mut x := 0; let s ← get; for i in [1:s] do { x := x + i; if x > 4 then throw 42 }; pure (f := ExceptT Nat (StateT Nat Idd)) (); return x)
+  ⦃(fun r s => False,
+    fun e s => e = 42 ∧ s = 4,
+    ())⦄ := by
+  open LawfulMonadTriple in
+  open LawfulMonadLiftTriple in
+  simp
+  apply triple_bind_bwd _ _ ?later ?now
+  case now =>
+    intro s
+    let inv : PostCond (List Nat × Nat) (.except Nat (.arg Nat .pure)) :=
+        (fun (xs, r) s => r ≤ 4 ∧ s = 4 ∧ r + xs.sum > 4, fun e s => e = 42 ∧ s = 4, ())
+    apply Triple.forIn_list_bwd (m:=ExceptT Nat (StateT Nat Idd)) inv ?hpost1 ?hpost2 ?hstep
+    case hpost1 =>
+      simp only [List.sum_nil, add_zero, gt_iff_lt, Prod.mk_le_mk, le_refl, and_true, inv]
+      intro r s
+      simp_all
+    case hpost2 => simp[inv]
+    case hstep =>
+      intro hd tl x
+      simp[inv]
+      apply triple_dite
+      case htrue =>
+        intro h
+        apply triple_conseq_l _ ?_ (ExceptT.throw_spec_bwd (m := StateT Nat Idd))
+        intro s
+        simp_all
+      case hfalse =>
+        intro h
+        apply triple_pure
+        intro s
+        simp_all
+        omega
+  case later =>
+    simp
+    apply triple_conseq _ ?hpre ?hpost (triple_lift (StateT.get_spec_bwd (m := Idd)))
+    case hpre =>
+      intro s
+      simp
+    case hpost =>
+      simp
 
 section UserStory1
 
