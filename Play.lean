@@ -279,70 +279,58 @@ instance EStateM.instWP : WP (EStateM ε σ) (.except ε (.arg σ .pure)) where
     | .error e s' => Q.2.1 e s'
 
 class LawfulWP (m : Type → Type) (ps : outParam PredShape) [Monad m] [WP m ps] where
-  wp_pure {α} (a : α) (Q : PostCond α ps) :
-    Q.1 a ≤ wp (m:=m) (pure a) Q
-  wp_bind {α β} (x : m α) (f : α → m β) {Q : PostCond β ps} :
-    wp x (fun a => wp (f a) Q, Q.2) ≤ wp (x >>= f) Q
+  wp_pure {α} (a : α) :
+    wp (m:=m) (pure a) = (fun Q => Q.1 a)
+  wp_bind {α β} (x : m α) (f : α → m β) :
+    wp (x >>= f) = fun Q => wp x (fun a => wp (f a) Q, Q.2)
   wp_conseq {α} (x : m α) (Q₁ Q₂ : PostCond α ps) :
     Q₁ ≤ Q₂ → wp x Q₁ ≤ wp x Q₂
 
-theorem LawfulWP.wp_pure_conseq {m : Type → Type} [Monad m] [WP m ps] [LawfulWP m ps] {α} {P : PreCond ps} {Q : PostCond α ps} (a : α)
-    (himp : P ≤ Q.1 a) : P ≤ wp (m:=m) (pure a) Q := le_trans himp (wp_pure a Q)
+instance [WP m sh] [Monad m] [LawfulWP m sh] : Monad (wp m)
 
-theorem LawfulWP.wp_bind_conseq_f {m : Type → Type} [Monad m] [WP m ps] [LawfulWP m ps] {α β} {P : PostCond α ps} {Q : PostCond β ps} (x : m α) (f : α → m β)
-    (hf : ∀a, P.1 a ≤ wp (f a) Q) (herror : P.2 ≤ Q.2) :
-    wp x P ≤ wp (x >>= f) Q := le_trans (wp_conseq x P (fun a => wp (f a) Q, Q.2) ⟨hf, herror⟩) (wp_bind x f)
+theorem LawfulWP.wp_pure_conseq {m : Type → Type} [Monad m] [WP m ps] [LawfulWP m ps] {α} {P : PreCond ps} {Q : PostCond α ps} (a : α)
+    (himp : P ≤ Q.1 a) : P ≤ wp (m:=m) (pure a) Q := by rw[wp_pure a]; exact himp
+
+-- theorem LawfulWP.wp_bind_conseq_f {m : Type → Type} [Monad m] [WP m ps] [LawfulWP m ps] {α β} {P : PostCond α ps} {Q : PostCond β ps} (x : m α) (f : α → m β)
+--     (hf : ∀a, P.1 a ≤ wp (f a) Q) (herror : P.2 ≤ Q.2) :
+--     wp x P ≤ wp (x >>= f) Q := by rw[wp_bind x f]; exact wp_conseq x P (fun a => wp (f a) Q, Q.2) ⟨hf, herror⟩
 
 theorem LawfulWP.wp_conseq_2 {m : Type → Type} [Monad m] [WP m ps] [LawfulWP m ps] {α} (x : m α) (Q₁ Q₂ : PostCond α ps)
     (h1 : Q₁.1 ≤ Q₂.1) (h2 : Q₁.2 ≤ Q₂.2) :
     wp x Q₁ ≤ wp x Q₂ := wp_conseq x _ _ ⟨h1,h2⟩
 
-theorem LawfulWP.wp_map {m : Type → Type} [Monad m] [LawfulMonad m] [WP m ps] [LawfulWP m ps] (f : α → β) (x : m α) {Q : PostCond β ps} :
-  wp x (fun a => Q.1 (f a), Q.2) ≤ wp (f <$> x) Q := by
-    simp only [← bind_pure_comp]
-    apply wp_bind_conseq_f _ _ ?_ (by simp)
-    intro b
-    apply wp_pure_conseq
-    simp only [le_refl]
+theorem LawfulWP.wp_map {m : Type → Type} [Monad m] [LawfulMonad m] [WP m ps] [LawfulWP m ps] (f : α → β) (x : m α) :
+  wp (f <$> x) = fun Q => wp x (fun a => Q.1 (f a), Q.2) := by
+    simp [← bind_pure_comp, wp_bind, wp_pure]
 
-theorem LawfulWP.wp_map_conseq_f {m : Type → Type} [Monad m] [LawfulMonad m] [WP m ps] [LawfulWP m ps] (f : α → β) (x : m α) {Q : PostCond β ps}
-    (hf : ∀a, P.1 a ≤ Q.1 (f a)) (herror : P.2 ≤ Q.2) :
-  wp x P ≤ wp (f <$> x) Q := le_trans (wp_conseq x P _ ⟨hf, herror⟩) (wp_map f x)
+theorem LawfulWP.wp_seq {m : Type → Type} [Monad m] [LawfulMonad m] [WP m ps] [LawfulWP m ps] (f : m (α → β)) (x : m α) :
+  wp (f <*> x) = fun Q => wp f (fun f => wp x (fun x => Q.1 (f x), Q.2), Q.2) := by
+    simp [← bind_map, wp_bind, wp_map]
 
-theorem LawfulWP.wp_seq {m : Type → Type} [Monad m] [LawfulMonad m] [WP m ps] [LawfulWP m ps] (f : m (α → β)) (x : m α) {Q : PostCond β ps} :
-  wp f (fun f => wp x (fun x => Q.1 (f x), Q.2), Q.2) ≤ wp (f <*> x) Q := by
-    simp only [← bind_map]
-    apply wp_bind_conseq_f _ _ ?_ (by simp)
-    intro f
-    apply wp_map_conseq_f _ _ (by simp) (by simp)
+-- theorem LawfulWP.wp_seq_f {m : Type → Type} [Monad m] [LawfulMonad m] [WP m ps] [LawfulWP m ps] (f : m (α → β)) (x : m α) {Q : PostCond β ps}
+--     (hx : ∀f, P.1 f ≤ wp x (fun a => Q.1 (f a), Q.2)) (herror : P.2 ≤ Q.2) :
+--   wp f P ≤ wp (f <*> x) Q := le_trans (wp_conseq f P _ ⟨hx, herror⟩) (wp_seq f x)
 
-theorem LawfulWP.wp_seq_f {m : Type → Type} [Monad m] [LawfulMonad m] [WP m ps] [LawfulWP m ps] (f : m (α → β)) (x : m α) {Q : PostCond β ps}
-    (hx : ∀f, P.1 f ≤ wp x (fun a => Q.1 (f a), Q.2)) (herror : P.2 ≤ Q.2) :
-  wp f P ≤ wp (f <*> x) Q := le_trans (wp_conseq f P _ ⟨hx, herror⟩) (wp_seq f x)
+theorem LawfulWP.wp_dite {c : Prop} [Decidable c] {t : c → m α} {e : ¬c → m α} [WP m ps] :
+  wp (dite c t e) = if h : c then wp (t h) else wp (e h) := by
+    split <;> simp
 
-theorem LawfulWP.wp_dite {c : Prop} [Decidable c] {t : c → m α} {e : ¬c → m α} {P : PreCond ps} {Q : PostCond α ps} [Monad m] [WP m ps]
-  (htrue : (h : c) → P ≤ wp (t h) Q)
-  (hfalse : (h : ¬c) → P ≤ wp (e h) Q) :
-  P ≤ wp (dite c t e) Q := by
-    split <;> simp only [htrue, hfalse]
-
-theorem LawfulWP.wp_ite {c : Prop} [Decidable c] {t : m α} {e : m α} {P : PreCond ps} {Q : PostCond α ps} [Monad m] [WP m ps]
-  (htrue : c → P ≤ wp t Q)
-  (hfalse : ¬c → P ≤ wp e Q) :
-  P ≤ wp (ite c t e) Q := by
-    change P ≤ wp (dite c (fun _ => t) (fun _ => e)) Q
-    exact wp_dite htrue hfalse
+theorem LawfulWP.wp_ite {c : Prop} [Decidable c] {t : m α} {e : m α} [WP m ps] :
+  wp (ite c t e) = if c then wp t else wp e := by
+  split <;> simp
 
 open LawfulWP
 
+attribute [simp] wp_pure wp_bind wp_map wp_seq wp_dite wp_ite
+
 instance Idd.instLawfulWP : LawfulWP Idd .pure where
-  wp_pure a Q := by simp only [wp, Pure.pure, pure, le_refl]
-  wp_bind x f Q := by simp only [wp, Bind.bind, bind, le_refl]
+  wp_pure a := by simp only [wp, Pure.pure, pure, le_refl]
+  wp_bind x f := by simp only [wp, Bind.bind, bind, le_refl]
   wp_conseq x _ _ h := h.1 x.run
 
 instance StateT.instLawfulWP [Monad m] [WP m ps] [LawfulWP m ps] : LawfulWP (StateT σ m) (.arg σ ps) where
-  wp_pure a Q := by intro s; apply wp_pure (Q := (fun x => Q.1 x.1 x.2, Q.2)) (a,s)
-  wp_bind x f Q := by intro s; apply wp_bind
+  wp_pure a := by simp [wp, pure, StateT.pure, wp_pure]
+  wp_bind x f := by simp [wp, bind, StateT.bind, wp_bind]
   wp_conseq {α} x Q₁ Q₂ h := by
     intro s
     simp only [wp]
@@ -352,8 +340,8 @@ instance StateT.instLawfulWP [Monad m] [WP m ps] [LawfulWP m ps] : LawfulWP (Sta
     apply h.1
 
 instance ReaderT.instLawfulWP [Monad m] [WP m ps] [LawfulWP m ps] : LawfulWP (ReaderT ρ m) (.arg ρ ps) where
-  wp_pure a Q := by intro r; apply wp_pure_conseq; simp
-  wp_bind x f Q := by intro r; apply wp_bind
+  wp_pure a := by simp [wp, pure, ReaderT.pure]
+  wp_bind x f := by simp [wp, bind, ReaderT.bind]
   wp_conseq {α} x Q₁ Q₂ h := by
     intro r
     apply wp_conseq (x r)
@@ -362,13 +350,15 @@ instance ReaderT.instLawfulWP [Monad m] [WP m ps] [LawfulWP m ps] : LawfulWP (Re
     apply h.1
 
 instance ExceptT.instLawfulWP [Monad m] [WP m ps] [LawfulWP m ps] : LawfulWP (ExceptT ε m) (.except ε ps) where
-  wp_pure a Q := by apply wp_pure_conseq (m:=m); simp
-  wp_bind x f Q := by
-    apply wp_bind_conseq_f (m:=m) _ _ ?_ (by simp)
-    intro b
+  wp_pure a := by simp [wp, pure, ExceptT.pure]
+  wp_bind x f := by
+    ext Q
+    simp only [wp, bind, ExceptT.bind, run_mk, wp_bind, ExceptT.bindCont]
+    congr
+    ext b
     cases b
-    case error a => apply wp_pure_conseq (m:=m); simp
-    case ok a => simp; apply wp_conseq (m:=m); simp
+    case error a => simp
+    case ok a => congr
   wp_conseq x Q₁ Q₂ h := by
     simp [wp, bind, ExceptT.bind]
     apply wp_conseq _ _ _ ?_
@@ -379,10 +369,10 @@ instance ExceptT.instLawfulWP [Monad m] [WP m ps] [LawfulWP m ps] : LawfulWP (Ex
     case ok a => apply h.1 a
 
 instance EStateM.instLawfulWP : LawfulWP (EStateM ε σ) (.except ε (.arg σ .pure)) where
-  wp_pure a Q := by simp [wp, Pure.pure, EStateM.pure]
-  wp_bind x f Q := by
-    intro s
-    simp [wp, Bind.bind, EStateM.bind]
+  wp_pure a := by simp [wp, pure, EStateM.pure]
+  wp_bind x f := by
+    ext Q s
+    simp only [wp, bind, EStateM.bind, eq_iff_iff]
     cases (x s) <;> simp
   wp_conseq x Q₁ Q₂ h := by
     intro s
@@ -413,7 +403,10 @@ theorem LawfulMonadTriple.triple_bind {m : Type → Type} [Monad m] [WP m ps] [L
   (hf : ∀ b, triple (f b) (Q b) R) :
   triple (x >>= f) P R := by
     apply le_trans hx
-    apply wp_bind_conseq_f _ _ hf (by simp)
+    simp only [wp_bind]
+    apply wp_conseq x
+    simp only [Prod.mk_le_mk, le_refl, and_true]
+    exact hf
 
 theorem LawfulMonadTriple.triple_conseq_l {m : Type → Type} [Monad m] [WP m ps] [LawfulWP m ps] {P P' : PreCond ps} {Q : PostCond α ps}
   (x : m α) (hp : P ≤ P') (h : triple x P' Q) :
@@ -494,37 +487,40 @@ class LawfulWPLift (m : semiOutParam (Type → Type)) (n : Type → Type) (psm :
   [MonadLift m n] [WP m psm] [WP n psn] where
   lift_pred_impl : LiftPredImpl psm psn
   wp_lift {x : m α} {Q : PostCond α psm} :
-    lift_pred_impl.lift_pre (wp x Q) ≤ wp (liftM x : n α) (lift_pred_impl.lift_post Q)
+    wp (liftM x : n α) (lift_pred_impl.lift_post Q) = lift_pred_impl.lift_pre (wp x Q) -- TODO: We actually want some kind of separating conjunction
 
 class LawfulWPLiftT (m : semiOutParam (Type → Type)) (n : Type → Type) (psm : outParam PredShape) (psn : outParam PredShape)
   [MonadLiftT m n] [WP m psm] [WP n psn] where
   lift_pred_impl : LiftPredImpl psm psn
   wp_lift {x : m α} {Q : PostCond α psm} :
-    lift_pred_impl.lift_pre (wp x Q) ≤ wp (liftM x : n α) (lift_pred_impl.lift_post Q)
+    wp (liftM x : n α) (lift_pred_impl.lift_post Q) = lift_pred_impl.lift_pre (wp x Q) -- TODO: We actually want some kind of separating conjunction
 
-def LawfulWPLiftT.wp_lift_conseq_r {m : semiOutParam (Type → Type)} {n : Type → Type} {psm : PredShape} {psn : PredShape}
-  [MonadLiftT m n] [WP m psm] [WP n psn] [Monad n] [LawfulWP n psn] [inst : LawfulWPLiftT m n psm psn] {x : m α} {Q : PostCond α psm} {Q' : PostCond α psn}
-  (hq : inst.lift_pred_impl.lift_post Q ≤ Q') :
-  inst.lift_pred_impl.lift_pre (wp x Q) ≤ wp (liftM x : n α) Q' := le_trans LawfulWPLiftT.wp_lift (wp_conseq _ _ _ hq)
-
-def LawfulWPLiftT.wp_lift_conseq {m : semiOutParam (Type → Type)} {n : Type → Type} {psm : PredShape} {psn : PredShape}
-  [MonadLiftT m n] [WP m psm] [WP n psn] [Monad n] [LawfulWP n psn] [inst : LawfulWPLiftT m n psm psn] {x : m α} {P : PreCond psn} {Q : PostCond α psm} {Q' : PostCond α psn}
-  (hp : P ≤ inst.lift_pred_impl.lift_pre (wp x Q)) (hq : inst.lift_pred_impl.lift_post Q ≤ Q') :
-  P ≤ wp (liftM x : n α) Q' := le_trans hp (LawfulWPLiftT.wp_lift_conseq_r hq)
+--def LawfulWPLiftT.wp_lift_conseq_r {m : semiOutParam (Type → Type)} {n : Type → Type} {psm : PredShape} {psn : PredShape}
+--  [MonadLiftT m n] [WP m psm] [WP n psn] [Monad n] [LawfulWP n psn] [inst : LawfulWPLiftT m n psm psn] {x : m α} {Q : PostCond α psm} {Q' : PostCond α psn}
+--  (hq : inst.lift_pred_impl.lift_post Q ≤ Q') :
+--  wp (liftM x : n α) Q' = inst.lift_pred_impl.lift_pre (wp x Q) := le_trans LawfulWPLiftT.wp_lift (wp_conseq _ _ _ hq)
+--
+--def LawfulWPLiftT.wp_lift_conseq {m : semiOutParam (Type → Type)} {n : Type → Type} {psm : PredShape} {psn : PredShape}
+--  [MonadLiftT m n] [WP m psm] [WP n psn] [Monad n] [LawfulWP n psn] [inst : LawfulWPLiftT m n psm psn] {x : m α} {P : PreCond psn} {Q : PostCond α psm} {Q' : PostCond α psn}
+--  (hp : P ≤ inst.lift_pred_impl.lift_pre (wp x Q)) (hq : inst.lift_pred_impl.lift_post Q ≤ Q') :
+--  P ≤ wp (liftM x : n α) Q' := le_trans hp (LawfulWPLiftT.wp_lift_conseq_r hq)
 
 open LawfulWPLiftT
+
+attribute [simp] LawfulWPLiftT.wp_lift
 
 instance (m n o) [WP m psm] [WP n psn] [WP o pso]
   [MonadLift n o] [inst1 : LawfulWPLift n o psn pso]
   [MonadLiftT m n] [instT : LawfulWPLiftT m n psm psn] : LawfulWPLiftT m o psm pso where
   lift_pred_impl := LiftPredImpl.compose inst1.lift_pred_impl instT.lift_pred_impl
   wp_lift := by
-    intros
+    intros α x Q
     simp only [liftM, monadLift, LiftPredImpl.compose_lift_pre, Function.comp_apply,
       LiftPredImpl.compose_lift_post]
-    apply le_trans ?liftt ?lift
-    case lift => apply inst1.wp_lift
-    case liftt => apply inst1.lift_pred_impl.lift_pre_conseq instT.wp_lift
+    calc wp (MonadLift.monadLift (monadLift x)) ((LawfulWPLift.lift_pred_impl n o).lift_post ((lift_pred_impl m n).lift_post Q))
+      _ = wp (liftM (monadLift x)) ((LawfulWPLift.lift_pred_impl n o).lift_post ((lift_pred_impl m n).lift_post Q)) := rfl
+      _ = (LawfulWPLift.lift_pred_impl n o).lift_pre (wp (monadLift x) ((lift_pred_impl m n).lift_post Q)) := by rw[LawfulWPLift.wp_lift]
+      _ = (LawfulWPLift.lift_pred_impl n o).lift_pre ((lift_pred_impl m n).lift_pre (wp x Q)) := by rw[LawfulWPLiftT.wp_lift]
 
 instance (m) [WP m psm] : LawfulWPLiftT m m psm psm where
   lift_pred_impl :=
@@ -532,7 +528,7 @@ instance (m) [WP m psm] : LawfulWPLiftT m m psm psm where
     lift_pre_conseq h := h
     lift_fail_conds fc := fc
     lift_fail_conds_conseq h := h }
-  wp_lift := le_rfl
+  wp_lift := by simp[LiftPredImpl.lift_post]
 
 instance StateT.instLawfulWPLift [Monad m][WP m ps] [LawfulWP m ps] :
   LawfulWPLift m (StateT σ m) ps (.arg σ ps) where
@@ -541,11 +537,7 @@ instance StateT.instLawfulWPLift [Monad m][WP m ps] [LawfulWP m ps] :
     lift_pre_conseq h := fun _s => h
     lift_fail_conds fc := fc
     lift_fail_conds_conseq h := h }
-  wp_lift h := by
-    simp only [LiftPredImpl.lift_post]
-    apply wp_bind_conseq_f
-    case hf => intro; apply wp_pure_conseq; simp only [le_refl]
-    case herror => simp only [le_refl]
+  wp_lift := by simp [wp, LiftPredImpl.lift_post, liftM, monadLift, MonadLift.monadLift, StateT.lift]
 
 instance ReaderT.instLawfulWPLift [Monad m] [WP m ps] [LawfulWP m ps] :
   LawfulWPLift m (ReaderT ρ m) ps (.arg ρ ps) where
@@ -554,10 +546,7 @@ instance ReaderT.instLawfulWPLift [Monad m] [WP m ps] [LawfulWP m ps] :
     lift_pre_conseq h := fun _r => h
     lift_fail_conds fc := fc
     lift_fail_conds_conseq h := h }
-  wp_lift h := by
-    simp only [LiftPredImpl.lift_post]
-    apply wp_conseq
-    simp only [le_refl]
+  wp_lift := by simp [wp, LiftPredImpl.lift_post, liftM, monadLift, MonadLift.monadLift]
 
 instance ExceptT.instLawfulWPLift [Monad m] [LawfulMonad m] [WP m ps] [LawfulWP m ps] :
   LawfulWPLift m (ExceptT ε m) ps (.except ε ps) where
@@ -566,10 +555,7 @@ instance ExceptT.instLawfulWPLift [Monad m] [LawfulMonad m] [WP m ps] [LawfulWP 
     lift_pre_conseq h := h
     lift_fail_conds fc := (fun _e => PreCond.pure False, fc)
     lift_fail_conds_conseq h := by simp[h] }
-  wp_lift := by
-    simp only [LiftPredImpl.lift_post]
-    intros
-    apply wp_map_conseq_f _ _ (by simp) (by simp)
+  wp_lift := by simp [wp, LiftPredImpl.lift_post, liftM, monadLift, MonadLift.monadLift]
 
 @[simp]
 theorem LawfulWPLift.StateT.lift_pre_def [Monad m] [WP m ps] [LawfulMonad m] [LawfulWP m ps] :
@@ -643,30 +629,65 @@ theorem LawfulWPLiftT.ExceptT.lift_fail_conds_def [Monad m] [WP m ps] [LawfulMon
 theorem LawfulWPLiftT.ExceptT.lift_post_def [Monad m] [WP m ps] [LawfulMonad m] [LawfulWP m ps] :
   (LawfulWPLiftT.lift_pred_impl m (ExceptT ε m)).lift_post Q = (fun a => Q.1 a, (fun _e => PreCond.pure False, Q.2)) := rfl
 
-def LawfulMonadLiftTripleT.triple_lift {m n : Type → Type} {psm : PredShape} {psn : PredShape}
-  [MonadLiftT m n] [WP m psm] [WP n psn] [inst : LawfulWPLiftT m n psm psn] {x : m α} {P : PreCond psm} {Q : PostCond α psm}
-  (h : triple x P Q) :
-  triple (m:=n) (liftM x) (inst.lift_pred_impl.lift_pre P) (inst.lift_pred_impl.lift_post Q) :=
-    le_trans (inst.lift_pred_impl.lift_pre_conseq h) inst.wp_lift
+@[simp]
+theorem StateT.wp_get [WP m sh] [Monad m] [LawfulWP m sh] :
+  wp (get : StateT σ m σ) = fun Q s => Q.1 s s := by
+    simp[wp, MonadState.get, getThe, MonadStateOf.get, StateT.get]
 
-def LawfulMonadLiftTripleT.triple_lift_r [Monad n] [MonadLiftT m n] [WP m psm] [WP n psn] [LawfulWP n psn] [inst : LawfulWPLiftT m n psm psn] {x : m α} {P : PreCond psm} {Q : PostCond α psm} {Q' : PostCond α psn}
-  (h : triple x P Q) (h' : inst.lift_pred_impl.lift_post Q ≤ Q') :
-  triple (m:=n) (liftM x) (inst.lift_pred_impl.lift_pre P) Q' := triple_conseq_r _ h' (triple_lift h)
+@[simp]
+theorem MonadStateOf.wp_get [WP m msh] [WP n nsh] [MonadLift m n] [MonadStateOf σ m] [LawfulWPLiftT m n msh nsh] :
+  wp (MonadStateOf.get : n σ) ((lift_pred_impl m n).lift_post Q) = (lift_pred_impl m n).lift_pre (wp (MonadStateOf.get : m σ) Q) := by
+    simp only [MonadStateOf.get, wp_lift]
 
-def LawfulMonadLiftTripleT.triple_lift_l [Monad n] [MonadLiftT m n] [WP m psm] [WP n psn] [LawfulWP n psn] [inst : LawfulWPLiftT m n psm psn] {x : m α} {P' : PreCond psn} {P : PreCond psm}
-  (h : triple x P Q) (h' : P' ≤ inst.lift_pred_impl.lift_pre P) :
-  triple (m:=n) (liftM x) P' (inst.lift_pred_impl.lift_post Q) := triple_conseq_l _ h' (triple_lift h)
+@[simp]
+theorem MonadState.wp_get [WP m sh] [MonadStateOf σ m] :
+  wp (MonadState.get : m σ) = wp (MonadStateOf.get : m σ) := rfl
 
-def LawfulMonadLiftTripleT.triple_lift_conseq [Monad n] [MonadLiftT m n] [WP m psm] [WP n psn] [LawfulWP n psn] [inst : LawfulWPLiftT m n psm psn] {x : m α} {P : PreCond psm} {Q : PostCond α psm} {P' : PreCond psn} {Q' : PostCond α psn}
-  (hp : P' ≤ inst.lift_pred_impl.lift_pre P) (hq : inst.lift_pred_impl.lift_post Q ≤ Q') (h : triple x P Q) :
-  triple (m:=n) (liftM x) P' Q' := triple_conseq _ hp hq (triple_lift h)
+@[simp]
+theorem StateT.wp_set [WP m sh] [Monad m] [LawfulWP m sh] (x : σ) :
+  wp (set x : StateT σ m PUnit) = fun Q _ => Q.1 ⟨⟩ x := by
+    simp[wp, MonadState.set, MonadStateOf.set, StateT.set]
 
-open LawfulMonadLiftTripleT (triple_lift triple_lift_r triple_lift_l)
+@[simp]
+theorem MonadStateOf.wp_set [WP m msh] [WP n nsh] [MonadLift m n] [MonadStateOf σ m] [LawfulWPLiftT m n msh nsh] :
+  wp (MonadStateOf.set x : n PUnit) ((lift_pred_impl m n).lift_post Q) = (lift_pred_impl m n).lift_pre (wp (MonadStateOf.set (σ:=σ) x : m PUnit) Q) := by
+    simp only [MonadStateOf.set, wp_lift]
+
+@[simp]
+theorem MonadState.wp_set [WP m sh] [MonadStateOf σ m] :
+  wp (MonadState.set x : m PUnit) = wp (MonadStateOf.set x : m PUnit) := rfl
+
+--def LawfulMonadLiftTripleT.triple_lift {m n : Type → Type} {psm : PredShape} {psn : PredShape}
+--  [MonadLiftT m n] [WP m psm] [WP n psn] [inst : LawfulWPLiftT m n psm psn] {x : m α} {P : PreCond psm} {Q : PostCond α psm}
+--  (h : triple x P Q) :
+--  triple (m:=n) (liftM x) (inst.lift_pred_impl.lift_pre P) (inst.lift_pred_impl.lift_post Q) :=
+--    le_trans (inst.lift_pred_impl.lift_pre_conseq h) inst.wp_lift
+--
+--def LawfulMonadLiftTripleT.triple_lift_r [Monad n] [MonadLiftT m n] [WP m psm] [WP n psn] [LawfulWP n psn] [inst : LawfulWPLiftT m n psm psn] {x : m α} {P : PreCond psm} {Q : PostCond α psm} {Q' : PostCond α psn}
+--  (h : triple x P Q) (h' : inst.lift_pred_impl.lift_post Q ≤ Q') :
+--  triple (m:=n) (liftM x) (inst.lift_pred_impl.lift_pre P) Q' := triple_conseq_r _ h' (triple_lift h)
+--
+--def LawfulMonadLiftTripleT.triple_lift_l [Monad n] [MonadLiftT m n] [WP m psm] [WP n psn] [LawfulWP n psn] [inst : LawfulWPLiftT m n psm psn] {x : m α} {P' : PreCond psn} {P : PreCond psm}
+--  (h : triple x P Q) (h' : P' ≤ inst.lift_pred_impl.lift_pre P) :
+--  triple (m:=n) (liftM x) P' (inst.lift_pred_impl.lift_post Q) := triple_conseq_l _ h' (triple_lift h)
+--
+--def LawfulMonadLiftTripleT.triple_lift_conseq [Monad n] [MonadLiftT m n] [WP m psm] [WP n psn] [LawfulWP n psn] [inst : LawfulWPLiftT m n psm psn] {x : m α} {P : PreCond psm} {Q : PostCond α psm} {P' : PreCond psn} {Q' : PostCond α psn}
+--  (hp : P' ≤ inst.lift_pred_impl.lift_pre P) (hq : inst.lift_pred_impl.lift_post Q ≤ Q') (h : triple x P Q) :
+--  triple (m:=n) (liftM x) P' Q' := triple_conseq _ hp hq (triple_lift h)
+--
+--open LawfulMonadLiftTripleT (triple_lift triple_lift_r triple_lift_l)
 
 notation:lead "⦃" P "⦄ " x:lead " ⦃" Q "⦄" =>
   MonadTriple.triple x P Q
 notation:lead "⦃" P "⦄ " x:lead " ⦃⇓" v " | " Q "⦄" =>
   ⦃P⦄ x ⦃PostCond.total fun v => Q⦄
+
+section CFML
+
+theorem xwp_lemma {m : Type → Type} [WP m ps] {α} (x : m α) {P : PreCond ps} {Q : PostCond α ps} :
+  P ≤ wp x Q → ⦃P⦄ x ⦃Q⦄ := id
+
+end CFML
 
 theorem Triple.forIn_list {α β} {m : Type → Type}
   [Monad m] [LawfulMonad m] [WP m ps] [LawfulWP m ps]
@@ -899,6 +920,8 @@ theorem test_ex_bwd :
   ⦃(fun r s => False,
     fun e s => e = 42 ∧ s = 4,
     ())⦄ := by
+  apply xwp_lemma
+  simp
   open LawfulMonadTriple in
   open LawfulMonadLiftTriple in
   simp
