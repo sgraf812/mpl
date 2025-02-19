@@ -597,6 +597,13 @@ noncomputable instance PreCond.instLattice : {ps : PredShape} → CompleteLattic
 noncomputable instance PreCond.instPreorder {ps : PredShape} : Preorder (PreCond ps) := inferInstance
 noncomputable instance PreCond.instLE {ps : PredShape} : LE (PreCond ps) := inferInstance
 
+theorem PreCond.imp_pure_extract {ps} {P : Prop} {P' : PreCond ps} {Q : PreCond ps}
+  (h : P → P' ≤ Q) : PreCond.pure P ⊓ P' ≤ Q := by
+  induction ps
+  case pure => simp; exact h
+  case arg σ s ih => intro s; apply ih (fun hp => h hp s)
+  case except ε s ih => simp; apply ih h
+
 def FailConds.const (p : Prop) : FailConds ps :=
   match ps with
   | .pure => ()
@@ -714,61 +721,137 @@ def RelFailConds : PredShape → Type
 def RelPostCond (α : Type) (s : PredShape) : Type :=
   ((α → PreCond s) → Prop) × RelFailConds s
 
-class MonadTriple (m : Type → Type) (ps : outParam PredShape) where
-  triple (x : m α) (P : PreCond ps) (Q : PostCond α ps) : Prop
-  --rel_triple (x : m α) (P : PreCond ps Prop) (Q : PostCond α ps Prop) : Prop
+class WP (m : Type → Type) (ps : outParam PredShape) where
+  wp (x : m α) (Q : PostCond α ps) : PreCond ps
+open WP
+
+instance Idd.instWP : WP Idd .pure where
+  wp x Q := Q.1 x.run
+
+instance StateT.instWP [Monad m] [WP m ps] : WP (StateT σ m) (.arg σ ps) where
+  wp x Q := fun s => wp (x s) (fun (a, s') => Q.1 a s', Q.2)
+
+instance ReaderT.instWP [Monad m] [WP m ps] : WP (ReaderT ρ m) (.arg ρ ps) where
+  wp x Q := fun r => wp (x r) (fun a => Q.1 a r, Q.2)
+
+instance ExceptT.instWP [Monad m] [WP m ps] : WP (ExceptT ε m) (.except ε ps) where
+  wp x Q := wp (m:=m) x.run (fun | .ok a => Q.1 a | .error e => Q.2.1 e, Q.2.2)
+
+instance EStateM.instWP : WP (EStateM ε σ) (.except ε (.arg σ .pure)) where
+  wp x Q := fun s => match x s with
+    | .ok a s' => Q.1 a s'
+    | .error e s' => Q.2.1 e s'
+
+class LawfulWP (m : Type → Type) (ps : outParam PredShape) [Monad m] [WP m ps] where
+  wp_pure {α} (a : α) (Q : PostCond α ps) :
+    Q.1 a ≤ wp (m:=m) (pure a) Q
+  wp_bind {α β} (x : m α) (f : α → m β) {Q : PostCond β ps} :
+    wp x (fun a => wp (f a) Q, Q.2) ≤ wp (x >>= f) Q
+  wp_conseq {α} (x : m α) (Q₁ Q₂ : PostCond α ps) :
+    Q₁ ≤ Q₂ → wp x Q₁ ≤ wp x Q₂
+
+def LawfulWP.wp_pure_imp {m : Type → Type} [Monad m] [WP m ps] [LawfulWP m ps] {α} {P : PreCond ps} {Q : PostCond α ps} (a : α)
+    (himp : P ≤ Q.1 a) : P ≤ wp (m:=m) (pure a) Q := le_trans himp (wp_pure a Q)
+
+def LawfulWP.wp_bind_imp {m : Type → Type} [Monad m] [WP m ps] [LawfulWP m ps] {α β} {P : PostCond α ps} {Q : PostCond β ps} (x : m α) (f : α → m β)
+    (hf : ∀a, P.1 a ≤ wp (f a) Q) (herror : P.2 ≤ Q.2) :
+    wp x P ≤ wp (x >>= f) Q := le_trans (wp_conseq x P (fun a => wp (f a) Q, Q.2) ⟨hf, herror⟩) (wp_bind x f)
+
+def LawfulWP.wp_conseq_2 {m : Type → Type} [Monad m] [WP m ps] [LawfulWP m ps] {α} (x : m α) (Q₁ Q₂ : PostCond α ps)
+    (h1 : Q₁.1 ≤ Q₂.1) (h2 : Q₁.2 ≤ Q₂.2) :
+    wp x Q₁ ≤ wp x Q₂ := wp_conseq x _ _ ⟨h1,h2⟩
+
+open LawfulWP
+
+instance Idd.instLawfulWP : LawfulWP Idd .pure where
+  wp_pure a Q := by simp only [wp, Pure.pure, pure, le_refl]
+  wp_bind x f Q := by simp only [wp, Bind.bind, bind, le_refl]
+  wp_conseq x _ _ h := h.1 x.run
+
+instance StateT.instLawfulWP [Monad m] [WP m ps] [LawfulWP m ps] : LawfulWP (StateT σ m) (.arg σ ps) where
+  wp_pure a Q := by intro s; apply wp_pure (Q := (fun x => Q.1 x.1 x.2, Q.2)) (a,s)
+  wp_bind x f Q := by intro s; apply wp_bind
+  wp_conseq {α} x Q₁ Q₂ h := by
+    intro s
+    simp only [wp]
+    apply wp_conseq (x s)
+    simp only [Prod.mk_le_mk, h.2, and_true]
+    intro x
+    apply h.1
+
+instance ReaderT.instLawfulWP [Monad m] [WP m ps] [LawfulWP m ps] : LawfulWP (ReaderT ρ m) (.arg ρ ps) where
+  wp_pure a Q := by intro r; apply wp_pure_imp; simp
+  wp_bind x f Q := by intro r; apply wp_bind
+  wp_conseq {α} x Q₁ Q₂ h := by
+    intro r
+    apply wp_conseq (x r)
+    simp only [Prod.mk_le_mk, h.2, and_true]
+    intro x
+    apply h.1
+
+instance ExceptT.instLawfulWP [Monad m] [WP m ps] [LawfulWP m ps] : LawfulWP (ExceptT ε m) (.except ε ps) where
+  wp_pure a Q := by apply wp_pure_imp (m:=m); simp
+  wp_bind x f Q := by
+    apply wp_bind_imp (m:=m) _ _ ?_ (by simp)
+    intro b
+    cases b
+    case error a => apply wp_pure_imp (m:=m); simp
+    case ok a => simp; apply wp_conseq (m:=m); simp
+  wp_conseq x Q₁ Q₂ h := by
+    simp [wp, bind, ExceptT.bind]
+    apply wp_conseq _ _ _ ?_
+    simp[h.2.2]
+    intro x
+    cases x
+    case error e => apply h.2.1 e
+    case ok a => apply h.1 a
+
+instance EStateM.instLawfulWP : LawfulWP (EStateM ε σ) (.except ε (.arg σ .pure)) where
+  wp_pure a Q := by simp [wp, Pure.pure, EStateM.pure]
+  wp_bind x f Q := by
+    intro s
+    simp [wp, Bind.bind, EStateM.bind]
+    cases (x s) <;> simp
+  wp_conseq x Q₁ Q₂ h := by
+    intro s
+    simp[wp]
+    cases (x s) <;> apply_rules [h.1,h.2.1]
+
+def MonadTriple.triple {m : Type → Type} [WP m ps] {α} (x : m α) (P : PreCond ps) (Q : PostCond α ps) : Prop :=
+  P ≤ wp x Q
+
 open MonadTriple (triple)
 
-instance Idd.instMonadTriple : MonadTriple Idd .pure where
-  triple {α} (x : Idd α) (P : Prop) (Q : (α → Prop) × Unit) := P ≤ Q.1 x.run
+theorem LawfulMonadTriple.triple_conseq {m : Type → Type} [Monad m] [WP m ps] [LawfulWP m ps] {α} (x : m α) {P P' : PreCond ps} {Q Q' : PostCond α ps}
+  (hp : P ≤ P' := by simp) (hq : Q' ≤ Q := by simp) (h : triple x P' Q') :
+  triple x P Q := by
+    apply le_trans hp
+    apply le_trans h
+    apply wp_conseq x Q' Q hq
 
-instance StateT.instMonadTriple [Monad m] [MonadTriple m ps] : MonadTriple (StateT σ m) (.arg σ ps) where
-  triple x P Q :=
-     ∀ s, MonadTriple.triple (x s) (P s) (fun (a, s') => Q.1 a s', Q.2)
+theorem LawfulMonadTriple.triple_extract_persistent {m : Type → Type} [Monad m] [WP m ps] [LawfulWP m ps] {P : Prop} {P' : PreCond ps} {Q : PostCond α ps}
+  (x : m α) (h : P → triple x P' Q) :
+  triple x (PreCond.pure P ⊓ P') Q := PreCond.imp_pure_extract h
 
-instance ReaderT.instMonadTriple [Monad m] [MonadTriple m ps] : MonadTriple (ReaderT ρ m) (.arg ρ ps) where
-  triple x P Q :=
-     ∀ r, MonadTriple.triple (x r) (P r) (fun a => Q.1 a r, Q.2) -- NB: Q.1 gets passed r as well; simpler that way
+theorem LawfulMonadTriple.triple_pure {m : Type → Type} [Monad m] [WP m ps] [LawfulWP m ps] {α} {Q : PostCond α ps} (a : α) (himp : P ≤ Q.1 a) :
+  triple (pure (f:=m) a) P Q := wp_pure_imp _ himp
 
-#reduce (types:=true) StateT Bool (Except Int) String
-#reduce (types:=true) ExceptT Int (StateM Bool) String
-#reduce (types:=true) StateT Char (ExceptT Int (StateM Bool)) String
+theorem LawfulMonadTriple.triple_bind {m : Type → Type} [Monad m] [WP m ps] [LawfulWP m ps] {α β} {P : PreCond ps} {Q : α → PreCond ps} {R : PostCond β ps} (x : m α) (f : α → m β)
+  (hx : triple x P (Q, R.2))
+  (hf : ∀ b, triple (f b) (Q b) R) :
+  triple (x >>= f) P R := by
+    apply le_trans hx
+    apply wp_bind_imp _ _ hf (by simp)
 
-instance ExceptT.instMonadTriple [MonadTriple m ps] : MonadTriple (ExceptT ε m) (.except ε ps) where
-  triple {α} (x : ExceptT ε m α) (P : PreCond (.except ε ps)) (Q : PostCond α (.except ε ps)) :=
-    MonadTriple.triple (ps:=ps) x.run P (fun | .ok a => Q.1 a | .error e => Q.2.1 e, Q.2.2)
-
-instance EStateM.instMonadTriple : MonadTriple (EStateM ε σ) (.except ε (.arg σ .pure)) where
-  triple {α} (x : EStateM ε σ α) (P : PreCond (.except ε (.arg σ .pure))) (Q : PostCond α (.except ε (.arg σ .pure))) :=
-    ∀ s, P s → match x s with
-      | .ok a s'    => Q.1 a s'
-      | .error e s' => Q.2.1 e s'
-
-class LawfulMonadTriple (m : Type → Type) (ps : outParam PredShape)
-  [Monad m] [MonadTriple m ps] where
-  triple_conseq {P P' : PreCond ps} {Q Q' : PostCond α ps} (x : m α)
-    (hp : P ≤ P' := by simp) (hq : Q' ≤ Q := by simp)
-    (h : triple x P' Q') :
-    triple x P Q
-  triple_extract_persistent {P : Prop} {P' : PreCond ps} {Q : PostCond α ps}
-    (x : m α) (h : P → triple x P' Q) :
-    triple x (PreCond.pure P ⊓ P') Q
-  triple_pure {α} {Q : PostCond α ps} (a : α) (himp : P ≤ Q.1 a):
-    triple (pure (f:=m) a) P Q
-  triple_bind {α β} {P : PreCond ps} {Q : α → PreCond ps} {R : PostCond β ps} (x : m α) (f : α → m β)
-    (hx : triple x P (Q, R.2))
-    (hf : ∀ b, triple (f b) (Q b) R) :
-    triple (x >>= f) P R
-
-theorem LawfulMonadTriple.triple_conseq_l {m : Type → Type} [Monad m] [MonadTriple m ps] [LawfulMonadTriple m ps] {P P' : PreCond ps} {Q : PostCond α ps}
+theorem LawfulMonadTriple.triple_conseq_l {m : Type → Type} [Monad m] [WP m ps] [LawfulWP m ps] {P P' : PreCond ps} {Q : PostCond α ps}
   (x : m α) (hp : P ≤ P') (h : triple x P' Q) :
   triple x P Q := triple_conseq x hp le_rfl h
 
-theorem LawfulMonadTriple.triple_conseq_r {m : Type → Type} [Monad m] [MonadTriple m ps] [LawfulMonadTriple m ps] {P : PreCond ps} {Q Q' : PostCond α ps}
+theorem LawfulMonadTriple.triple_conseq_r {m : Type → Type} [Monad m] [WP m ps] [LawfulWP m ps] {P : PreCond ps} {Q Q' : PostCond α ps}
   (x : m α) (hq : Q ≤ Q') (h : triple x P Q) :
   triple x P Q' := triple_conseq x le_rfl hq h
 
-theorem LawfulMonadTriple.triple_map {m : Type → Type} [Monad m] [LawfulMonad m] [MonadTriple m ps] [LawfulMonadTriple m ps] (f : α → β) (x : m α)
+theorem LawfulMonadTriple.triple_map {m : Type → Type} [Monad m] [LawfulMonad m] [WP m ps] [LawfulWP m ps] (f : α → β) (x : m α)
   (h : triple x P (fun a => Q.1 (f a), Q.2)) :
   triple (f <$> x) P Q := by
     simp only [← bind_pure_comp]
@@ -777,7 +860,7 @@ theorem LawfulMonadTriple.triple_map {m : Type → Type} [Monad m] [LawfulMonad 
     apply triple_pure
     simp only [le_refl]
 
-theorem LawfulMonadTriple.triple_seq {m : Type → Type} [Monad m] [LawfulMonad m] [MonadTriple m ps] [LawfulMonadTriple m ps] (f : m (α → β)) (x : m α) {Q : (α → β) → PreCond ps}
+theorem LawfulMonadTriple.triple_seq {m : Type → Type} [Monad m] [LawfulMonad m] [WP m ps] [LawfulWP m ps] (f : m (α → β)) (x : m α) {Q : (α → β) → PreCond ps}
   (hf : triple f P (Q, R.2))
   (hx : ∀ f, triple x (Q f) (fun a => R.1 (f a), R.2)) :
   triple (f <*> x) P R := by
@@ -786,20 +869,20 @@ theorem LawfulMonadTriple.triple_seq {m : Type → Type} [Monad m] [LawfulMonad 
     intro f
     apply triple_map _ _ (hx f)
 
-theorem LawfulMonadTriple.triple_extract_persistent_true {m : Type → Type} [Monad m] [LawfulMonad m] [MonadTriple m ps] [LawfulMonadTriple m ps] {P : Prop} {Q : PostCond α ps}
+theorem LawfulMonadTriple.triple_extract_persistent_true {m : Type → Type} [Monad m] [LawfulMonad m] [WP m ps] [LawfulWP m ps] {P : Prop} {Q : PostCond α ps}
   (x : m α) (h : P → triple x (PreCond.pure True) Q) :
   triple x (PreCond.pure P) Q := by
     have : PreCond.pure P = (PreCond.pure P ⊓ PreCond.pure True : PreCond ps) := by simp
     rw[this]
     exact triple_extract_persistent x h
 
-theorem LawfulMonadTriple.triple_dite {c : Prop} [Decidable c] {t : c → m α} {e : ¬c → m α} {P : PreCond ps} {Q : PostCond α ps} [Monad m] [MonadTriple m ps]
+theorem LawfulMonadTriple.triple_dite {c : Prop} [Decidable c] {t : c → m α} {e : ¬c → m α} {P : PreCond ps} {Q : PostCond α ps} [Monad m] [WP m ps]
   (htrue : (h : c) → triple (t h) P Q)
   (hfalse : (h : ¬c) → triple (e h) P Q) :
   triple (dite c t e) P Q := by
     split <;> simp only [htrue, hfalse]
 
-theorem LawfulMonadTriple.triple_ite {c : Prop} [Decidable c] {t : m α} {e : m α} {P : PreCond ps} {Q : PostCond α ps} [Monad m] [MonadTriple m ps]
+theorem LawfulMonadTriple.triple_ite {c : Prop} [Decidable c] {t : m α} {e : m α} {P : PreCond ps} {Q : PostCond α ps} [Monad m] [WP m ps]
   (htrue : c → triple t P Q)
   (hfalse : ¬c → triple e P Q) :
   triple (ite c t e) P Q := by
@@ -831,34 +914,34 @@ theorem LiftPredImpl.compose_lift_post {m n o : PredShape} {α : Type} (impl₂ 
   (compose impl₂ impl₁).lift_post (α := α) = impl₂.lift_post ∘ impl₁.lift_post := rfl
 
 class LawfulMonadLiftTriple (m : semiOutParam (Type → Type)) (n : Type → Type) (psm : outParam PredShape) (psn : outParam PredShape)
-  [MonadLift m n] [MonadTriple m psm] [MonadTriple n psn] where
+  [MonadLift m n] [WP m psm] [WP n psn] where
   lift_pred_impl : LiftPredImpl psm psn
   triple_lift {x : m α} {P : PreCond psm} {Q : PostCond α psm}
     (h : triple x P Q) :
     triple (m:=n) (liftM x) (lift_pred_impl.lift_pre P) (lift_pred_impl.lift_post Q)
 
 class LawfulMonadLiftTripleT (m : Type → Type) (n : Type → Type) (psm : outParam PredShape) (psn : outParam PredShape)
-  [MonadLiftT m n] [MonadTriple m psm] [MonadTriple n psn] where
+  [MonadLiftT m n] [WP m psm] [WP n psn] where
   lift_pred_impl : LiftPredImpl psm psn
   triple_lift {x : m α} {P : PreCond psm} {Q : PostCond α psm}
     (h : triple x P Q) :
     triple (m:=n) (liftM x) (lift_pred_impl.lift_pre P) (lift_pred_impl.lift_post Q)
 
-def LawfulMonadLiftTripleT.triple_lift_r [Monad n] [MonadLiftT m n] [MonadTriple m psm] [MonadTriple n psn] [LawfulMonadTriple n psn] [inst : LawfulMonadLiftTripleT m n psm psn] {x : m α} {P : PreCond psm} {Q : PostCond α psm} {Q' : PostCond α psn}
+def LawfulMonadLiftTripleT.triple_lift_r [Monad n] [MonadLiftT m n] [WP m psm] [WP n psn] [LawfulWP n psn] [inst : LawfulMonadLiftTripleT m n psm psn] {x : m α} {P : PreCond psm} {Q : PostCond α psm} {Q' : PostCond α psn}
   (h : triple x P Q) (h' : inst.lift_pred_impl.lift_post Q ≤ Q') :
   triple (m:=n) (liftM x) (inst.lift_pred_impl.lift_pre P) Q' := triple_conseq_r _ h' (inst.triple_lift h)
 
-def LawfulMonadLiftTripleT.triple_lift_l [Monad n] [MonadLiftT m n] [MonadTriple m psm] [MonadTriple n psn] [LawfulMonadTriple n psn] [inst : LawfulMonadLiftTripleT m n psm psn] {x : m α} {P' : PreCond psn} {P : PreCond psm}
+def LawfulMonadLiftTripleT.triple_lift_l [Monad n] [MonadLiftT m n] [WP m psm] [WP n psn] [LawfulWP n psn] [inst : LawfulMonadLiftTripleT m n psm psn] {x : m α} {P' : PreCond psn} {P : PreCond psm}
   (h : triple x P Q) (h' : P' ≤ inst.lift_pred_impl.lift_pre P) :
   triple (m:=n) (liftM x) P' (inst.lift_pred_impl.lift_post Q) := triple_conseq_l _ h' (inst.triple_lift h)
 
-def LawfulMonadLiftTripleT.triple_lift_conseq [Monad n] [MonadLiftT m n] [MonadTriple m psm] [MonadTriple n psn] [LawfulMonadTriple n psn] [inst : LawfulMonadLiftTripleT m n psm psn] {x : m α} {P : PreCond psm} {Q : PostCond α psm} {P' : PreCond psn} {Q' : PostCond α psn}
+def LawfulMonadLiftTripleT.triple_lift_conseq [Monad n] [MonadLiftT m n] [WP m psm] [WP n psn] [LawfulWP n psn] [inst : LawfulMonadLiftTripleT m n psm psn] {x : m α} {P : PreCond psm} {Q : PostCond α psm} {P' : PreCond psn} {Q' : PostCond α psn}
   (hp : P' ≤ inst.lift_pred_impl.lift_pre P) (hq : inst.lift_pred_impl.lift_post Q ≤ Q') (h : triple x P Q) :
   triple (m:=n) (liftM x) P' Q' := triple_conseq _ hp hq (inst.triple_lift h)
 
 open LawfulMonadLiftTripleT (triple_lift triple_lift_r triple_lift_l)
 
-instance (m n o) [MonadTriple m psm] [MonadTriple n psn] [MonadTriple o pso]
+instance (m n o) [WP m psm] [WP n psn] [WP o pso]
   [MonadLift n o] [inst1 : LawfulMonadLiftTriple n o psn pso]
   [MonadLiftT m n] [instT : LawfulMonadLiftTripleT m n psm psn] : LawfulMonadLiftTripleT m o psm pso where
   lift_pred_impl := LiftPredImpl.compose inst1.lift_pred_impl instT.lift_pred_impl
@@ -869,13 +952,13 @@ instance (m n o) [MonadTriple m psm] [MonadTriple n psn] [MonadTriple o pso]
     apply LawfulMonadLiftTripleT.triple_lift
     assumption
 
-instance (m) [MonadTriple m psm] : LawfulMonadLiftTripleT m m psm psm where
+instance (m) [WP m psm] : LawfulMonadLiftTripleT m m psm psm where
   lift_pred_impl :=
   { lift_pre P := P
     lift_fail_conds fc := fc }
   triple_lift h := h
 
-instance StateT.instLawfulMonadLiftTriple [Monad m][MonadTriple m ps] [LawfulMonadTriple m ps] :
+instance StateT.instLawfulMonadLiftTriple [Monad m][WP m ps] [LawfulWP m ps] :
   LawfulMonadLiftTriple m (StateT σ m) ps (.arg σ ps) where
   lift_pred_impl :=
   { lift_pre P := fun _s => P
@@ -885,33 +968,33 @@ instance StateT.instLawfulMonadLiftTriple [Monad m][MonadTriple m ps] [LawfulMon
     intros
     apply LawfulMonadTriple.triple_bind _ _
     case hx => exact h
-    case hf => simp[LawfulMonadTriple.triple_pure]
+    case hf => simp[LawfulWP.triple_pure]
 
 @[simp]
-theorem LawfulMonadLiftTriple.StateT.lift_pre_def [Monad m] [MonadTriple m ps] [LawfulMonad m] [LawfulMonadTriple m ps] :
+theorem LawfulMonadLiftTriple.StateT.lift_pre_def [Monad m] [WP m ps] [LawfulMonad m] [LawfulWP m ps] :
   (LawfulMonadLiftTriple.lift_pred_impl m (StateT σ m)).lift_pre P s = P := rfl
 
 @[simp]
-theorem LawfulMonadLiftTriple.StateT.lift_fail_conds_def [Monad m] [MonadTriple m ps] [LawfulMonad m] [LawfulMonadTriple m ps] :
+theorem LawfulMonadLiftTriple.StateT.lift_fail_conds_def [Monad m] [WP m ps] [LawfulMonad m] [LawfulWP m ps] :
   (LawfulMonadLiftTriple.lift_pred_impl m (StateT σ m)).lift_fail_conds fc = fc := rfl
 
 @[simp]
-theorem LawfulMonadLiftTriple.StateT.lift_post_def [Monad m] [MonadTriple m ps] [LawfulMonad m] [LawfulMonadTriple m ps] :
+theorem LawfulMonadLiftTriple.StateT.lift_post_def [Monad m] [WP m ps] [LawfulMonad m] [LawfulWP m ps] :
   (LawfulMonadLiftTriple.lift_pred_impl m (StateT σ m)).lift_post Q = (fun a _ => Q.1 a, Q.2) := rfl
 
 @[simp]
-theorem LawfulMonadLiftTripleT.StateT.lift_pre_def [Monad m] [MonadTriple m ps] [LawfulMonad m] [LawfulMonadTriple m ps] :
+theorem LawfulMonadLiftTripleT.StateT.lift_pre_def [Monad m] [WP m ps] [LawfulMonad m] [LawfulWP m ps] :
   (LawfulMonadLiftTripleT.lift_pred_impl m (StateT σ m)).lift_pre P s = P := rfl
 
 @[simp]
-theorem LawfulMonadLiftTripleT.StateT.lift_fail_conds_def [Monad m] [MonadTriple m ps] [LawfulMonad m] [LawfulMonadTriple m ps] :
+theorem LawfulMonadLiftTripleT.StateT.lift_fail_conds_def [Monad m] [WP m ps] [LawfulMonad m] [LawfulWP m ps] :
   (LawfulMonadLiftTripleT.lift_pred_impl m (StateT σ m)).lift_fail_conds fc = fc := rfl
 
 @[simp]
-theorem LawfulMonadLiftTripleT.StateT.lift_post_def [Monad m] [MonadTriple m ps] [LawfulMonad m] [LawfulMonadTriple m ps] :
+theorem LawfulMonadLiftTripleT.StateT.lift_post_def [Monad m] [WP m ps] [LawfulMonad m] [LawfulWP m ps] :
   (LawfulMonadLiftTripleT.lift_pred_impl m (StateT σ m)).lift_post Q = (fun a _ => Q.1 a, Q.2) := rfl
 
-instance ReaderT.instLawfulMonadLiftTriple [Monad m] [MonadTriple m ps] :
+instance ReaderT.instLawfulMonadLiftTriple [Monad m] [WP m ps] :
   LawfulMonadLiftTriple m (ReaderT ρ m) ps (.arg ρ ps) where
   lift_pred_impl :=
   { lift_pre P := fun _r => P
@@ -922,30 +1005,30 @@ instance ReaderT.instLawfulMonadLiftTriple [Monad m] [MonadTriple m ps] :
     apply h
 
 @[simp]
-theorem LawfulMonadLiftTriple.ReaderT.lift_pre_def [Monad m] [MonadTriple m ps] :
+theorem LawfulMonadLiftTriple.ReaderT.lift_pre_def [Monad m] [WP m ps] :
   (LawfulMonadLiftTriple.lift_pred_impl m (ReaderT ρ m)).lift_pre P s = P := rfl
 
 @[simp]
-theorem LawfulMonadLiftTriple.ReaderT.lift_fail_conds_def [Monad m] [MonadTriple m ps] :
+theorem LawfulMonadLiftTriple.ReaderT.lift_fail_conds_def [Monad m] [WP m ps] :
   (LawfulMonadLiftTriple.lift_pred_impl m (ReaderT ρ m)).lift_fail_conds fc = fc := rfl
 
 @[simp]
-theorem LawfulMonadLiftTriple.ReaderT.lift_post_def [Monad m] [MonadTriple m ps] :
+theorem LawfulMonadLiftTriple.ReaderT.lift_post_def [Monad m] [WP m ps] :
   (LawfulMonadLiftTriple.lift_pred_impl m (ReaderT ρ m)).lift_post Q = (fun a _ => Q.1 a, Q.2) := rfl
 
 @[simp]
-theorem LawfulMonadLiftTripleT.ReaderT.lift_pre_def [Monad m] [MonadTriple m ps] :
+theorem LawfulMonadLiftTripleT.ReaderT.lift_pre_def [Monad m] [WP m ps] :
   (LawfulMonadLiftTripleT.lift_pred_impl m (ReaderT ρ m)).lift_pre P s = P := rfl
 
 @[simp]
-theorem LawfulMonadLiftTripleT.ReaderT.lift_fail_conds_def [Monad m] [MonadTriple m ps] :
+theorem LawfulMonadLiftTripleT.ReaderT.lift_fail_conds_def [Monad m] [WP m ps] :
   (LawfulMonadLiftTripleT.lift_pred_impl m (ReaderT ρ m)).lift_fail_conds fc = fc := rfl
 
 @[simp]
-theorem LawfulMonadLiftTripleT.ReaderT.lift_post_def [Monad m] [MonadTriple m ps] :
+theorem LawfulMonadLiftTripleT.ReaderT.lift_post_def [Monad m] [WP m ps] :
   (LawfulMonadLiftTripleT.lift_pred_impl m (ReaderT ρ m)).lift_post Q = (fun a _ => Q.1 a, Q.2) := rfl
 
-instance ExceptT.instLawfulMonadLiftTriple [Monad m] [LawfulMonad m] [MonadTriple m ps] [LawfulMonadTriple m ps] :
+instance ExceptT.instLawfulMonadLiftTriple [Monad m] [LawfulMonad m] [WP m ps] [LawfulWP m ps] :
   LawfulMonadLiftTriple m (ExceptT ε m) ps (.except ε ps) where
   lift_pred_impl :=
   { lift_pre P := P
@@ -956,107 +1039,28 @@ instance ExceptT.instLawfulMonadLiftTriple [Monad m] [LawfulMonad m] [MonadTripl
     apply h
 
 @[simp]
-theorem LawfulMonadLiftTriple.ExceptT.lift_pre_def [Monad m] [MonadTriple m ps] [LawfulMonad m] [LawfulMonadTriple m ps] :
+theorem LawfulMonadLiftTriple.ExceptT.lift_pre_def [Monad m] [WP m ps] [LawfulMonad m] [LawfulWP m ps] :
   (LawfulMonadLiftTriple.lift_pred_impl m (ExceptT ε m)).lift_pre P = P := rfl
 
 @[simp]
-theorem LawfulMonadLiftTriple.ExceptT.lift_fail_conds_def [Monad m] [MonadTriple m ps] [LawfulMonad m] [LawfulMonadTriple m ps] :
+theorem LawfulMonadLiftTriple.ExceptT.lift_fail_conds_def [Monad m] [WP m ps] [LawfulMonad m] [LawfulWP m ps] :
   (LawfulMonadLiftTriple.lift_pred_impl m (ExceptT ε m)).lift_fail_conds fc = (fun _e => PreCond.pure False, fc) := rfl
 
 @[simp]
-theorem LawfulMonadLiftTriple.ExceptT.lift_post_def [Monad m] [MonadTriple m ps] [LawfulMonad m] [LawfulMonadTriple m ps] :
+theorem LawfulMonadLiftTriple.ExceptT.lift_post_def [Monad m] [WP m ps] [LawfulMonad m] [LawfulWP m ps] :
   (LawfulMonadLiftTriple.lift_pred_impl m (ExceptT ε m)).lift_post Q = (fun a => Q.1 a, (fun _e => PreCond.pure False, Q.2)) := rfl
 
 @[simp]
-theorem LawfulMonadLiftTripleT.ExceptT.lift_pre_def [Monad m] [MonadTriple m ps] [LawfulMonad m] [LawfulMonadTriple m ps] :
+theorem LawfulMonadLiftTripleT.ExceptT.lift_pre_def [Monad m] [WP m ps] [LawfulMonad m] [LawfulWP m ps] :
   (LawfulMonadLiftTripleT.lift_pred_impl m (ExceptT ε m)).lift_pre P = P := rfl
 
 @[simp]
-theorem LawfulMonadLiftTripleT.ExceptT.lift_fail_conds_def [Monad m] [MonadTriple m ps] [LawfulMonad m] [LawfulMonadTriple m ps] :
+theorem LawfulMonadLiftTripleT.ExceptT.lift_fail_conds_def [Monad m] [WP m ps] [LawfulMonad m] [LawfulWP m ps] :
   (LawfulMonadLiftTripleT.lift_pred_impl m (ExceptT ε m)).lift_fail_conds fc = (fun _e => PreCond.pure False, fc) := rfl
 
 @[simp]
-theorem LawfulMonadLiftTripleT.ExceptT.lift_post_def [Monad m] [MonadTriple m ps] [LawfulMonad m] [LawfulMonadTriple m ps] :
+theorem LawfulMonadLiftTripleT.ExceptT.lift_post_def [Monad m] [WP m ps] [LawfulMonad m] [LawfulWP m ps] :
   (LawfulMonadLiftTripleT.lift_pred_impl m (ExceptT ε m)).lift_post Q = (fun a => Q.1 a, (fun _e => PreCond.pure False, Q.2)) := rfl
-
-instance Idd.instLawfulMonadTriple : LawfulMonadTriple Idd .pure where
-  triple_conseq x hp' hq h := by intro; apply_rules [(Prod.le_def.mp hq).1]
-  triple_extract_persistent x h := by intro hp; exact (h hp.1) hp.2
-  triple_pure _ himp := by simp[triple, Pure.pure, Idd.pure, himp]
-  triple_bind x f hspec herror hrest := by
-    simp_all only [triple, le_Prop_eq, le_refl, Bind.bind, bind, implies_true]
-
-instance StateT.instLawfulMonadTriple [Monad m] [LawfulMonad m] [MonadTriple m ps] [LawfulMonadTriple m ps] :
-  LawfulMonadTriple (StateT σ m) (.arg σ ps) where
-  triple_conseq x hp hq h := by
-    intro s
-    apply triple_conseq (x s) (hp s) ?_ (h s)
-    constructor
-    · intro (a, s')
-      exact hq.1 a s'
-    · exact hq.2
-  triple_extract_persistent x h := by
-    intro s
-    apply triple_extract_persistent (x s) (fun hp => h hp s)
-  triple_pure _ himp := by
-    intro s
-    apply LawfulMonadTriple.triple_pure
-    exact (himp s)
-  triple_bind x f hspec hrest := by
-    simp_all only [triple, bind, StateT.bind]
-    intros
-    apply_rules [LawfulMonadTriple.triple_bind, hspec]
-    intros
-    apply hrest
-
-instance ReaderT.instLawfulMonadTriple [Monad m] [LawfulMonad m] [MonadTriple m ps] [LawfulMonadTriple m ps] :
-  LawfulMonadTriple (ReaderT ρ m) (.arg ρ ps) where
-  triple_conseq x hp hq h := by
-    intro r
-    apply triple_conseq (x r) (hp r) ?_ (h r)
-    constructor
-    · intro a
-      exact hq.1 a r
-    · exact hq.2
-  triple_extract_persistent x h := by
-    intro r
-    apply triple_extract_persistent (x r) (fun hp => h hp r)
-  triple_pure _ himp := by
-    intro r
-    apply LawfulMonadTriple.triple_pure
-    exact (himp r)
-  triple_bind x f hspec hrest := by
-    simp_all only [triple, bind, ReaderT.bind]
-    intros
-    apply_rules [LawfulMonadTriple.triple_bind, hspec]
-    intros
-    apply hrest
-
-instance ExceptT.instLawfulMonadTriple [Monad m] [LawfulMonad m] [MonadTriple m ps] [LawfulMonadTriple m ps] :
-  LawfulMonadTriple (ExceptT ε m) (.except ε ps) where
-  triple_conseq x hp hq h := by
-    simp_all [triple, bind, ExceptT.bind]
-    apply triple_conseq (ps := ps) x.run hp ?hq h
-    have h21 := (Prod.le_def.mp (Prod.le_def.mp hq).2).1
-    have h22 := (Prod.le_def.mp (Prod.le_def.mp hq).2).2
-    exact ⟨fun | Except.ok a => (Prod.le_def.mp hq).1 a | Except.error e => h21 e, h22⟩
-  triple_extract_persistent x h := by
-    apply triple_extract_persistent (ps := ps) x.run (fun hp => h hp)
-  triple_pure _ himp := by
-    simp only [triple, pure, ExceptT.pure, run_mk]
-    apply LawfulMonadTriple.triple_pure
-    exact himp
-  triple_bind x f hspec hrest := by
-    simp_all only [triple, bind, ExceptT.bind]
-    apply_rules [LawfulMonadTriple.triple_bind]
-    · intro b
-      cases b
-      case error a =>
-        apply LawfulMonadTriple.triple_pure
-        exact le_rfl
-      case ok a =>
-        simp only [ExceptT.bindCont]
-        exact hrest a
 
 notation:lead "⦃" P "⦄ " x:lead " ⦃" Q "⦄" =>
   MonadTriple.triple x P Q
@@ -1064,7 +1068,7 @@ notation:lead "⦃" P "⦄ " x:lead " ⦃⇓" v " | " Q "⦄" =>
   ⦃P⦄ x ⦃PostCond.total fun v => Q⦄
 
 theorem Triple.forIn_list {α β} {m : Type → Type}
-  [Monad m] [LawfulMonad m] [MonadTriple m ps] [LawfulMonadTriple m ps]
+  [Monad m] [LawfulMonad m] [WP m ps] [LawfulWP m ps]
   {xs : List α} {init : β} {f : α → β → m (ForInStep β)}
   (inv : PostCond (List α × β) ps)
   (hpre : P ≤ inv.1 (xs, init))
@@ -1088,7 +1092,7 @@ theorem Triple.forIn_list {α β} {m : Type → Type}
         · exact ih
 
 theorem Triple.foldlM_list {α β} {m : Type → Type}
-  [Monad m] [LawfulMonad m] [MonadTriple m ps] [LawfulMonadTriple m ps]
+  [Monad m] [LawfulMonad m] [WP m ps] [LawfulWP m ps]
   {xs : List α} {init : β} {f : β → α → m β}
   (inv : PostCond (List α × β) ps)
   (hpre : P ≤ inv.1 (xs, init))
@@ -1108,32 +1112,31 @@ end Triple
 
 section IO
 
-axiom IO.satisfies_post {α ε} (x : EIO ε α) (p : Except ε α → Prop) : Prop
-axiom IO.satisfies_conseq {α ε} {x : EIO ε α} {Q Q' : Except ε α → Prop} :
-  Q ≤ Q' → IO.satisfies_post x Q → IO.satisfies_post x Q'
-axiom IO.satisfies_pure {α ε} {Q : Except ε α → Prop} (a : α) (h : Q (.ok a)) :
-  IO.satisfies_post (pure a) Q
-axiom IO.satisfies_bind {α β ε} {P : Except ε α → Prop} {Q : Except ε β → Prop} {x : EIO ε α} {f : α → EIO ε β}
-  (hx : IO.satisfies_post x P)
-  (herror : ∀ e, P (.error e) → Q (.error e))
-  (hf : ∀ a, P (.ok a) → IO.satisfies_post (f a) Q) :
-  IO.satisfies_post (x >>= f) Q
+axiom IO.wp {α ε} (x : EIO ε α) (p : Except ε α → Prop) : Prop
+axiom IO.wp_conseq {α ε} {x : EIO ε α} {Q Q' : Except ε α → Prop} :
+  Q ≤ Q' → IO.wp x Q → IO.wp x Q'
+axiom IO.wp_pure {α ε} {Q : Except ε α → Prop} (a : α) (h : Q (.ok a)) :
+  IO.wp (pure a) Q
+axiom IO.wp_bind {α β ε} {Q : Except ε β → Prop} {x : EIO ε α} {f : α → EIO ε β}
+  (hx : IO.wp x (fun | .ok a => wp (f a) Q | .error e => Q (.error e))) :
+  IO.wp (x >>= f) Q
 
-instance IO.instMonadTriple : MonadTriple (EIO ε) (.except ε .pure) where
-  triple x P Q :=
-    P → IO.satisfies_post x (fun | .ok a => Q.1 a | .error e => Q.2.1 e)
+instance IO.instWP : WP (EIO ε) (.except ε .pure) where
+  wp x Q := IO.wp x (fun | .ok a => Q.1 a | .error e => Q.2.1 e)
 
-instance IO.instLawfulMonadTriple : LawfulMonadTriple (EIO ε) (.except ε .pure) where
-  triple_conseq x hp' hq h := by
-    intro hp
-    apply IO.satisfies_conseq ?_ (h (hp' hp))
-    intro x; cases x <;> apply_rules[hq.1, hq.2.1]
-  triple_extract_persistent x h := by intro hp; exact (h hp.1) hp.2
-  triple_pure _ himp := by intro hp; apply IO.satisfies_pure; exact (himp hp)
-  triple_bind x f hspec hrest := by
-    intro hp
-    apply IO.satisfies_bind (hspec hp) _ hrest
-    simp
+instance IO.instLawfulWP : LawfulWP (EIO ε) (.except ε .pure) where
+  wp_conseq x _ _ h := by
+    apply IO.wp_conseq
+    intro x
+    cases x <;> apply_rules [h.1, h.2.1]
+  wp_pure x h := by intro hp; apply IO.wp_pure x hp
+  wp_bind x f Q := by
+    intro hx
+    apply IO.wp_bind
+    apply wp_conseq _ hx
+    intro x
+    simp only [WP.wp]
+    cases x <;> simp
 
 end IO
 
@@ -1227,58 +1230,58 @@ theorem test_2 : ⦃True⦄ (do let mut x := 5; if x > 1 then { x := 1 } else { 
 theorem test_2_2 : ⦃True⦄ (do let mut id := 5; id := 3; pure (f := Idd) id) ⦃⇓r | r < 20⦄ := by
   simp[LawfulMonadTriple.triple_pure]
 
--- theorem StateT.get_spec2 [Monad m] [MonadState σ m] [MonadTriple m stack] [LawfulMonad m] [LawfulMonadTriple m stack] {P : PreCond stack} :
+-- theorem StateT.get_spec2 [Monad m] [MonadState σ m] [WP m stack] [LawWP m] [LawfulMonadTriple m stack] {P : PreCond stack} :
 --   ⦃LawfulMonadLiftTriple.lift_pred_impl.lift_pre P⦄
 --   (get : m σ)
 --   ⦃⇓r | do pure (P (← read) ⊓ P r)⦄ := by
 --   simp [MonadTriple.triple, get, getThe, MonadStateOf.get, StateT.get, PostCond.total_fst, LawfulMonadTriple.triple_pure]
 
-theorem StateT.get_spec [Monad m] [MonadTriple m stack] [LawfulMonadTriple m stack] {P : σ → PreCond stack} :
+theorem StateT.get_spec [Monad m] [WP m stack] [LawfulWP m stack] {P : σ → PreCond stack} :
   ⦃P⦄
   (get : StateT σ m σ)
   ⦃⇓r | fun s => P s ⊓ P r⦄ := by
   simp [MonadTriple.triple, get, getThe, MonadStateOf.get, StateT.get, PostCond.total_fst, LawfulMonadTriple.triple_pure]
 
-theorem StateT.get_spec' [Monad m] [MonadTriple m stack] [LawfulMonadTriple m stack] {P : σ → PreCond stack} :
+theorem StateT.get_spec' [Monad m] [WP m stack] [LawfulWP m stack] {P : σ → PreCond stack} :
   ⦃P⦄
   (get : StateT σ m σ)
   ⦃⇓r | fun s => PreCond.pure (s = r) ⊓ P r⦄ := by
   simp [MonadTriple.triple, get, getThe, MonadStateOf.get, StateT.get, PostCond.total_fst, LawfulMonadTriple.triple_pure]
 
-theorem StateT.get_spec_bwd [Monad m] [MonadTriple m stack] [LawfulMonadTriple m stack] :
+theorem StateT.get_spec_bwd [Monad m] [WP m stack] [LawfulWP m stack] :
   ⦃fun s => Q.1 s s⦄
   (get : StateT σ m σ)
   ⦃Q⦄ := by
   simp [MonadTriple.triple, get, getThe, MonadStateOf.get, StateT.get, PostCond.total_fst, LawfulMonadTriple.triple_pure]
 
-theorem StateT.get_spec_fwd [Monad m] [MonadTriple m stack] [LawfulMonad m] [LawfulMonadTriple m stack] {P : σ → PreCond stack} :
+theorem StateT.get_spec_fwd [Monad m] [WP m stack] [LawfulMonad m] [LawfulWP m stack] {P : σ → PreCond stack} :
   ⦃P⦄ (get : StateT σ m σ) ⦃⇓r | fun s => PreCond.pure (s = r) ⊓ P r⦄ :=
   LawfulMonadTriple.triple_conseq_l get (by intro s; simp) (StateT.get_spec_bwd (m := m))
 
-theorem StateT.set_spec_fwd [Monad m] [MonadTriple m stack] [LawfulMonad m] [LawfulMonadTriple m stack] {P : σ → PreCond stack} :
+theorem StateT.set_spec_fwd [Monad m] [WP m stack] [LawfulMonad m] [LawfulWP m stack] {P : σ → PreCond stack} :
   ⦃P⦄ (set x : StateT σ m PUnit) ⦃⇓_ | fun s => PreCond.pure (s = x) ⊓ (⨆ s', P s')⦄ := by
   simp +contextual [MonadTriple.triple, set, StateT.set, LawfulMonadTriple.triple_pure, le_iSup_iff]
 
-theorem StateT.set_spec_bwd [Monad m] [MonadTriple m stack] [LawfulMonad m] [LawfulMonadTriple m stack] :
+theorem StateT.set_spec_bwd [Monad m] [WP m stack] [LawfulMonad m] [LawfulWP m stack] :
   ⦃fun _ => Q.1 ⟨⟩ x⦄ (set x : StateT σ m PUnit) ⦃Q⦄ := by
   simp only [MonadTriple.triple, set, StateT.set, le_refl, LawfulMonadTriple.triple_pure, implies_true]
 
-theorem StateT.set_spec_fwd_deriv [Monad m] [MonadTriple m stack] [LawfulMonad m] [LawfulMonadTriple m stack] {P : σ → PreCond stack} :
+theorem StateT.set_spec_fwd_deriv [Monad m] [WP m stack] [LawfulMonad m] [LawfulWP m stack] {P : σ → PreCond stack} :
   ⦃P⦄ (set x : StateT σ m PUnit) ⦃⇓_ | fun s => PreCond.pure (s = x) ⊓ (⨆ s', P s')⦄ :=
   LawfulMonadTriple.triple_conseq_l _ (by intro; simp +contextual [le_iSup_iff]) (StateT.set_spec_bwd (m := m))
 
-theorem StateT.set_spec_bwd_deriv [Monad m] [MonadTriple m stack] [LawfulMonad m] [LawfulMonadTriple m stack] {P : σ → PreCond stack} :
+theorem StateT.set_spec_bwd_deriv [Monad m] [WP m stack] [LawfulMonad m] [LawfulWP m stack] {P : σ → PreCond stack} :
   ⦃fun _ => Q.1 ⟨⟩ x⦄ (set x : StateT σ m PUnit) ⦃Q⦄ :=
   LawfulMonadTriple.triple_conseq_r _ (by simp +contextual [le_iSup_iff]; intro ⟨⟩ s; simp +contextual [le_iSup_iff]) (StateT.set_spec_fwd (m := m))
 
-theorem ExceptT.throw_spec [Monad m] [MonadTriple m stack] [LawfulMonadTriple m stack] {P : PreCond (.except ε stack)} :
+theorem ExceptT.throw_spec [Monad m] [WP m stack] [LawfulWP m stack] {P : PreCond (.except ε stack)} :
   ⦃P⦄
   (throw e : ExceptT ε m σ)
   ⦃(fun _ => PreCond.pure False, fun e' => PreCond.pure (e = e') ⊓ P, FailConds.false)⦄ := by
   simp only [MonadTriple.triple, run_throw, PostCond.total_def, PreCond.le_top, inf_of_le_right,
     le_refl, LawfulMonadTriple.triple_pure]
 
-theorem ExceptT.throw_spec_bwd [Monad m] [MonadTriple m stack] [LawfulMonadTriple m stack] :
+theorem ExceptT.throw_spec_bwd [Monad m] [WP m stack] [LawfulWP m stack] :
   ⦃Q.2.1 e⦄
   (throw e : ExceptT ε m σ)
   ⦃Q⦄ := by
@@ -1328,7 +1331,7 @@ theorem test_ex :
       omega
 
 theorem Triple.forIn_list_bwd {α β} {m : Type → Type}
-  [Monad m] [LawfulMonad m] [MonadTriple m ps] [LawfulMonadTriple m ps]
+  [Monad m] [LawfulMonad m] [WP m ps] [LawfulWP m ps]
   {xs : List α} {init : β} {f : α → β → m (ForInStep β)} {Q : PostCond β ps}
   (inv : PostCond (List α × β) ps)
   (hpost1 : ∀ b, inv.1 ([], b) ≤ Q.1 b)
