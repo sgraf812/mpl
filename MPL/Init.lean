@@ -1,6 +1,6 @@
 import Lean
 
-namespace VCGen
+namespace MPL
 
 open Lean Meta Simp
 
