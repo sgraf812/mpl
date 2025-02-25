@@ -77,6 +77,13 @@ noncomputable instance PreCond.instLattice : {ps : PredShape} → CompleteLattic
 -- noncomputable instance PreCond.instPreorder {ps : PredShape} : Preorder (PreCond ps) := inferInstance
 -- noncomputable instance PreCond.instLE {ps : PredShape} : LE (PreCond ps) := inferInstance
 
+@[simp]
+theorem PreCond.le_pure_pure {ps} {p q : Prop} : @PreCond.pure ps p ≤ @PreCond.pure ps q ↔ p ≤ q := by
+  induction ps
+  case pure => simp
+  case arg σ s ih => sorry
+  case except ε s ih => sorry
+
 theorem PreCond.imp_pure_extract_l {ps} {P : Prop} {P' : PreCond ps} {Q : PreCond ps}
   (h : P → P' ≤ Q) : PreCond.pure P ⊓ P' ≤ Q := by
   induction ps
@@ -187,26 +194,30 @@ lemma PostCond.le_partial (p q : α → PreCond ps) : PostCond.partial p ≤ Pos
   simp only [PostCond.partial, Prod.le_def, le_refl, and_true]
   rfl
 
+def PredTrans.Mono {ps : PredShape} {α : Type} (x : PostCond α ps → PreCond ps) : Prop :=
+  ∀ Q₁ Q₂, Q₁ ≤ Q₂ → x Q₁ ≤ x Q₂
+
 @[ext]
 structure PredTrans (ps : PredShape) (α : Type) : Type where
   apply : PostCond α ps → PreCond ps
+  mono : PredTrans.Mono apply
 
 --infix:100 " ⇐ " => PredTrans.apply
 
 def PredTrans.le {ps : PredShape} {α : Type} (x y : PredTrans ps α) : Prop :=
   y.apply ≤ x.apply
 noncomputable def PredTrans.top {ps : PredShape} {α : Type} : PredTrans ps α :=
-  PredTrans.mk ⊥
+  PredTrans.mk ⊥ sorry
 noncomputable def PredTrans.bot {ps : PredShape} {α : Type} : PredTrans ps α :=
-  PredTrans.mk ⊤
+  PredTrans.mk ⊤ sorry
 noncomputable def PredTrans.sup {ps : PredShape} {α : Type} : PredTrans ps α → PredTrans ps α → PredTrans ps α :=
-  fun x y => PredTrans.mk (x.apply ⊔ y.apply)
+  fun x y => PredTrans.mk (x.apply ⊔ y.apply) sorry
 noncomputable def PredTrans.inf {ps : PredShape} {α : Type} : PredTrans ps α → PredTrans ps α → PredTrans ps α :=
-  fun x y => PredTrans.mk (x.apply ⊓ y.apply)
+  fun x y => PredTrans.mk (x.apply ⊓ y.apply) sorry
 noncomputable def PredTrans.sSup {ps : PredShape} {α : Type} : Set (PredTrans ps α) → PredTrans ps α :=
-  fun x => PredTrans.mk (InfSet.sInf { p | .mk p ∈ x })
+  fun x => PredTrans.mk (InfSet.sInf { PredTrans.apply p | p ∈ x }) sorry
 noncomputable def PredTrans.sInf {ps : PredShape} {α : Type} : Set (PredTrans ps α) → PredTrans ps α :=
-  fun x => PredTrans.mk (SupSet.sSup { p | .mk p ∈ x })
+  fun x => PredTrans.mk (SupSet.sSup { PredTrans.apply p | p ∈ x }) sorry
 
 noncomputable instance : CompleteLattice (PredTrans ps α) where
   le := PredTrans.le
@@ -233,10 +244,17 @@ noncomputable instance : CompleteLattice (PredTrans ps α) where
   sInf_le := sorry
 
 def PredTrans.pure {ps : PredShape} {α : Type} (a : α) : PredTrans ps α :=
-  { apply := fun Q => Q.1 a }
+  { apply := fun Q => Q.1 a, mono := by intro _ _ h; apply h.1 }
 
 def PredTrans.bind {ps : PredShape} {α β : Type} (x : PredTrans ps α) (f : α → PredTrans ps β) : PredTrans ps β :=
-  { apply := fun Q => x.apply (fun a => (f a).apply Q, Q.2) }
+  { apply := fun Q => x.apply (fun a => (f a).apply Q, Q.2), mono := by
+      intro Q₁ Q₂ h
+      simp only [apply]
+      apply x.mono
+      simp[h.2]
+      intro a
+      apply (f a).mono
+      exact h }
 
 instance : Monad (PredTrans ps) where
   pure := PredTrans.pure
@@ -249,10 +267,6 @@ theorem PredTrans.pure_apply {ps : PredShape} {α : Type} (a : α) (Q : PostCond
 @[simp]
 theorem PredTrans.map_apply {ps : PredShape} {α β : Type} (f : α → β) (x : PredTrans ps α) (Q : PostCond β ps) :
   (f <$> x).apply Q = x.apply (fun a => Q.1 (f a), Q.2) := by rfl
-
-@[simp]
-theorem PredTrans.bind_apply {ps : PredShape} {α β : Type} (f : α → PredTrans ps β) (trans : PostCond α ps → PreCond ps) (Q : PostCond β ps) :
-  (Bind.bind { apply := trans } f).apply Q = trans (fun a => (f a).apply Q, Q.2) := by rfl
 
 --
 --@[simp]
@@ -289,45 +303,82 @@ instance : LawfulMonad (PredTrans ps) where
 
 @[simp]
 def PredTrans.frame_arg (p : PredTrans m α) : PredTrans (.arg σ m) α :=
-  { apply Q s := p.apply (fun a => Q.1 a s, Q.2) }
+  { apply := fun Q s => p.apply (fun a => Q.1 a s, Q.2), mono := by
+      intro Q₁ Q₂ h
+      simp only [apply]
+      intro s
+      simp
+      apply p.mono
+      simp[h.2]
+      intro a
+      apply h.1 }
 
 @[simp]
 instance PredTrans.liftArg : MonadLift (PredTrans m) (PredTrans (.arg σ m)) where
   monadLift := PredTrans.frame_arg
 
 @[simp]
-def PredTrans.drop_fail_cond (Q : PostCond α (.except σ m)) : PostCond α m :=
-  (Q.1, Q.2.2)
+def PredTrans.drop_fail_cond (p : PredTrans ps α) : PredTrans (.except ε ps) α :=
+  { apply := fun Q => p.apply (Q.1, Q.2.2), mono := by
+      intro Q₁ Q₂ h
+      simp only [apply]
+      apply p.mono
+      simp[h.1, h.2.2] }
 
 @[simp]
 instance PredTrans.dropFail : MonadLift (PredTrans m) (PredTrans (.except σ m)) where
-  monadLift p := { apply := p.apply ∘ PredTrans.drop_fail_cond }
+  monadLift := PredTrans.drop_fail_cond
 
 @[simp]
 def PredTrans.throw {ps : PredShape} {ε : Type} (e : ε) : PredTrans (.except ε ps) α :=
-  { apply := fun Q => Q.2.1 e }
+  { apply := fun Q => Q.2.1 e, mono := by
+      intro Q₁ Q₂ h
+      simp only [apply]
+      exact h.2.1 e }
 
 @[simp]
 def PredTrans.get {ps : PredShape} {σ : Type} : PredTrans (.arg σ ps) σ :=
-  { apply := fun Q s => Q.1 s s}
+  { apply := fun Q s => Q.1 s s, mono := by
+      intro Q₁ Q₂ h
+      simp only [apply]
+      intro s
+      exact h.1 s s }
 
 @[simp]
 def PredTrans.set {ps : PredShape} {σ : Type} (s : σ) : PredTrans (.arg σ ps) PUnit :=
-  { apply := fun Q _ => Q.1 ⟨⟩ s }
+  { apply := fun Q _ => Q.1 ⟨⟩ s, mono := by
+      intro Q₁ Q₂ h
+      simp only [apply]
+      intro _
+      exact h.1 ⟨⟩ s }
 
 @[simp]
 noncomputable def PredTrans.prePost {ps : PredShape} {α : Type} (P : PreCond ps) (Q : PostCond α ps) : PredTrans ps α :=
-  { apply := fun Q' => P ⊓ PreCond.pure (Q ≤ Q') }
+  { apply := fun Q' => P ⊓ PreCond.pure (Q ≤ Q'), mono := by
+      intro Q₁ Q₂ h
+      simp only [apply, le_inf_iff, inf_le_left, true_and]
+      refine inf_le_of_right_le ?_
+      simp only [PreCond.le_pure_pure]
+      exact (le_trans · h) }
 
 theorem PredTrans.prePost_imp {ps : PredShape} {α : Type} {P : PreCond ps} {Q : PostCond α ps} :
   P ≤ (PredTrans.prePost P Q).apply Q := by simp[PredTrans.prePost]
 
 theorem PredTrans.le_prePost {ps : PredShape} {α : Type} {P : PreCond ps} {Q : PostCond α ps} {x : PredTrans ps α}
-  (hmono : ∀ Q₁ Q₂, Q₁ ≤ Q₂ → x.apply Q₁ ≤ x.apply Q₂) (h : P ≤ x.apply Q) :
+  (h : P ≤ x.apply Q) :
   x ≤ PredTrans.prePost P Q := by
     simp[PredTrans.prePost]
     intro Q₂
     simp
     apply PreCond.imp_pure_extract_r
     intro hq
-    exact le_trans h (hmono Q Q₂ hq)
+    exact le_trans h (x.mono Q Q₂ hq)
+
+def PredTrans.runState {ps : PredShape} {α} (x : PredTrans (.arg σ ps) α) (s : σ) : PredTrans ps (α × σ) :=
+  { apply Q := x.apply (fun r s' => Q.1 (r, s'), Q.2) s,
+    mono := by
+      intro Q₁ Q₂ h
+      apply x.mono
+      simp[h.2]
+      intro r s'
+      apply h.1 }

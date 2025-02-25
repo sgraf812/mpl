@@ -5,36 +5,69 @@ namespace MPL
 def triple {ps : PredShape} {α} (x : PredTrans ps α) (P : PreCond ps) (Q : PostCond α ps) : Prop :=
   P ≤ x.apply Q
 
+def intro_state_triple {ps : PredShape} {α} (x : PredTrans (.arg σ ps) α) (P : PreCond (.arg σ ps)) (Q : PostCond α (.arg σ ps))
+  (h : ∀ s, triple (PredTrans.runState x s) (P s) (fun (r, s') => Q.1 r s', Q.2)) :
+  triple x P Q := h
+
 notation:lead "⦃" P "⦄ " x:lead " ⦃" Q "⦄" =>
   triple x P Q
 notation:lead "⦃" P "⦄ " x:lead " ⦃⇓" v " | " Q "⦄" =>
   ⦃P⦄ x ⦃PostCond.total fun v => Q⦄
 
-/-
-theorem triple_conseq {m : Type → Type} [WP m ps] {α} (x : m α) {P P' : PreCond ps} {Q Q' : PostCond α ps}
-  (hp : P ≤ P' := by simp) (hq : Q' ≤ Q := by simp) (h : triple x P' Q') :
-  triple x P Q := by
-    apply le_trans hp
-    apply le_trans h
-    apply wp_mono x Q' Q hq
+@[simp]
+theorem triple_bind_apply {ps : PredShape} {α β : Type} (trans : PostCond α ps → PreCond ps) (h : PredTrans.Mono trans) (f : α → PredTrans ps β) (P : PreCond ps) (Q : PostCond β ps) :
+  triple (⟨trans,h⟩ >>= f) P Q = triple ⟨fun Q => trans (fun a => (f a).apply Q, Q.2),sorry⟩ P Q := by rfl
 
-theorem triple_extract_persistent {m : Type → Type} [Monad m] [WP m ps] [WPMonad m ps] {P : Prop} {P' : PreCond ps} {Q : PostCond α ps}
-  (x : m α) (h : P → triple x P' Q) :
+-- theorem triple_conseq {ps : PredShape} {α} (x : PredTrans ps α) {P P' : PreCond ps} {Q Q' : PostCond α ps}
+--   (hp : P ≤ P' := by simp) (hq : Q' ≤ Q := by simp) (h : triple x P' Q') :
+--   triple x P Q := by
+--     apply le_trans hp
+--     apply le_trans h
+--     apply wp_mono x Q' Q hq
+
+theorem triple_extract_persistent {P : Prop} {P' : PreCond ps} {Q : PostCond α ps}
+  (x : PredTrans ps α) (h : P → triple x P' Q) :
   triple x (PreCond.pure P ⊓ P') Q := PreCond.imp_pure_extract_l h
 
 theorem triple_pure {m : Type → Type} [Monad m] [WP m ps] [WPMonad m ps] {α} {Q : PostCond α ps} (a : α) (himp : P ≤ Q.1 a) :
-  triple (pure (f:=m) a) P Q := by apply le_trans himp (by simp only [wp_pure, PredTrans.pure_apply, le_refl])
+  triple wp⟦pure (f:=m) a⟧ P Q := by apply le_trans himp (by simp only [wp_pure, PredTrans.pure_apply, le_refl])
 
 theorem triple_bind {m : Type → Type} [Monad m] [WP m ps] [WPMonad m ps] {α β} {P : PreCond ps} {Q : α → PreCond ps} {R : PostCond β ps} (x : m α) (f : α → m β)
+  (hx : triple wp⟦x⟧ P (Q, R.2))
+  (hf : ∀ b, triple wp⟦f b⟧ (Q b) R) :
+  triple wp⟦x >>= f⟧ P R := by
+    apply le_trans hx
+    simp only [wp_bind]
+    apply wp⟦x⟧.mono _ _
+    simp only [Prod.mk_le_mk, le_refl, and_true]
+    exact hf
+
+theorem triple_bind2 {α β} {P : PreCond ps} {Q : α → PreCond ps} {R : PostCond β ps} (x : PredTrans ps α) (f : α → PredTrans ps β)
   (hx : triple x P (Q, R.2))
   (hf : ∀ b, triple (f b) (Q b) R) :
   triple (x >>= f) P R := by
     apply le_trans hx
-    simp only [wp_bind]
-    apply wp_mono x
+    apply x.mono
     simp only [Prod.mk_le_mk, le_refl, and_true]
     exact hf
 
+--theorem triple_bind_pre {m : Type → Type} [Monad m] [WP m ps] [WPMonad m ps] {α β} {P : PreCond ps} {Q : PostCond β ps} (x : m α) (f : α → m β)
+--  (hx : triple wp⟦x⟧ P (fun a => triple wp⟦f a⟧ Q, Q.2)) :
+--  triple wp⟦x >>= f⟧ P R := by
+--    apply le_trans hx
+--    simp only [wp_bind]
+--    apply wp_mono x
+--    simp only [Prod.mk_le_mk, le_refl, and_true]
+--    exact hf
+
+theorem triple_extract_persistent_true {P : Prop} {Q : PostCond α ps}
+  (x : PredTrans ps α) (h : P → triple x (PreCond.pure True) Q) :
+  triple x (PreCond.pure P) Q := by
+    have : PreCond.pure P = (PreCond.pure P ⊓ PreCond.pure True : PreCond ps) := by simp
+    rw[this]
+    exact triple_extract_persistent x h
+
+/-
 theorem triple_conseq_l {m : Type → Type} [Monad m] [WP m ps] [WPMonad m ps] {P P' : PreCond ps} {Q : PostCond α ps}
   (x : m α) (hp : P ≤ P') (h : triple x P' Q) :
   triple x P Q := triple_conseq x hp le_rfl h
@@ -60,13 +93,6 @@ theorem triple_conseq_r {m : Type → Type} [Monad m] [WP m ps] [WPMonad m ps] {
 --    apply triple_bind _ _ hf ?_
 --    intro f
 --    apply triple_map _ _ (hx f)
-
-theorem triple_extract_persistent_true {m : Type → Type} [Monad m] [LawfulMonad m] [WP m ps] [WPMonad m ps] {P : Prop} {Q : PostCond α ps}
-  (x : m α) (h : P → triple x (PreCond.pure True) Q) :
-  triple x (PreCond.pure P) Q := by
-    have : PreCond.pure P = (PreCond.pure P ⊓ PreCond.pure True : PreCond ps) := by simp
-    rw[this]
-    exact triple_extract_persistent x h
 
 theorem triple_dite {c : Prop} [Decidable c] {t : c → m α} {e : ¬c → m α} {P : PreCond ps} {Q : PostCond α ps} [Monad m] [WP m ps]
   (htrue : (h : c) → triple (t h) P Q)

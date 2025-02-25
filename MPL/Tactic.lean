@@ -11,11 +11,11 @@ namespace MPL
 
 open Lean Meta Elab Tactic
 
-theorem xwp_lemma {m : Type → Type} [WP m ps] {α} {x : m α} {P : PreCond ps} {Q : PostCond α ps} :
-  P ≤ wp⟦x⟧.apply Q → ⦃P⦄ x ⦃Q⦄ := id
+--theorem xwp_lemma {m : Type → Type} [WP m ps] {α} {x : m α} {P : PreCond ps} {Q : PostCond α ps} :
+--  P ≤ wp⟦x⟧.apply Q → ⦃P⦄ x ⦃Q⦄ := id
 
 theorem wp_apply_triple {m : Type → Type} {ps : PredShape} [WP m ps] {α} {x : m α} {P : PreCond ps} {Q : PostCond α ps}
-  (h : ⦃P⦄ x ⦃Q⦄) :
+  (h : ⦃P⦄ wp x ⦃Q⦄) :
   wp x ≤ PredTrans.prePost P Q := PredTrans.le_prePost (wp_mono x) h
 
 theorem rw_wp {m : Type → Type} {ps : PredShape} [WP m ps] {α} {x : m α} {t : PredTrans ps α}
@@ -29,9 +29,17 @@ macro_rules
 
 syntax "xapp" (ppSpace colGt term:max)? : tactic
 
+def focus_on_wp (target : Expr) (goal : MVarId) : TacticM Unit := withMainContext do
+  match_expr target with
+  | LE.le α _ l r =>
+    let g::gs ← liftMetaM <| goal.apply (mkConst ``le_trans) | failure
+    pushGoals gs
+  | _ => throwError "focus_on_wp: unsupported term"
+
 partial def xapp (target : Expr) (spec : Option (TSyntax `term)) : TacticM Unit := withMainContext do
-  let rec loop (trans : Expr) (goal : MVarId) : TacticM Unit := do
-    match_expr trans with
+  let_expr triple ps α x P Q := target | throwError "xapp: Not a triple {target}"
+  let rec loop (x : Expr) (goal : MVarId) : TacticM Unit := do
+    match_expr x with -- `x` is a `PredTrans α`; we want to focus until it is of the form `wp x`
     | WP.wp m ps instWP α x =>
 --      let P ← liftMetaM <| mkFreshExprMVar (mkApp (mkConst ``PreCond) ps)
 --      let Q ← liftMetaM <| mkFreshExprMVar (mkApp2 (mkConst ``PostCond) α ps)
@@ -77,16 +85,15 @@ partial def xapp (target : Expr) (spec : Option (TSyntax `term)) : TacticM Unit 
 --      let y ← liftMetaM <| mkFreshExprMVar (← inferType x) (userName := `y)
 --      let .forallE _ h_ty _ _ ← inferType (mkApp6 (mkConst ``PredTrans.bind_mono) ps α β x y f) | failure
 --      let h ← liftMetaM <| mkFreshExprMVar h_ty (userName := `h)
-      let g::gs ← liftMetaM <| goal.apply (mkApp (mkConst ``PredTrans.bind_mono) ps) | failure
+      let g::gs ← liftMetaM <| goal.apply (mkApp (mkConst ``triple_bind) ps) | failure
       -- now solve `g`, which is `h : x ≤ y`
       pushGoals gs
       loop x g
     | _ => throwError "xapp: unsupported term {target.getArg! 2}"
-  loop (target.getArg! 2) (← getMainGoal)
+  loop x (← getMainGoal)
 
 elab "xapp" spec:term : tactic => withMainContext do
   let tgt ← getMainTarget
-  if not (tgt.isAppOf ``PredTrans.apply) then throwError "xapp: unsupported term"
   xapp tgt spec
 
 theorem test_ex :
@@ -101,14 +108,14 @@ theorem test_ex :
     fun e s => e = 42 ∧ s = 4,
     ())⦄ := by
   simp
-  intro s
-  -- ⦃· = s⦄ let ; ... ⦃⦄
-  simp only [wp_bind, wp_pure]
-  xwp s hs
+  conv => arg 1; rw[PredTrans.bind_apply]
+  simp only [PredTrans.bind_apply]
+  apply triple_bind2 (ps:= .except Nat (.arg Nat .pure))
+  rw[PredTrans.bind]
 --  apply PredTrans.bind_mono (ps := .except Nat (.arg Nat .pure))
 --  apply wp_apply_triple
 --  apply Specs.forIn_list
-
+  apply triple_bind2 (ps:= .except Nat (.arg Nat .pure))
   xapp (Specs.forIn_list (fun (xs, r) s => r ≤ 4 ∧ s = 4 ∧ r + xs.sum > 4, fun e s => e = 42 ∧ s = 4, ()) ?step)
   case step =>
     intro hd tl x
@@ -120,5 +127,23 @@ theorem test_ex :
   constructor
   · subst hs; conv in (List.sum _) => { whnf }; simp
   · simp; intro _ _ h; omega
+
+theorem test_ex_2 :
+  ⦃fun s => s = 4⦄
+  wp⟦do
+        let mut x := 0
+        let s ← get
+        for i in [1:s] do { x := x + i; if x > 4 then set 42 }
+        (set 1 : StateT Nat Idd PUnit)
+        return x⟧
+  ⦃(fun r s => r = 42 ∧ s = 4,
+    ())⦄ := by
+  simp
+  apply intro_state_triple _ _ _; intro s
+  dsimp
+  apply triple_extract_persistent_true; intro h
+  dsimp
+  intro s
+
 
 end MPL
