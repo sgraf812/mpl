@@ -2,54 +2,77 @@ import MPL.WPMonad
 
 namespace MPL
 
-def triple {ps : PredShape} {α} (x : PredTrans ps α) (P : PreCond ps) (Q : PostCond α ps) : Prop :=
-  P ≤ x.apply Q
+section Delab
+open Lean Lean.Macro
 
-def intro_state_triple {ps : PredShape} {α} (x : PredTrans (.arg σ ps) α) (P : PreCond (.arg σ ps)) (Q : PostCond α (.arg σ ps))
-  (h : ∀ s, triple (PredTrans.runState x s) (P s) (fun (r, s') => Q.1 r s', Q.2)) :
-  triple x P Q := h
+-- macro for adding unexpanders for function applications
+open Lean.Parser.Term in
+private def matchAlts' := leading_parser matchAlts
+
+syntax "delab_rule" ident matchAlts' : command
+macro_rules
+  | `(delab_rule $f $[| $p => $s]*) => do
+    let f := f.getId
+    if f.isAnonymous then
+      throwUnsupported
+    let f ← match ← Macro.resolveGlobalName f with
+      | [(name, [])] => pure name
+      | _           => throwUnsupported
+
+    let (p : TSyntaxArray `term) := p
+    if p.any (· matches `(`($$_))) then
+      `(@[app_unexpander $(mkIdent f)]
+        def unexpand : Lean.PrettyPrinter.Unexpander
+          $[| $p => $s]*)
+    else
+      `(@[app_unexpander $(mkIdent f)]
+        def unexpand : Lean.PrettyPrinter.Unexpander
+          $[| $p => $s]*
+          | _ => throw ())
+
+end Delab
+
+def triple {ps : PredShape} {m : Type → Type} [WP m ps] {α} (x : m α) (P : PreCond ps) (Q : PostCond α ps) : Prop :=
+  P ≤ wp⟦x⟧.apply Q
+
+notation:lead "{{" P "}} " x:lead " {{" Q "}}" =>
+  P ≤ PredTrans.apply x Q
+
+delab_rule LE.le
+  | `(_ $P (PredTrans.apply $x $Q)) => `({{$P}} $x {{$Q}})
 
 notation:lead "⦃" P "⦄ " x:lead " ⦃" Q "⦄" =>
   triple x P Q
 notation:lead "⦃" P "⦄ " x:lead " ⦃⇓" v " | " Q "⦄" =>
   ⦃P⦄ x ⦃PostCond.total fun v => Q⦄
 
-@[simp]
-theorem triple_bind_apply {ps : PredShape} {α β : Type} (trans : PostCond α ps → PreCond ps) (h : PredTrans.Mono trans) (f : α → PredTrans ps β) (P : PreCond ps) (Q : PostCond β ps) :
-  triple (⟨trans,h⟩ >>= f) P Q = triple ⟨fun Q => trans (fun a => (f a).apply Q, Q.2),sorry⟩ P Q := by rfl
+theorem triple_conseq {ps : PredShape} {α} {m : Type → Type} [WP m ps] (x : m α) {P P' : PreCond ps} {Q Q' : PostCond α ps}
+  (hp : P ≤ P' := by simp) (hq : Q' ≤ Q := by simp) (h : triple x P' Q') :
+  triple x P Q := by
+    apply le_trans hp
+    apply le_trans h
+    apply wp⟦x⟧.mono Q' Q hq
 
--- theorem triple_conseq {ps : PredShape} {α} (x : PredTrans ps α) {P P' : PreCond ps} {Q Q' : PostCond α ps}
---   (hp : P ≤ P' := by simp) (hq : Q' ≤ Q := by simp) (h : triple x P' Q') :
---   triple x P Q := by
---     apply le_trans hp
---     apply le_trans h
---     apply wp_mono x Q' Q hq
-
-theorem triple_extract_persistent {P : Prop} {P' : PreCond ps} {Q : PostCond α ps}
-  (x : PredTrans ps α) (h : P → triple x P' Q) :
+theorem triple_extract_persistent {ps : PredShape} {α} {m : Type → Type} [WP m ps] {P : Prop} {P' : PreCond ps} {Q : PostCond α ps}
+  (x : m α) (h : P → triple x P' Q) :
   triple x (PreCond.pure P ⊓ P') Q := PreCond.imp_pure_extract_l h
 
 theorem triple_pure {m : Type → Type} [Monad m] [WP m ps] [WPMonad m ps] {α} {Q : PostCond α ps} (a : α) (himp : P ≤ Q.1 a) :
-  triple wp⟦pure (f:=m) a⟧ P Q := by apply le_trans himp (by simp only [wp_pure, PredTrans.pure_apply, le_refl])
+  triple (pure (f:=m) a) P Q := by apply le_trans himp (by simp only [wp_pure, PredTrans.pure_apply, le_refl])
 
 theorem triple_bind {m : Type → Type} [Monad m] [WP m ps] [WPMonad m ps] {α β} {P : PreCond ps} {Q : α → PreCond ps} {R : PostCond β ps} (x : m α) (f : α → m β)
-  (hx : triple wp⟦x⟧ P (Q, R.2))
-  (hf : ∀ b, triple wp⟦f b⟧ (Q b) R) :
-  triple wp⟦x >>= f⟧ P R := by
+  (hx : triple x P (Q, R.2))
+  (hf : ∀ b, triple (f b) (Q b) R) :
+  triple (x >>= f) P R := by
     apply le_trans hx
     simp only [wp_bind]
     apply wp⟦x⟧.mono _ _
     simp only [Prod.mk_le_mk, le_refl, and_true]
     exact hf
 
-theorem triple_bind2 {α β} {P : PreCond ps} {Q : α → PreCond ps} {R : PostCond β ps} (x : PredTrans ps α) (f : α → PredTrans ps β)
-  (hx : triple x P (Q, R.2))
-  (hf : ∀ b, triple (f b) (Q b) R) :
-  triple (x >>= f) P R := by
-    apply le_trans hx
-    apply x.mono
-    simp only [Prod.mk_le_mk, le_refl, and_true]
-    exact hf
+theorem triple_bind2 {m : Type → Type} [Monad m] [WP m ps] [WPMonad m ps] {α β} {P : PreCond ps} {R : PostCond β ps} (x : m α) (f : α → m β)
+  (h : triple x P (fun a => wp⟦f a⟧.apply R, R.2)) :
+  triple (x >>= f) P R := triple_bind x f h (fun _ => le_rfl)
 
 --theorem triple_bind_pre {m : Type → Type} [Monad m] [WP m ps] [WPMonad m ps] {α β} {P : PreCond ps} {Q : PostCond β ps} (x : m α) (f : α → m β)
 --  (hx : triple wp⟦x⟧ P (fun a => triple wp⟦f a⟧ Q, Q.2)) :
@@ -60,8 +83,8 @@ theorem triple_bind2 {α β} {P : PreCond ps} {Q : α → PreCond ps} {R : PostC
 --    simp only [Prod.mk_le_mk, le_refl, and_true]
 --    exact hf
 
-theorem triple_extract_persistent_true {P : Prop} {Q : PostCond α ps}
-  (x : PredTrans ps α) (h : P → triple x (PreCond.pure True) Q) :
+theorem triple_extract_persistent_true {ps : PredShape} {α} {m : Type → Type} [WP m ps] (x : m α) {P : Prop} {Q : PostCond α ps}
+  (h : P → triple x (PreCond.pure True) Q) :
   triple x (PreCond.pure P) Q := by
     have : PreCond.pure P = (PreCond.pure P ⊓ PreCond.pure True : PreCond ps) := by simp
     rw[this]

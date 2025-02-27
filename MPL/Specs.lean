@@ -10,9 +10,9 @@ theorem Specs.forIn_list {α β} {m : Type → Type}
   (inv : PostCond (List α × β) ps)
   (hstep : ∀ hd tl b,
       ⦃inv.1 (hd :: tl, b)⦄
-      wp⟦f hd b⟧
+      f hd b
       ⦃(fun r => match r with | .yield b' => inv.1 (tl, b') | .done b' => inv.1 ([], b'), inv.2)⦄) :
-  ⦃inv.1 (xs, init)⦄ wp⟦forIn xs init f⟧ ⦃(fun b' => inv.1 ([], b'), inv.2)⦄ := by
+  ⦃inv.1 (xs, init)⦄ forIn xs init f ⦃(fun b' => inv.1 ([], b'), inv.2)⦄ := by
     induction xs generalizing init
     case nil => apply triple_pure; simp
     case cons hd tl ih =>
@@ -32,9 +32,9 @@ theorem Specs.foldlM_list {α β} {m : Type → Type}
   (inv : PostCond (List α × β) ps)
   (hstep : ∀ hd tl b,
       ⦃inv.1 (hd :: tl, b)⦄
-      wp⟦f b hd⟧
+      f b hd
       ⦃(fun b' => inv.1 (tl, b'), inv.2)⦄) :
-  ⦃inv.1 (xs, init)⦄ wp⟦List.foldlM f init xs⟧ ⦃(fun b' => inv.1 ([], b'), inv.2)⦄ := by
+  ⦃inv.1 (xs, init)⦄ List.foldlM f init xs ⦃(fun b' => inv.1 ([], b'), inv.2)⦄ := by
   have : xs.foldlM f init = forIn xs init (fun a b => .yield <$> f b a) := by
     simp only [List.forIn_yield_eq_foldlM, id_map']
   rw[this]

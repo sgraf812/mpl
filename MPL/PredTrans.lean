@@ -74,11 +74,20 @@ noncomputable instance PreCond.instLattice : {ps : PredShape} → CompleteLattic
   | .arg σ s => let _ := @instLattice s; (inferInstance : CompleteLattice (σ → PreCond s))
   | .except ε s => @instLattice s
 
--- noncomputable instance PreCond.instPreorder {ps : PredShape} : Preorder (PreCond ps) := inferInstance
--- noncomputable instance PreCond.instLE {ps : PredShape} : LE (PreCond ps) := inferInstance
+noncomputable instance PreCond.instPreorder {ps : PredShape} : Preorder (PreCond ps) := inferInstance
+noncomputable instance PreCond.instLE {ps : PredShape} : LE (PreCond ps) := inferInstance
+noncomputable instance PreCond.instTop {ps : PredShape} : Top (PreCond ps) := inferInstance
+noncomputable instance PreCond.instBot {ps : PredShape} : Bot (PreCond ps) := inferInstance
 
 @[simp]
 theorem PreCond.le_pure_pure {ps} {p q : Prop} : @PreCond.pure ps p ≤ @PreCond.pure ps q ↔ p ≤ q := by
+  induction ps
+  case pure => simp
+  case arg σ s ih => sorry
+  case except ε s ih => sorry
+
+@[simp]
+theorem PreCond.ext_pure_pure {ps} {p q : Prop} : @PreCond.pure ps p = @PreCond.pure ps q ↔ p = q := by
   induction ps
   case pure => simp
   case arg σ s ih => sorry
@@ -128,6 +137,20 @@ lemma PreCond.bot_le {x : PreCond ps} : pure False ≤ x := by
   induction ps
   case pure => exact False.elim
   case arg σ s ih => intro; exact ih
+  case except ε s ih => exact ih
+
+@[simp]
+lemma PreCond.pure_true_top {ps : PredShape} : PreCond.pure True = @Top.top (PreCond ps) PreCond.instTop := by
+  induction ps
+  case pure => rfl
+  case arg σ s ih => ext; exact ih
+  case except ε s ih => exact ih
+
+@[simp]
+lemma PreCond.pure_false_bot {ps : PredShape} : PreCond.pure False = @Bot.bot (PreCond ps) PreCond.instBot := by
+  induction ps
+  case pure => rfl
+  case arg σ s ih => ext; exact ih
   case except ε s ih => exact ih
 
 @[simp]
@@ -273,9 +296,9 @@ theorem PredTrans.map_apply {ps : PredShape} {α β : Type} (f : α → β) (x :
 --theorem PredTrans.pure_apply2 {ps : PredShape} {α : Type} (a : α) (Q : PostCond α ps) :
 --  (PredTrans.pure a).apply Q = Q.1 a := by rfl
 --
---@[simp]
---theorem PredTrans.bind_apply {ps : PredShape} {α β : Type} (x : PredTrans ps α) (f : α → PredTrans ps β) (Q : PostCond β ps) :
---  (Bind.bind x f).apply Q = x.apply (fun a => (f a).apply Q, Q.2) := by rfl
+@[simp]
+theorem PredTrans.bind_apply {ps : PredShape} {α β : Type} (trans : PostCond α ps → PreCond ps) (h : PredTrans.Mono trans) (f : α → PredTrans ps β) (Q : PostCond β ps) :
+  (PredTrans.mk trans h >>= f).apply Q = trans (fun a => (f a).apply Q, Q.2) := by rfl
 --
 --@[simp]
 --theorem PredTrans.bind_apply2 {ps : PredShape} {α β : Type} (x : PredTrans ps α) (f : α → PredTrans ps β) (Q : PostCond β ps) :
@@ -361,18 +384,33 @@ noncomputable def PredTrans.prePost {ps : PredShape} {α : Type} (P : PreCond ps
       simp only [PreCond.le_pure_pure]
       exact (le_trans · h) }
 
-theorem PredTrans.prePost_imp {ps : PredShape} {α : Type} {P : PreCond ps} {Q : PostCond α ps} :
+@[simp]
+noncomputable def PredTrans.post {ps : PredShape} {α : Type} (Q : PostCond α ps) : PredTrans ps α :=
+  { apply := fun Q' => PreCond.pure (Q ≤ Q'), mono := by
+      intro Q₁ Q₂ h
+      simp only [apply, le_inf_iff, inf_le_left, true_and]
+      simp only [PreCond.le_pure_pure]
+      exact (le_trans · h) }
+
+theorem PredTrans.prePost_apply {ps : PredShape} {α : Type} {P : PreCond ps} {Q : PostCond α ps} :
   P ≤ (PredTrans.prePost P Q).apply Q := by simp[PredTrans.prePost]
 
-theorem PredTrans.le_prePost {ps : PredShape} {α : Type} {P : PreCond ps} {Q : PostCond α ps} {x : PredTrans ps α}
-  (h : P ≤ x.apply Q) :
-  x ≤ PredTrans.prePost P Q := by
-    simp[PredTrans.prePost]
-    intro Q₂
-    simp
-    apply PreCond.imp_pure_extract_r
-    intro hq
-    exact le_trans h (x.mono Q Q₂ hq)
+theorem PredTrans.prePost_apply_conseq {ps : PredShape} {α : Type} {P : PreCond ps} {Q Q' : PostCond α ps}
+  (hpost : Q ≤ Q') :
+  P ≤ (PredTrans.prePost P Q).apply Q' := le_trans PredTrans.prePost_apply ((PredTrans.prePost P Q).mono _ _ hpost)
+
+theorem PredTrans.le_prePost {ps : PredShape} {α : Type} {P : PreCond ps} {Q : PostCond α ps} {x : PredTrans ps α} :
+  P ≤ x.apply Q ↔ x ≤ PredTrans.prePost P Q := by
+    constructor
+    · intro h;
+      simp[PredTrans.prePost]
+      intro Q₂
+      simp
+      apply PreCond.imp_pure_extract_r
+      intro hq
+      exact le_trans h (x.mono Q Q₂ hq)
+    · intro h
+      apply le_trans PredTrans.prePost_apply (h Q)
 
 def PredTrans.runState {ps : PredShape} {α} (x : PredTrans (.arg σ ps) α) (s : σ) : PredTrans ps (α × σ) :=
   { apply Q := x.apply (fun r s' => Q.1 (r, s'), Q.2) s,

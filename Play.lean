@@ -1,6 +1,90 @@
 import Lean
 import Mathlib
-import MPL
+
+
+
+
+
+
+
+namespace Test
+
+inductive PredShape : Type 1 where
+  | pure : PredShape
+  | arg : (σ : Type) → PredShape → PredShape
+  | except : (ε : Type) → PredShape → PredShape
+
+@[reducible]
+def PreCond : PredShape → Type
+  | .pure => Prop
+  | .arg σ s => σ → PreCond s
+  | .except _ s => PreCond s
+
+@[reducible]
+def FailConds : PredShape → Type
+  | .pure => Unit
+  | .arg _ s => FailConds s
+  | .except ε s => (ε → PreCond s) × FailConds s
+
+-- Translate a predicate shape to a multi-barreled postcondition
+@[reducible]
+def PostCond (α : Type) (s : PredShape) : Type :=
+  (α → PreCond s) × FailConds s
+
+instance : CompleteLattice (PreCond ps) := sorry
+instance : CompleteLattice (FailConds ps) := sorry
+instance : CompleteLattice (PostCond α ps) := sorry
+
+section PostCondExamples
+open PredShape
+
+variable (α ρ ε ε₁ ε₂ σ σ₁ σ₂ : Type)
+#reduce (types:=true) PreCond (except ε₂ (arg σ₂ (except ε₁ (arg σ₁ pure))))
+#reduce (types:=true) PostCond α (except ε₂ (arg σ₂ (except ε₁ (arg σ₁ pure))))
+example : PostCond α (arg ρ pure) = ((α → ρ → Prop) × Unit) := rfl
+example : PostCond α (except ε pure) = ((α → Prop) × (ε → Prop) × Unit) := rfl
+example : PostCond α (arg σ (except ε pure)) = ((α → σ → Prop) × (ε → Prop) × Unit) := rfl
+example : PostCond α (except ε (arg σ₁ pure)) = ((α → σ₁ → Prop) × (ε → σ₁ → Prop) × Unit) := rfl
+example : PostCond α (arg σ₂ (except ε (arg σ₁ pure))) = ((α → σ₂ → σ₁ → Prop) × (ε → σ₁ → Prop) × Unit) := rfl
+example : PostCond α (except ε₂ (arg σ₂ (except ε₁ (arg σ₁ pure)))) = ((α → σ₂ → σ₁ → Prop) × (ε₂ → σ₂ → σ₁ → Prop) × (ε₁ → σ₁ → Prop) × Unit) := rfl
+
+end PostCondExamples
+
+
+structure PredTrans (ps : PredShape) (α : Type) : Type where
+  apply : PostCond α ps → PreCond ps
+instance : Monad (PredTrans ps) := sorry
+
+class WP (m : Type → Type) (ps : outParam PredShape) where
+  wp {α} (x : m α) : PredTrans ps α
+  wp_mono {α} (x : m α) (Q₁ Q₂ : PostCond α ps) :
+    Q₁ ≤ Q₂ → (wp x).apply Q₁ ≤ (wp x).apply Q₂
+open WP
+
+class LawfulWP (m : Type → Type) (ps : outParam PredShape) [Monad m] [WP m ps] where
+  wp_pure {α} (a : α) :
+    wp (m:=m) (pure a) = pure a
+  wp_bind {α β} (x : m α) (f : α → m β) :
+    wp (do let a ← x; f a) = do let a ← wp x; wp (f a)
+
+def triple {m : Type → Type} {ps : PredShape} [WP m ps] {α} (x : m α) (P : PreCond ps) (Q : PostCond α ps) : Prop :=
+  P ≤ (wp x).apply Q
+
+notation:lead "⦃" P "⦄ " x:lead " ⦃" Q "⦄" =>
+  triple x P Q
+notation:lead "⦃" P "⦄ " x:lead " ⦃⇓" v " | " Q "⦄" =>
+  ⦃P⦄ x ⦃PostCond.total fun v => Q⦄
+notation:lead "⟦" e "⟧" =>
+  WP.wp e
+
+end Test
+
+
+
+
+
+
+
 
 open MPL
 
@@ -36,6 +120,10 @@ theorem test_ex :
     fun e s => e = 42 ∧ s = 4,
     ())⦄ := by
   xwp s hs
+--  apply PredTrans.bind_mono (ps := .except Nat (.arg Nat .pure))
+--  apply wp_apply_triple
+--  apply Specs.forIn_list
+
   xapp (Specs.forIn_list (fun (xs, r) s => r ≤ 4 ∧ s = 4 ∧ r + xs.sum > 4, fun e s => e = 42 ∧ s = 4, ()) ?step)
   case step =>
     intro hd tl x
@@ -77,17 +165,20 @@ theorem test_rec :
   ⦃PreCond.pure True⦄
   recfun n
   ⦃⇓r | fun s => r = s * n⦄ := by
-  xwp
-  intro s h
-  revert h s
   induction n with
-  | zero => simp[recfun]
-  | succ n ih => simp[recfun]; xapp (ih : ⦃· = s⦄ recfun n ⦃⇓r | fun s => r = s * n⦄)
-    simp
-    rw[wp_recfun]
-    simp +arith
-    rw[ih]
-    simp +arith
+  | zero => sorry
+  | succ n ih =>
+    xwp
+    intro s h
+    revert h s
+    induction n with
+    | zero => simp[recfun]
+    | succ n ih => simp[recfun]; xapp (ih : ⦃· = s⦄ recfun n ⦃⇓r | fun s => r = s * n⦄)
+      simp
+      rw[wp_recfun]
+      simp +arith
+      rw[ih]
+      simp +arith
 
 -- TBD: Figure out while loops
 theorem test_4 : ⦃True⦄ (do let mut x := 0; let mut i := 0; while i < 4 do { x := x + i; i := i + 1 }; pure (f := Idd) (); return x) ⦃⇓r | r = 6⦄ := by
