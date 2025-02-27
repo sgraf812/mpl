@@ -10,6 +10,7 @@ defaultTargets = ["Test"]
 [[require]]
 name = "mathlib"
 scope = "leanprover-community"
+rev = "4.17.0-rc1"
 
 [[require]]
 name = "batteries"
