@@ -1,7 +1,7 @@
-name = "play"
+name = "mpl"
 version = "0.1.0"
 keywords = ["math"]
-defaultTargets = ["Play"]
+defaultTargets = ["Test"]
 
 [leanOptions]
 #pp.unicode.fun = true # pretty-prints `fun a ↦ b`
