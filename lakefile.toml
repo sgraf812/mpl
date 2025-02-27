@@ -11,5 +11,9 @@ defaultTargets = ["Play"]
 name = "mathlib"
 scope = "leanprover-community"
 
+[[require]]
+name = "batteries"
+scope = "leanprover-community"
+
 [[lean_lib]]
 name = "MPL"
