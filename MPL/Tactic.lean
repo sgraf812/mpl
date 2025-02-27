@@ -16,11 +16,15 @@ theorem xwp_lemma {m : Type → Type} [WP m ps] {α} {x : m α} {P : PreCond ps}
 
 theorem wp_apply_triple {m : Type → Type} {ps : PredShape} [WP m ps] {α} {x : m α} {P : PreCond ps} {Q : PostCond α ps}
   (h : ⦃P⦄ x ⦃Q⦄) :
-  wp x ≤ PredTrans.prePost P Q := PredTrans.le_prePost.mp h
+  P ≤ wp⟦x⟧.apply Q := h
 
-theorem wp_apply_triple2 {m : Type → Type} {ps : PredShape} [WP m ps] {α} {x : m α} {P : PreCond ps} {Q Q' : PostCond α ps}
+theorem wp_apply_triple_conseq {m : Type → Type} {ps : PredShape} [WP m ps] {α} {x : m α} {P : PreCond ps} {Q Q' : PostCond α ps}
   (h : ⦃P⦄ x ⦃Q⦄) (hpost : Q ≤ Q') :
   P ≤ wp⟦x⟧.apply Q' := le_trans h (wp⟦x⟧.mono _ _ hpost)
+
+theorem wp_apply_triple_pointfree {m : Type → Type} {ps : PredShape} [WP m ps] {α} {x : m α} {P : PreCond ps} {Q : PostCond α ps}
+  (h : ⦃P⦄ x ⦃Q⦄) :
+  wp x ≤ PredTrans.prePost P Q := PredTrans.le_prePost.mp h
 
 theorem rw_wp {m : Type → Type} {ps : PredShape} [WP m ps] {α} {x : m α} {t : PredTrans ps α}
   (h : wp x = t): wp x ≤ t := h ▸ le_rfl
@@ -132,10 +136,16 @@ def xapp_no_xbind (goal : MVarId) (spec : Option (TSyntax `term)) : TacticM Unit
 --      dbg_trace s!"spec_hole type: {← inferType spec_hole}"
 --      let wp_apply_triple_app ← mkAppM ``wp_apply_triple #[spec_hole]
   -- dbg_trace s!"goal: {tgt}"
-  let triple_goal::main_goal::pre_goal::gs ← liftMetaM <| goal.apply (mkApp2 (mkConst ``wp_apply_triple2) m ps) | failure
-  main_goal.setTag main_tag -- this is going to be the main goal after applying the triple
+--  try
+--    let triple_goal::main_goal::gs ← goal.apply (mkApp2 (mkConst ``wp_apply_triple) m ps) | failure
+--    main_goal.setTag main_tag -- this is going to be the main goal after applying the triple
+--    pushGoals (main_goal::gs)
+--    apply_spec triple_goal -- first try without generalizing the postcondition
+--  catch _ =>
+  let triple_goal::post_goal::pre_goal::gs ← goal.apply (mkApp2 (mkConst ``wp_apply_triple_conseq) m ps) | failure
+  post_goal.setTag main_tag -- this is going to be the main goal after applying the triple
   pre_goal.setTag `pre
-  pushGoals (pre_goal::main_goal::gs)
+  pushGoals (pre_goal::post_goal::gs)
   let triple_ty ← instantiateMVars (← triple_goal.getDecl).type
   if let some spec := spec then
     -- dbg_trace s!"spec: {spec}"
@@ -157,10 +167,11 @@ def xapp_no_xbind (goal : MVarId) (spec : Option (TSyntax `term)) : TacticM Unit
         pruneSolvedGoals
     else
       throwError s!"not an application of a constant: {x}"
+  try let _ ← post_goal.apply (mkConst ``le_refl [.zero]) catch _ => pure ()
 
 syntax "xapp_no_xbind" (ppSpace colGt term)? : tactic
 
-elab "xapp_no_xbind" spec:term : tactic => withMainContext do
+elab "xapp_no_xbind" spec:optional(term) : tactic => withMainContext do
   xapp_no_xbind (← getMainGoal) spec
 
 syntax "xapp_no_simp" (ppSpace colGt term)? : tactic
@@ -168,7 +179,9 @@ syntax "xapp_no_simp" (ppSpace colGt term)? : tactic
 -- or: xspec
 syntax "xapp" (ppSpace colGt term)? : tactic
 macro_rules
+  | `(tactic| xapp_no_simp)       => `(tactic| ((try xbind); xapp_no_xbind))
   | `(tactic| xapp_no_simp $spec) => `(tactic| ((try xbind); xapp_no_xbind $spec))
+  | `(tactic| xapp)               => `(tactic| xapp_no_simp <;> try simp only [gt_iff_lt, Prod.mk_le_mk, le_refl, and_true])
   | `(tactic| xapp $spec)         => `(tactic| xapp_no_simp $spec <;> try simp only [gt_iff_lt, Prod.mk_le_mk, le_refl, and_true])
 
 macro "sgrind" : tactic => `(tactic| ((try simp +contextual); grind))

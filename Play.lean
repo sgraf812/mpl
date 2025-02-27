@@ -4,26 +4,25 @@ import MPL
 
 open MPL
 
-section LawfulMonadState
-
-class LawfulMonadState (σ : semiOutParam (Type u)) (m : Type u → Type v) [Monad m] [LawfulMonad m] [MonadStateOf σ m] where
-  get_set : (do let s ← get; set s) = pure (f := m) ⟨⟩
-  set_get {k : σ → m β} : (do set s₁; let s₂ ← get; k s₂) = (do set s₁; k s₁)
-  set_set {s₁ s₂ : σ} : (do set s₁; set s₂) = set (m := m) s₂
-
-theorem LawfulMonadState.set_get_pure [Monad m] [LawfulMonad m] [MonadStateOf σ m] [LawfulMonadState σ m] {s : σ} :
-  (do set s; get) = (do set (m := m) s; pure s) := by
-    calc (do set s; get)
-      _ = (do set s; let s' ← get; pure s') := by simp
-      _ = (do set s; pure s) := by rw [LawfulMonadState.set_get]
-attribute [simp] LawfulMonadState.get_set LawfulMonadState.set_get LawfulMonadState.set_set LawfulMonadState.set_get_pure
-
-instance [Monad m] [LawfulMonad m] : LawfulMonadState σ (StateT σ m) where
-  get_set := by ext s; simp
-  set_get := by intros; ext s; simp
-  set_set := by intros; ext s; simp
-
-end LawfulMonadState
+theorem test_3 :
+  ⦃True⦄
+  do
+    let mut x := 0
+    for i in [1:5] do
+      x := x + i
+    pure (f := Idd) x
+  ⦃⇓r | r < 30⦄ := by
+  intro _
+  xwp
+  xapp (Specs.forIn_list (PostCond.total fun (xs, r) => (∀ x, x ∈ xs → x ≤ 5) ∧ r + xs.length * 5 ≤ 25) ?step)
+  case pre => sgrind -- (try simp); grind
+  case step =>
+    intro hd tl b
+    xwp
+    -- grind -- does not work yet... Maybe in 4.17
+    simp +contextual
+    omega
+  sgrind
 
 theorem test_ex :
   ⦃fun s => s = 4⦄
@@ -52,19 +51,6 @@ theorem test_ex :
     · grind -- simp[hinv, h]
     · simp only [PredTrans.pure_apply]; grind -- omega
   simp only [List.sum_nil, add_zero]
-  sgrind
-
-theorem test_3 : ⦃True⦄ (do let mut x := 0; for i in [1:5] do { x := x + i }; pure (f := Idd) (); return x) ⦃⇓r | r < 30⦄ := by
-  intro _
-  xwp
-  xapp (Specs.forIn_list (PostCond.total fun (xs, r) => (∀ x, x ∈ xs → x ≤ 5) ∧ r + xs.length * 5 ≤ 25) ?step)
-  case pre => sgrind
-  case step =>
-    intro hd tl b
-    xwp
-    -- grind -- does not work yet... Maybe in 4.17
-    simp +contextual
-    omega
   sgrind
 
 section UserStory1
@@ -178,16 +164,16 @@ def program (n : Nat) (k : Nat) : IO Nat := do
 axiom IO.rand_spec {n : Nat} : ⦃True⦄ (IO.rand 0 n : IO Nat) ⦃⇓r | r < n⦄
 
 /-- The result has the same parity as the input. -/
+@[spec]
 theorem addRandomEvens_spec (n k) : ⦃True⦄ (addRandomEvens n k) ⦃⇓r | r % 2 = k % 2⦄ := by
   unfold addRandomEvens -- TODO: integrate into xwp or xstart, make it an option
   xwp
   intro h
-  xapp (Specs.foldlM_list (PostCond.total fun (xs, r) => r % 2 = k % 2) ?step)
-  case step =>
-    intro hd tl b hinv
-    xwp
-    xapp IO.rand_spec
-    sgrind
+  xapp
+  intro hd b hinv
+  xwp
+  xapp IO.rand_spec
+  sgrind -- (try simp); grind
 
 /-- Since we're adding even numbers to our number twice, and summing,
 the entire result is even. -/
@@ -196,7 +182,7 @@ theorem program_spec (n k) : ⦃True⦄ program n k ⦃⇓r | r % 2 = 0⦄ := by
   xwp
   intro h
   xapp (addRandomEvens_spec n k); intro r₁ h₁
-  xapp (addRandomEvens_spec n k); intro r₂ h₂
+  xapp /- registered spec is taken -/; intro r₂ h₂
   -- grind -- can't do it; check after 4.17 release
   omega
 
