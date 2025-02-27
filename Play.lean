@@ -169,7 +169,7 @@ theorem addRandomEvens_spec (n k) : ⦃True⦄ (addRandomEvens n k) ⦃⇓r | r 
   unfold addRandomEvens -- TODO: integrate into xwp or xstart, make it an option
   xwp
   intro h
-  xapp
+  xapp -- Specs.foldlM_list_const_inv -- is the one that is registered
   intro hd b hinv
   xwp
   xapp IO.rand_spec
