@@ -23,11 +23,17 @@ export WP (wp wp_dite wp_ite)
 end MPL
 open MPL
 
+instance Id.instWP : WP Id .pure where
+  wp x := PredTrans.pure x.run
+
 instance Idd.instWP : WP Idd .pure where
   wp x := PredTrans.pure x.run
 
 theorem Idd.by_wp {prog : Idd α} (P : α → Prop) :
   (wp prog).apply (PostCond.total P) → P (Idd.run prog) := id
+
+theorem Id.by_wp {prog : Id α} (P : α → Prop) :
+  (wp prog).apply (PostCond.total P) → P (Id.run prog) := id
 
 instance StateT.instWP [Monad m] [WP m ps] : WP (StateT σ m) (.arg σ ps) where
   wp x :=

@@ -1,90 +1,6 @@
 import Lean
 import Mathlib
-
-
-
-
-
-
-
-namespace Test
-
-inductive PredShape : Type 1 where
-  | pure : PredShape
-  | arg : (σ : Type) → PredShape → PredShape
-  | except : (ε : Type) → PredShape → PredShape
-
-@[reducible]
-def PreCond : PredShape → Type
-  | .pure => Prop
-  | .arg σ s => σ → PreCond s
-  | .except _ s => PreCond s
-
-@[reducible]
-def FailConds : PredShape → Type
-  | .pure => Unit
-  | .arg _ s => FailConds s
-  | .except ε s => (ε → PreCond s) × FailConds s
-
--- Translate a predicate shape to a multi-barreled postcondition
-@[reducible]
-def PostCond (α : Type) (s : PredShape) : Type :=
-  (α → PreCond s) × FailConds s
-
-instance : CompleteLattice (PreCond ps) := sorry
-instance : CompleteLattice (FailConds ps) := sorry
-instance : CompleteLattice (PostCond α ps) := sorry
-
-section PostCondExamples
-open PredShape
-
-variable (α ρ ε ε₁ ε₂ σ σ₁ σ₂ : Type)
-#reduce (types:=true) PreCond (except ε₂ (arg σ₂ (except ε₁ (arg σ₁ pure))))
-#reduce (types:=true) PostCond α (except ε₂ (arg σ₂ (except ε₁ (arg σ₁ pure))))
-example : PostCond α (arg ρ pure) = ((α → ρ → Prop) × Unit) := rfl
-example : PostCond α (except ε pure) = ((α → Prop) × (ε → Prop) × Unit) := rfl
-example : PostCond α (arg σ (except ε pure)) = ((α → σ → Prop) × (ε → Prop) × Unit) := rfl
-example : PostCond α (except ε (arg σ₁ pure)) = ((α → σ₁ → Prop) × (ε → σ₁ → Prop) × Unit) := rfl
-example : PostCond α (arg σ₂ (except ε (arg σ₁ pure))) = ((α → σ₂ → σ₁ → Prop) × (ε → σ₁ → Prop) × Unit) := rfl
-example : PostCond α (except ε₂ (arg σ₂ (except ε₁ (arg σ₁ pure)))) = ((α → σ₂ → σ₁ → Prop) × (ε₂ → σ₂ → σ₁ → Prop) × (ε₁ → σ₁ → Prop) × Unit) := rfl
-
-end PostCondExamples
-
-
-structure PredTrans (ps : PredShape) (α : Type) : Type where
-  apply : PostCond α ps → PreCond ps
-instance : Monad (PredTrans ps) := sorry
-
-class WP (m : Type → Type) (ps : outParam PredShape) where
-  wp {α} (x : m α) : PredTrans ps α
-  wp_mono {α} (x : m α) (Q₁ Q₂ : PostCond α ps) :
-    Q₁ ≤ Q₂ → (wp x).apply Q₁ ≤ (wp x).apply Q₂
-open WP
-
-class LawfulWP (m : Type → Type) (ps : outParam PredShape) [Monad m] [WP m ps] where
-  wp_pure {α} (a : α) :
-    wp (m:=m) (pure a) = pure a
-  wp_bind {α β} (x : m α) (f : α → m β) :
-    wp (do let a ← x; f a) = do let a ← wp x; wp (f a)
-
-def triple {m : Type → Type} {ps : PredShape} [WP m ps] {α} (x : m α) (P : PreCond ps) (Q : PostCond α ps) : Prop :=
-  P ≤ (wp x).apply Q
-
-notation:lead "⦃" P "⦄ " x:lead " ⦃" Q "⦄" =>
-  triple x P Q
-notation:lead "⦃" P "⦄ " x:lead " ⦃⇓" v " | " Q "⦄" =>
-  ⦃P⦄ x ⦃PostCond.total fun v => Q⦄
-notation:lead "⟦" e "⟧" =>
-  WP.wp e
-
-end Test
-
-
-
-
-
-
-
+import MPL
 
 open MPL
 
@@ -111,91 +27,45 @@ end LawfulMonadState
 
 theorem test_ex :
   ⦃fun s => s = 4⦄
-  (do let mut x := 0
-      let s ← get
-      for i in [1:s] do { x := x + i; if x > 4 then throw 42 }
-      (set 1 : ExceptT Nat (StateT Nat Idd) PUnit)
-      return x)
+  do
+    let mut x := 0
+    let s ← get
+    for i in [1:s] do { x := x + i; if x > 4 then throw 42 }
+    (set 1 : ExceptT Nat (StateT Nat Idd) PUnit)
+    return x
   ⦃(fun r s => False,
     fun e s => e = 42 ∧ s = 4,
     ())⦄ := by
-  xwp s hs
---  apply PredTrans.bind_mono (ps := .except Nat (.arg Nat .pure))
---  apply wp_apply_triple
---  apply Specs.forIn_list
-
+  xstart
+  intro s hs
+  xwp
+  -- xbind -- optional
   xapp (Specs.forIn_list (fun (xs, r) s => r ≤ 4 ∧ s = 4 ∧ r + xs.sum > 4, fun e s => e = 42 ∧ s = 4, ()) ?step)
+  case pre => simp only [hs]; conv in (List.sum _) => { whnf }; simp
   case step =>
-    intro hd tl x
-    xwp s hinv
+    intro hd tl b
+    xstart
+    xwp
+    simp only [List.sum_cons]
+    intro b' hinv
     split
-    · simp[hinv]
-    · simp only [PredTrans.pure_apply]; omega
-  dsimp
-  constructor
-  · subst hs; conv in (List.sum _) => { whnf }; simp
-  · simp; intro _ _ h; omega
+    · grind -- simp[hinv, h]
+    · simp only [PredTrans.pure_apply]; grind -- omega
+  simp only [List.sum_nil, add_zero]
+  sgrind
 
 theorem test_3 : ⦃True⦄ (do let mut x := 0; for i in [1:5] do { x := x + i }; pure (f := Idd) (); return x) ⦃⇓r | r < 30⦄ := by
+  intro _
   xwp
   xapp (Specs.forIn_list (PostCond.total fun (xs, r) => (∀ x, x ∈ xs → x ≤ 5) ∧ r + xs.length * 5 ≤ 25) ?step)
+  case pre => sgrind
   case step =>
-    simp
     intro hd tl b
-    xwp hinv _ _
-    omega
-  simp
-  constructor <;> (try (repeat intro); omega)
-
-def recfun : Nat → StateT Nat Idd Nat
-| 0 => pure 0
-| n+1 => do return (← get) + (← recfun n)
-
-@[simp]
-def recfun_spec : Nat → PredTrans (.arg Nat .pure) Nat
-| 0 => pure 0
-| n+1 => do return (← WP.wp (get : StateT Nat Idd Nat)) + (← recfun_spec n)
-
-theorem wp_recfun : WP.wp (recfun n) = recfun_spec n := by
-  induction n with
-  | zero => simp [recfun, recfun_spec]
-  | succ n ih => simp [recfun, recfun_spec, ih]
-
-theorem test_rec :
-  ⦃PreCond.pure True⦄
-  recfun n
-  ⦃⇓r | fun s => r = s * n⦄ := by
-  induction n with
-  | zero => sorry
-  | succ n ih =>
     xwp
-    intro s h
-    revert h s
-    induction n with
-    | zero => simp[recfun]
-    | succ n ih => simp[recfun]; xapp (ih : ⦃· = s⦄ recfun n ⦃⇓r | fun s => r = s * n⦄)
-      simp
-      rw[wp_recfun]
-      simp +arith
-      rw[ih]
-      simp +arith
-
--- TBD: Figure out while loops
-theorem test_4 : ⦃True⦄ (do let mut x := 0; let mut i := 0; while i < 4 do { x := x + i; i := i + 1 }; pure (f := Idd) (); return x) ⦃⇓r | r = 6⦄ := by
-  simp
-  sorry
-
-theorem test_1 : ⦃True⦄ (do let mut id := 5; id := 3; pure (f := Idd) id) ⦃⇓r | r = 3⦄ := by
-  refine xwp_lemma ?_
-  simp
-
-theorem test_2 : ⦃True⦄ (do let mut x := 5; if x > 1 then { x := 1 } else { x := x }; pure (f:=Idd) x) ⦃⇓r | r = 1⦄ := by
-  refine xwp_lemma ?_
-  simp
-
-theorem test_2_2 : ⦃True⦄ (do let mut id := 5; id := 3; pure (f := Idd) id) ⦃⇓r | r < 20⦄ := by
-  refine xwp_lemma ?_
-  simp
+    -- grind -- does not work yet... Maybe in 4.17
+    simp +contextual
+    omega
+  sgrind
 
 section UserStory1
 
@@ -220,21 +90,14 @@ noncomputable def greedySpanner {n:ℕ }(G : FinSimpleGraph n) (t :ℕ ): FinSim
     if (2*t -1) < dist f_H e then f_H := AddEdge f_H e
   return SimpleGraph.fromRel f_H
 
-@[simp]
-theorem ite_extrude_yield {c : Prop} [Decidable c] {x y : α} :
-  (if c then pure (.yield x) else pure (.yield y)) = ForInStep.yield <$> if c then pure x else pure (f := Idd) y := by
-  split <;> simp
-
 lemma correctnessOfGreedySpanner {n:ℕ }(G : FinSimpleGraph n)(t :ℕ ) (u v : Fin n) :
   (greedySpanner G t).dist u v ≤ 2*t-1 := by
     apply Idd.by_wp (fun r => SimpleGraph.dist r u v ≤ 2*t-1)
-    simp
-    apply wp_apply_triple (ps := .pure) (Specs.foldlM_list (PostCond.total fun (xs, f_H) => ∀ i j, f_H i j → 2*t-1 < _root_.dist f_H s(i,j)) ?hstep)
+    xwp
+    xapp (Specs.foldlM_list (PostCond.total fun (xs, f_H) => ∀ i j, f_H i j → 2*t-1 < _root_.dist f_H s(i,j)) ?hstep)
     case hstep =>
-      intro e es f_H
-      apply xwp_lemma
-      simp
-      intro hinv
+      intro e es f_H hinv
+      xwp
       if h : 2*t-1 < _root_.dist f_H e
       then
         simp[h]
@@ -280,20 +143,19 @@ theorem fib_spec_rec (h : n > 1) : fib_spec n = fib_spec (n-2) + fib_spec (n-1) 
 
 theorem fib_correct {n} : fib_impl n = fib_spec n := by
   apply Idd.by_wp (· = fib_spec n)
+  xwp
   if h : n = 0 then simp[h,fib_spec] else ?_
-  simp [h,fib_spec]
+  simp[h]
   xapp Specs.forIn_list ?inv ?step
   case inv => exact PostCond.total fun (xs, ⟨a, b⟩) => let i := n - xs.length; xs.length < n ∧ a = fib_spec (i-1) ∧ b = fib_spec i
+  case pre => simp +arith +decide [Nat.succ_le_of_lt, Nat.zero_lt_of_ne_zero h, Nat.sub_sub_eq_min]
   case step =>
-    intro hd tl ⟨a, b⟩
-    apply xwp_lemma
-    intro ⟨htl, ha, hb⟩
-    simp_all
+    intro hd tl ⟨a, b⟩ ⟨htl, ha, hb⟩
+    xwp
     use Nat.lt_of_succ_lt htl
-    simp_arith[Nat.succ_le_of_lt, Nat.zero_lt_of_ne_zero h, Nat.sub_sub_eq_min, Nat.sub_sub, Nat.lt_of_succ_lt] at *
+    simp_arith[Nat.succ_le_of_lt, Nat.zero_lt_of_ne_zero h, Nat.sub_sub_eq_min, Nat.sub_sub, Nat.lt_of_succ_lt, ha, hb] at *
     refine (fib_spec_rec ?_).symm
     simp_arith[Nat.le_sub_of_add_le' htl]
-  simp_arith [Nat.succ_le_of_lt, Nat.zero_lt_of_ne_zero h, Nat.sub_sub_eq_min]
   intro y
   simp
 
@@ -317,25 +179,25 @@ axiom IO.rand_spec {n : Nat} : ⦃True⦄ (IO.rand 0 n : IO Nat) ⦃⇓r | r < n
 
 /-- The result has the same parity as the input. -/
 theorem addRandomEvens_spec (n k) : ⦃True⦄ (addRandomEvens n k) ⦃⇓r | r % 2 = k % 2⦄ := by
-  apply xwp_lemma
-  simp[addRandomEvens]
+  unfold addRandomEvens -- TODO: integrate into xwp or xstart, make it an option
+  xwp
+  intro h
   xapp (Specs.foldlM_list (PostCond.total fun (xs, r) => r % 2 = k % 2) ?step)
   case step =>
-    intro hd tl b
-    xwp hinv
+    intro hd tl b hinv
+    xwp
     xapp IO.rand_spec
-    simp
-    intro _ _; trivial
-  simp
+    sgrind
 
 /-- Since we're adding even numbers to our number twice, and summing,
 the entire result is even. -/
 theorem program_spec (n k) : ⦃True⦄ program n k ⦃⇓r | r % 2 = 0⦄ := by
-  -- unfold program
-  simp[program] -- only [program, bind_pure_comp, Observation.bind_bind, Observation.map_map]
+  unfold program
   xwp
-  xapp (addRandomEvens_spec n k); simp; intro r₁ h₁
-  xapp (addRandomEvens_spec n k); simp; intro r₂ h₂
+  intro h
+  xapp (addRandomEvens_spec n k); intro r₁ h₁
+  xapp (addRandomEvens_spec n k); intro r₂ h₂
+  -- grind -- can't do it; check after 4.17 release
   omega
 
 theorem addRandomEvens_spec_old (n k) : SatisfiesM (fun r => r % 2 = k % 2) (addRandomEvens n k) := by

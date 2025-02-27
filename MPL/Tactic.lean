@@ -27,18 +27,24 @@ theorem rw_wp {m : Type → Type} {ps : PredShape} [WP m ps] {α} {x : m α} {t 
 
 macro "xstart" : tactic => `(tactic| (refine xwp_lemma ?_))
 
+@[simp]
+theorem ite_extrude_yield {c : Prop} [Decidable c] {x y : α} :
+  (if c then pure (.yield x) else pure (.yield y)) = ForInStep.yield <$> if c then pure x else pure (f := Idd) y := by
+  split <;> simp
+
 macro "xwp" : tactic =>
-  `(tactic| (try { xstart };
+  `(tactic| ((try xstart);
              simp +contextual only [
                wp_pure, wp_bind, wp_map, wp_seq, wp_ite, wp_dite, wp_monadLift,
-               pure_bind, bind_assoc, bind_pure_comp,
+               pure_bind, bind_assoc, bind_pure_comp, bind_pure, id_map',
                map_pure, ExceptT.map_throw,
                Std.Range.forIn_eq_forIn_range', Std.Range.size, Nat.div_one,  -- rewrite to forIn_list
+               ite_extrude_yield, List.forIn_yield_eq_foldlM, -- rewrite to foldlM
                PredTrans.dropFail, PredTrans.drop_fail_cond, -- TODO: Can we do this whole lifting business with fewer simp rules?
                MonadState.wp_get, MonadStateOf.wp_get, StateT.wp_get, PredTrans.get,
                MonadState.wp_set, MonadStateOf.wp_set, StateT.wp_set, PredTrans.set,
                ExceptT.wp_throw, PredTrans.throw,
-               PredTrans.bind_apply
+               PredTrans.pure_apply, PredTrans.bind_apply, PredTrans.map_apply --, PredTrans.seq_apply TODO
              ]))
 
 --syntax "xwp" notFollowedBy("|") (ppSpace colGt term:max)* : tactic
@@ -102,12 +108,14 @@ def xbind_tac (goal : MVarId) (wp : Expr) : TacticM Expr := withMainContext do
     return r
   | _ => throwError s!"xbind: Not a bind application {wp}"
 
-syntax "xbind" : tactic
+syntax "xbind_no_dsimp" : tactic
 
-elab "xbind" : tactic => withMainContext do
+elab "xbind_no_dsimp" : tactic => withMainContext do
   let (rw_goal, _user_goal, wp) ← focus_on_le_wp (← getMainGoal)
   let _wp ← xbind_tac rw_goal wp
   return
+
+macro "xbind" : tactic => `(tactic| (xbind_no_dsimp; (try dsimp)))
 
 def xapp_no_xbind (goal : MVarId) (spec : Option (TSyntax `term)) : TacticM Unit := withMainContext do
   let main_tag ← goal.getTag
@@ -123,7 +131,7 @@ def xapp_no_xbind (goal : MVarId) (spec : Option (TSyntax `term)) : TacticM Unit
 --      dbg_trace s!"spec_hole: {spec_hole}"
 --      dbg_trace s!"spec_hole type: {← inferType spec_hole}"
 --      let wp_apply_triple_app ← mkAppM ``wp_apply_triple #[spec_hole]
-  dbg_trace s!"goal: {tgt}"
+  -- dbg_trace s!"goal: {tgt}"
   let triple_goal::main_goal::pre_goal::gs ← liftMetaM <| goal.apply (mkApp2 (mkConst ``wp_apply_triple2) m ps) | failure
   main_goal.setTag main_tag -- this is going to be the main goal after applying the triple
   pre_goal.setTag `pre
@@ -132,7 +140,7 @@ def xapp_no_xbind (goal : MVarId) (spec : Option (TSyntax `term)) : TacticM Unit
   if let some spec := spec then
     -- dbg_trace s!"spec: {spec}"
     let spec ← elabTerm spec triple_ty
-    dbg_trace s!"spec: {spec}"
+    -- dbg_trace s!"spec: {spec}"
     let gs ← triple_goal.apply spec
     pushGoals gs
     pruneSolvedGoals
@@ -150,14 +158,20 @@ def xapp_no_xbind (goal : MVarId) (spec : Option (TSyntax `term)) : TacticM Unit
     else
       throwError s!"not an application of a constant: {x}"
 
-syntax "xapp_no_xbind" (ppSpace colGt term:max)? : tactic
+syntax "xapp_no_xbind" (ppSpace colGt term)? : tactic
 
 elab "xapp_no_xbind" spec:term : tactic => withMainContext do
   xapp_no_xbind (← getMainGoal) spec
 
+syntax "xapp_no_simp" (ppSpace colGt term)? : tactic
+
 -- or: xspec
-syntax "xapp" (ppSpace colGt term:max)? : tactic
-macro_rules | `(tactic| xapp $spec) => `(tactic| (try { xbind; }; xapp_no_xbind $spec))
+syntax "xapp" (ppSpace colGt term)? : tactic
+macro_rules
+  | `(tactic| xapp_no_simp $spec) => `(tactic| ((try xbind); xapp_no_xbind $spec))
+  | `(tactic| xapp $spec)         => `(tactic| xapp_no_simp $spec <;> try simp only [gt_iff_lt, Prod.mk_le_mk, le_refl, and_true])
+
+macro "sgrind" : tactic => `(tactic| ((try simp +contextual); grind))
 
 theorem test_ex :
   ⦃fun s => s = 4⦄
@@ -173,42 +187,19 @@ theorem test_ex :
   xstart
   intro s hs
   xwp
-  simp
-  xbind; dsimp
---  apply wp_apply_triple (ps:= .except Nat (.arg Nat .pure))
---  apply Specs.forIn_list (fun (xs, r) s => r ≤ 4 ∧ s = 4 ∧ r + xs.sum > 4, fun e s => e = 42 ∧ s = 4, ()) ?step
-  xapp_no_xbind (Specs.forIn_list (fun (xs, r) s => r ≤ 4 ∧ s = 4 ∧ r + xs.sum > 4, fun e s => e = 42 ∧ s = 4, ()) ?step)
+  -- xbind -- optional
+  xapp (Specs.forIn_list (fun (xs, r) s => r ≤ 4 ∧ s = 4 ∧ r + xs.sum > 4, fun e s => e = 42 ∧ s = 4, ()) ?step)
   case pre => simp only [hs]; conv in (List.sum _) => { whnf }; simp
   case step =>
     intro hd tl b
     xstart
     xwp
-    simp
+    simp only [List.sum_cons]
     intro b' hinv
     split
-    next h => simp[hinv, h]
-    next h => simp only [PredTrans.pure_apply, h]; omega
-  simp
-  intro _ _ h
-  omega
-
-theorem test_ex_2 :
-  ⦃fun s => s = 4⦄
-  do
-    let mut x := 0
-    let s ← get
-    for i in [1:s] do { x := x + i; if x > 4 then set 42 }
-    (set 1 : StateT Nat Idd PUnit)
-    return x
-  ⦃(fun r s => r = 42 ∧ s = 4,
-    ())⦄ := by
-  xwp
-  simp
-  apply intro_state_triple _ _ _; intro s
-  dsimp
-  apply triple_extract_persistent_true; intro h
-  dsimp
-  intro s
-
+    · grind -- simp[hinv, h]
+    · simp only [PredTrans.pure_apply]; grind -- omega
+  simp only [List.sum_nil, add_zero]
+  grind
 
 end MPL
