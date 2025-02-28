@@ -44,6 +44,10 @@ instance Idd.instLawfulWP : WPMonad Idd .pure where
   wp_pure a := by simp only [wp, PredTrans.pure, Pure.pure, Idd.pure]
   wp_bind x f := by simp only [wp, PredTrans.pure, Bind.bind, Idd.bind, PredTrans.bind]
 
+instance Id.instLawfulWP : WPMonad Id .pure where
+  wp_pure a := by simp only [wp, PredTrans.pure, Pure.pure, Id.run]
+  wp_bind x f := by simp only [wp, PredTrans.pure, Bind.bind, Id.run, PredTrans.bind]
+
 instance StateT.instLawfulWP [Monad m] [WP m ps] [WPMonad m ps] : WPMonad (StateT σ m) (.arg σ ps) where
   wp_pure a := by simp [wp, PredTrans.pure, pure, StateT.pure, wp_pure]
   wp_bind x f := by simp [wp, PredTrans.pure, Bind.bind, bind, PredTrans.bind, StateT.bind]

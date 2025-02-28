@@ -1,3 +1,8 @@
+-- This type exists purely because of the following annoying simp rules:
+#check Id.map_eq
+#check Id.bind_eq
+#check Id.pure_eq
+
 @[ext]
 structure Idd (α : Type u) where
   run : α

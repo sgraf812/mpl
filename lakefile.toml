@@ -1,7 +1,7 @@
 name = "mpl"
 version = "0.1.0"
 keywords = ["math"]
-defaultTargets = ["Test"]
+defaultTargets = ["mpl"]
 
 [leanOptions]
 #pp.unicode.fun = true # pretty-prints `fun a ↦ b`
@@ -10,7 +10,6 @@ defaultTargets = ["Test"]
 [[require]]
 name = "mathlib"
 scope = "leanprover-community"
-rev = "4.17.0-rc1"
 
 [[require]]
 name = "batteries"
@@ -18,3 +17,4 @@ scope = "leanprover-community"
 
 [[lean_lib]]
 name = "MPL"
+roots = ["MPL", "Test"]
