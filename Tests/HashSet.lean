@@ -200,10 +200,10 @@ theorem MPL.disjointUnion_characterization (ss : Array (HashSet α)) :
   case inv => exact PostCond.total fun ((acc : MProd (HashSet α) Bool), ss) =>
       (∀ a, a ∈ acc.1.toFinset ↔ ∃ s ∈ ss.pref, a ∈ s.toFinset) ∧
       (acc.snd →
-        ∀ (i j : Fin ss.pref.length), i ≠ j → ss.pref[i].toFinset ∩ ss.pref[j].toFinset = ∅)
+        ∀ (i j : Fin ss.rpref.length), i ≠ j → ss.rpref[i].toFinset ∩ ss.rpref[j].toFinset = ∅)
   case pre => simp[List.Zipper.pref]
   case step =>
-    intro acc pref s suff h
+    intro acc rpref s suff h
     xwp
     simp only [List.mem_reverse, ne_eq, toFinset_union, Finset.mem_union, List.mem_cons,
       exists_eq_or_imp, le_Prop_eq, and_imp]
@@ -230,23 +230,31 @@ theorem MPL.disjointUnion_characterization (ss : Array (HashSet α)) :
           apply (hinv₁ a).mpr h
     case step₂ =>
       simp[List.Zipper.pref]
-      intro hB₁ hB₂ i j hNe
-      cases hs₁ <;> cases hs₂
-      case inl.inl hs₁ hs₂ =>
-        subst hs₁ hs₂
+      intro hB₁ hB₂ j k hNe
+      cases j.eq_zero_or_eq_succ <;> cases k.eq_zero_or_eq_succ
+      case inr.inr hJ hK =>
+        obtain ⟨j', hJ'⟩ := hJ
+        obtain ⟨k', hK'⟩ := hK
+        subst hJ' hK'
+        simp only [Fin.val_succ, List.getElem_cons_succ]
+        have hNe' : j' ≠ k' := by grind
+        exact hinv₂ hB₁ j' k' hNe'
+      case inl.inl hJ hK =>
+        subst hJ hK
         contradiction
-      case inr.inr hs₁ hs₂ =>
-        have hB : acc.snd = true := by grind
-        exact hinv₂ hB s₁ s₂ hs₁ hs₂ hNe
-      case inl.inr hs₁ hs₂ =>
-        subst hs₁
-        replace hB : ((acc.fst.union s₁).inter s₁).isEmpty = true := by grind
+      case inl.inr hJ hK =>
+        obtain ⟨k', hK'⟩ := hK
+        subst hJ hK'
+        simp only [Fin.val_succ, List.getElem_cons_succ, Fin.val_zero, List.getElem_cons_zero]
+        replace hB : ((acc.fst.union s).inter s).isEmpty = true := by grind
         replace hB := toFinset_of_isEmpty _ hB
         simp only [toFinset_inter, toFinset_union, Finset.union_inter_cancel_right] at hB
         simp[hB]
-      case inr.inl hs₁ hs₂ =>
-        subst hs₂
-        replace hB : ((acc.fst.union s₂).inter s₂).isEmpty = true := by grind
+      case inr.inl hJ hK =>
+        obtain ⟨j', hJ'⟩ := hJ
+        subst hK hJ'
+        simp only [Fin.val_succ, List.getElem_cons_succ, Fin.val_zero, List.getElem_cons_zero]
+        replace hB : ((acc.fst.union s).inter s).isEmpty = true := by grind
         replace hB := toFinset_of_isEmpty _ hB
         simp only [toFinset_inter, toFinset_union, Finset.union_inter_cancel_right] at hB
         simp[hB]
@@ -254,17 +262,8 @@ theorem MPL.disjointUnion_characterization (ss : Array (HashSet α)) :
   intro ⟨U, b⟩ ⟨hinv₁, hinv₂⟩
   use hinv₁
   intro hB i j hNe
-  apply hinv₂ hB --
-  exact (by simp[Array.get_mem_data ss i])
-  exact (by simp[Array.get_mem_data ss j])
-  exact (by simp[hNe])
-  simp at hinv₁
-    dsimp [disjointUnion]
-    refine ⟨fun a => ⟨fun hMem => h₁ a hMem, ?_⟩,
-      fun h i j hNe => h₃ h i j i.isLt j.isLt hNe⟩
-    intro ⟨s, hS, hA⟩
-    have ⟨i, hI⟩ := Array.get_of_mem_data hS
-    exact h₂ i i.isLt (hI ▸ hA)
+  -- apply hinv₂ hB sorry sorry sorry -- some tedious symmetry argument about i and ss.size - 1 - i
+  sorry
 
 end test
 

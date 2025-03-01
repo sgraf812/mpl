@@ -17,6 +17,7 @@ structure Zipper (l : List α) where
   suff : List α
   property : rpref.reverse ++ suff = l
 
+@[simp]
 abbrev Zipper.pref {α} {l : List α} (s : List.Zipper l) : List α := s.rpref.reverse
 
 def Zipper.suffix (s : List.Zipper l) : s.suff <:+ l := ⟨s.pref, s.property⟩
@@ -70,29 +71,29 @@ theorem Specs.forIn_list {α β} ⦃m : Type → Type⦄
   [Monad m] [LawfulMonad m] [WP m ps] [WPMonad m ps]
   {xs : List α} {init : β} {f : α → β → m (ForInStep β)}
   (inv : PostCond (β × List.Zipper xs) ps)
-  (step : ∀ b pref x suff (h : xs = pref ++ x :: suff),
-      ⦃inv.1 (b, ⟨pref.reverse, x::suff, by simp[h]⟩)⦄
+  (step : ∀ b rpref x suff (h : xs = rpref.reverse ++ x :: suff),
+      ⦃inv.1 (b, ⟨rpref, x::suff, by simp[h]⟩)⦄
       f x b
       ⦃(fun r => match r with
-                 | .yield b' => inv.1 (b', ⟨x::pref.reverse, suff, by simp[h]⟩)
+                 | .yield b' => inv.1 (b', ⟨x::rpref, suff, by simp[h]⟩)
                  | .done b' => inv.1 (b', ⟨xs.reverse, [], by simp⟩), inv.2)⦄) :
   ⦃inv.1 (init, ⟨[], xs, by simp⟩)⦄ forIn xs init f ⦃(fun b => inv.1 (b, ⟨xs.reverse, [], by simp⟩), inv.2)⦄ := by
-    suffices h : ∀ pref suff (h : xs = pref ++ suff), ⦃inv.1 (init, ⟨pref.reverse, suff, by simp[h]⟩)⦄ forIn suff init f ⦃(fun b => inv.1 (b, ⟨xs.reverse, [], by simp[h]⟩), inv.2)⦄
+    suffices h : ∀ rpref suff (h : xs = rpref.reverse ++ suff), ⦃inv.1 (init, ⟨rpref, suff, by simp[h]⟩)⦄ forIn suff init f ⦃(fun b => inv.1 (b, ⟨xs.reverse, [], by simp[h]⟩), inv.2)⦄
       from h [] xs rfl
-    intro pref suff h
-    induction suff generalizing pref init
+    intro rpref suff h
+    induction suff generalizing rpref init
     case nil => apply triple_pure; simp[h]
     case cons x suff ih =>
       simp only [List.forIn_cons]
       apply triple_bind
-      case hx => exact step init pref x suff h
+      case hx => exact step init rpref x suff h
       case hf =>
         intro r
         split
         next => apply triple_pure; simp[h]
         next b =>
           simp
-          have := @ih b (pref ++ [x]) (by simp[h])
+          have := @ih b (x::rpref) (by simp[h])
           simp at this
           exact this
 
@@ -114,10 +115,10 @@ theorem Specs.foldlM_list {α β} ⦃m : Type → Type⦄
   [Monad m] [LawfulMonad m] [WP m ps] [WPMonad m ps]
   {xs : List α} {init : β} {f : β → α → m β}
   (inv : PostCond (β × List.Zipper xs) ps)
-  (step : ∀ b pref x suff (h : xs = pref ++ x :: suff),
-      ⦃inv.1 (b, ⟨pref.reverse, x::suff, by simp[h]⟩)⦄
+  (step : ∀ b rpref x suff (h : xs = rpref.reverse ++ x :: suff),
+      ⦃inv.1 (b, ⟨rpref, x::suff, by simp[h]⟩)⦄
       f b x
-      ⦃(fun b' => inv.1 (b', ⟨x::pref.reverse, suff, by simp[h]⟩), inv.2)⦄) :
+      ⦃(fun b' => inv.1 (b', ⟨x::rpref, suff, by simp[h]⟩), inv.2)⦄) :
   ⦃inv.1 (init, ⟨[], xs, by simp⟩)⦄ List.foldlM f init xs ⦃(fun b => inv.1 (b, ⟨xs.reverse, [], by simp⟩), inv.2)⦄ := by
   have : xs.foldlM f init = forIn xs init (fun a b => .yield <$> f b a) := by
     simp only [List.forIn_yield_eq_foldlM, id_map']
