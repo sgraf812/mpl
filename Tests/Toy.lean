@@ -14,10 +14,10 @@ theorem test_3 :
   ⦃⇓r | r < 30⦄ := by
   intro _
   xwp
-  xapp (Specs.forIn_list (PostCond.total fun (xs, r) => (∀ x, x ∈ xs → x ≤ 5) ∧ r + xs.length * 5 ≤ 25) ?step)
+  xapp (Specs.forIn_list (PostCond.total fun (r, xs) => (∀ x, x ∈ xs.suff → x ≤ 5) ∧ r + xs.suff.length * 5 ≤ 25) ?step)
   case pre => sgrind -- (try simp); grind
   case step =>
-    intro hd tl b
+    intro b pref x suff h
     xwp
     -- grind -- does not work yet... Maybe in 4.17
     simp +contextual
@@ -39,13 +39,13 @@ theorem test_ex :
   intro s hs
   xwp
   -- xbind -- optional
-  xapp (Specs.forIn_list (fun (xs, r) s => r ≤ 4 ∧ s = 4 ∧ r + xs.sum > 4, fun e s => e = 42 ∧ s = 4, ()) ?step)
+  xapp (Specs.forIn_list (fun (r, xs) s => r ≤ 4 ∧ s = 4 ∧ r + xs.suff.sum > 4, fun e s => e = 42 ∧ s = 4, ()) ?step)
   case pre => simp only [hs]; conv in (List.sum _) => { whnf }; simp
   case step =>
-    intro hd tl b
+    intro b pref x suff h
     xstart
     xwp
-    simp only [List.sum_cons]
+    simp only [h, List.sum_cons]
     intro b' hinv
     split
     · grind -- simp[hinv, h]
@@ -80,9 +80,9 @@ lemma correctnessOfGreedySpanner {n:ℕ }(G : FinSimpleGraph n)(t :ℕ ) (u v : 
   (greedySpanner G t).dist u v ≤ 2*t-1 := by
     apply Idd.by_wp (fun r => SimpleGraph.dist r u v ≤ 2*t-1)
     xwp
-    xapp (Specs.foldlM_list (PostCond.total fun (xs, f_H) => ∀ i j, f_H i j → 2*t-1 < _root_.dist f_H s(i,j)) ?hstep)
+    xapp (Specs.foldlM_list (PostCond.total fun (f_H, xs) => ∀ i j, f_H i j → 2*t-1 < _root_.dist f_H s(i,j)) ?hstep)
     case hstep =>
-      intro e es f_H hinv
+      intro f_H pref e suff h hinv
       xwp
       if h : 2*t-1 < _root_.dist f_H e
       then
@@ -133,10 +133,10 @@ theorem fib_correct {n} : fib_impl n = fib_spec n := by
   if h : n = 0 then simp[h,fib_spec] else ?_
   simp[h]
   xapp Specs.forIn_list ?inv ?step
-  case inv => exact PostCond.total fun (xs, ⟨a, b⟩) => let i := n - xs.length; xs.length < n ∧ a = fib_spec (i-1) ∧ b = fib_spec i
+  case inv => exact PostCond.total fun (⟨a, b⟩, xs) => let i := n - xs.suff.length; xs.suff.length < n ∧ a = fib_spec (i-1) ∧ b = fib_spec i
   case pre => simp +arith +decide [Nat.succ_le_of_lt, Nat.zero_lt_of_ne_zero h, Nat.sub_sub_eq_min]
   case step =>
-    intro hd tl ⟨a, b⟩ ⟨htl, ha, hb⟩
+    intro ⟨a, b⟩ _pref x suff _h ⟨htl, ha, hb⟩
     xwp
     use Nat.lt_of_succ_lt htl
     simp_arith[Nat.succ_le_of_lt, Nat.zero_lt_of_ne_zero h, Nat.sub_sub_eq_min, Nat.sub_sub, Nat.lt_of_succ_lt, ha, hb] at *

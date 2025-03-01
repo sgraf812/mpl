@@ -6,6 +6,7 @@ Authors: Wojciech Nawrocki
 -/
 import Batteries
 import Mathlib.Data.Finset.Basic
+import MPL
 
 --import ProofChecker.Data.HashMap.Lemmas
 
@@ -94,6 +95,12 @@ def Union (l : Array (HashSet α)) : HashSet α :=
 theorem toFinset_Union (l : Array (HashSet α)) :
     toFinset (Union l) = l.foldl (init := ∅) fun acc s => acc ∪ s.toFinset := sorry
 
+-- Wojciech says:
+-- > IIRC, the reason disjointUnion is written as a fold together with a separate
+-- > disjointUnion_characterization that uses foldl_induction is that there was no
+-- > way to state a loop invariant.
+-- > If there were, I'd much rather write it with do and prove correctness like that.
+--
 /-- Calculate the union of an array of `HashSet`s, and check if the array elements are all pairwise
 disjoint. Return `(⋃ ss, true)` if array elements are pairwise disjoint, otherwise `(⋃ ss, false)`.
 -/
@@ -164,14 +171,101 @@ theorem disjointUnion_characterization (ss : Array (HashSet α)) :
     have ⟨i, hI⟩ := Array.get_of_mem_data hS
     exact h₂ i i.isLt (hI ▸ hA)
 
-theorem mem_disjointUnion (ss : Array (HashSet α)) (a : α) :
-    a ∈ (disjointUnion ss).fst.toFinset ↔ ∃ s ∈ ss.toList, a ∈ s.toFinset :=
-  disjointUnion_characterization ss |>.left a
+-- Now the actual test case for MPL:
 
-theorem disjoint_disjointUnion (ss : Array (HashSet α)) : (disjointUnion ss).snd →
-    ∀ (i j : Nat) (hI : i < ss.size) (hJ : j < ss.size), i ≠ j →
-      ss[i].toFinset ∩ ss[j].toFinset = ∅ :=
-  fun h i j hI hJ hNe =>
-    disjointUnion_characterization ss |>.right h ⟨i, hI⟩ ⟨j, hJ⟩ (by simp [hNe])
+section test
+open MPL
+
+def MPL.disjointUnion (ss : Array (HashSet α)) : HashSet α × Bool := Idd.run do
+  -- ss.foldl (init := (.empty α, true)) fun (U, b) t =>
+  --   (U.union t, b && (U.inter t).isEmpty)
+  let mut U := HashSet.empty α
+  let mut b := true
+  for t in ss do
+    U := U.union t
+    b := b && (U.inter t).isEmpty
+  return (U, b)
+
+theorem Idd.by_wp3 {α} {x : α} {prog : Idd α} (h : x = Idd.run prog) (P : α → Prop) :
+  (wp prog).apply (PostCond.total P) → P x := h ▸ id
+
+theorem MPL.disjointUnion_characterization (ss : Array (HashSet α)) :
+    (∀ a, a ∈ (disjointUnion ss).fst.toFinset ↔ ∃ s ∈ ss.toList, a ∈ s.toFinset)
+    ∧ ((disjointUnion ss).snd →
+      ∀ (i j : Fin ss.size), i ≠ j → ss[i].toFinset ∩ ss[j].toFinset = ∅) := by
+  generalize h : disjointUnion ss = x
+  apply Idd.by_wp3 h.symm
+  xwp
+  xapp (Specs.forIn_list ?inv ?step)
+  case inv => exact PostCond.total fun ((acc : MProd (HashSet α) Bool), ss) =>
+      (∀ a, a ∈ acc.1.toFinset ↔ ∃ s ∈ ss.pref, a ∈ s.toFinset) ∧
+      (acc.snd →
+        ∀ (i j : Fin ss.pref.length), i ≠ j → ss.pref[i].toFinset ∩ ss.pref[j].toFinset = ∅)
+  case pre => simp[List.Zipper.pref]
+  case step =>
+    intro acc pref s suff h
+    xwp
+    simp only [List.mem_reverse, ne_eq, toFinset_union, Finset.mem_union, List.mem_cons,
+      exists_eq_or_imp, le_Prop_eq, and_imp]
+    intro hinv₁ hinv₂
+    refine ⟨?step₁, ?step₂⟩
+    case step₁ =>
+      intro a
+      constructor
+      · intro hMem
+        cases hMem with
+        | inl h =>
+          right
+          apply (hinv₁ a).mp h
+        | inr h =>
+          left
+          exact h
+      · intro hMem
+        cases hMem with
+        | inl h =>
+          right
+          exact h
+        | inr h =>
+          left
+          apply (hinv₁ a).mpr h
+    case step₂ =>
+      simp[List.Zipper.pref]
+      intro hB₁ hB₂ i j hNe
+      cases hs₁ <;> cases hs₂
+      case inl.inl hs₁ hs₂ =>
+        subst hs₁ hs₂
+        contradiction
+      case inr.inr hs₁ hs₂ =>
+        have hB : acc.snd = true := by grind
+        exact hinv₂ hB s₁ s₂ hs₁ hs₂ hNe
+      case inl.inr hs₁ hs₂ =>
+        subst hs₁
+        replace hB : ((acc.fst.union s₁).inter s₁).isEmpty = true := by grind
+        replace hB := toFinset_of_isEmpty _ hB
+        simp only [toFinset_inter, toFinset_union, Finset.union_inter_cancel_right] at hB
+        simp[hB]
+      case inr.inl hs₁ hs₂ =>
+        subst hs₂
+        replace hB : ((acc.fst.union s₂).inter s₂).isEmpty = true := by grind
+        replace hB := toFinset_of_isEmpty _ hB
+        simp only [toFinset_inter, toFinset_union, Finset.union_inter_cancel_right] at hB
+        simp[hB]
+  simp
+  intro ⟨U, b⟩ ⟨hinv₁, hinv₂⟩
+  use hinv₁
+  intro hB i j hNe
+  apply hinv₂ hB --
+  exact (by simp[Array.get_mem_data ss i])
+  exact (by simp[Array.get_mem_data ss j])
+  exact (by simp[hNe])
+  simp at hinv₁
+    dsimp [disjointUnion]
+    refine ⟨fun a => ⟨fun hMem => h₁ a hMem, ?_⟩,
+      fun h i j hNe => h₃ h i j i.isLt j.isLt hNe⟩
+    intro ⟨s, hS, hA⟩
+    have ⟨i, hI⟩ := Array.get_of_mem_data hS
+    exact h₂ i i.isLt (hI ▸ hA)
+
+end test
 
 end HashSet

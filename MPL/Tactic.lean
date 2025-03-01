@@ -36,13 +36,36 @@ theorem ite_extrude_yield {c : Prop} [Decidable c] {x y : α} :
   (if c then pure (.yield x) else pure (.yield y)) = ForInStep.yield <$> if c then pure x else pure (f := Idd) y := by
   split <;> simp
 
+-- TODO: upstream
+@[simp] theorem Array.forIn'_eq_forIn'_toList {α β} [Monad m] (arr : Array α)
+    (init : β) (f : (a : α) → a ∈ arr → β → m (ForInStep β)) :
+    forIn' arr init f =
+      forIn' arr.toList init (fun a h => f a (Array.mem_toList.mp h)) := by
+  conv => lhs; simp only [forIn', Array.forIn']
+  simp
+  sorry -- do the same as for Std.Range
+  -- rw [forIn'_loop_eq_forIn'_range']
+
+@[simp] theorem Array.forIn_eq_forIn_toList {α β} [Monad m] (arr : Array α)
+    (init : β) (f : α → β → m (ForInStep β)) :
+    forIn arr init f = forIn arr.toList init f := by
+  simp only [forIn, forIn'_eq_forIn'_toList]
+
+-- not sure how to do this in a non-bloaty way. Probably involves a type class
+--@[simp] theorem List.forIn_MProd_to_Prod {α β} [Monad m]
+    --(init : β) (f : α → β → m (ForInStep β)) :
+    --forIn xs init f = forIn xs init f := by
+  --simp only [forIn, forIn'_eq_forIn'_toList]
+
 macro "xwp" : tactic =>
   `(tactic| ((try xstart);
              simp +contextual only [
                wp_pure, wp_bind, wp_map, wp_seq, wp_ite, wp_dite, wp_monadLift,
                pure_bind, bind_assoc, bind_pure_comp, bind_pure, id_map',
                map_pure, ExceptT.map_throw,
-               Std.Range.forIn_eq_forIn_range', Std.Range.size, Nat.div_one,  -- rewrite to forIn_list
+               -- List.Zipper.begin_suff, List.Zipper.tail_suff, List.Zipper.end_suff, -- Zipper stuff needed for invariants
+               Std.Range.forIn_eq_forIn_range', Std.Range.forIn'_eq_forIn'_range', Std.Range.size, Nat.div_one,  -- rewrite to forIn_list
+               Array.forIn'_eq_forIn', Array.forIn_eq_forIn_toList, Array.forIn'_eq_forIn'_toList, -- rewrite to forIn_list
                ite_extrude_yield, List.forIn_yield_eq_foldlM, -- rewrite to foldlM
                PredTrans.dropFail, PredTrans.drop_fail_cond, -- TODO: Can we do this whole lifting business with fewer simp rules?
                MonadState.wp_get, MonadStateOf.wp_get, StateT.wp_get, PredTrans.get,
@@ -181,8 +204,8 @@ syntax "xapp" (ppSpace colGt term)? : tactic
 macro_rules
   | `(tactic| xapp_no_simp)       => `(tactic| ((try xbind); xapp_no_xbind))
   | `(tactic| xapp_no_simp $spec) => `(tactic| ((try xbind); xapp_no_xbind $spec))
-  | `(tactic| xapp)               => `(tactic| xapp_no_simp <;> try simp only [gt_iff_lt, Prod.mk_le_mk, le_refl, and_true])
-  | `(tactic| xapp $spec)         => `(tactic| xapp_no_simp $spec <;> try simp only [gt_iff_lt, Prod.mk_le_mk, le_refl, and_true])
+  | `(tactic| xapp)               => `(tactic| xapp_no_simp <;> try simp +contextual only [gt_iff_lt, Prod.mk_le_mk, le_refl, and_true])
+  | `(tactic| xapp $spec)         => `(tactic| xapp_no_simp $spec <;> try simp +contextual only [gt_iff_lt, Prod.mk_le_mk, le_refl, and_true])
 
 macro "sgrind" : tactic => `(tactic| ((try simp +contextual); grind))
 
@@ -201,13 +224,13 @@ theorem test_ex :
   intro s hs
   xwp
   -- xbind -- optional
-  xapp (Specs.forIn_list (fun (xs, r) s => r ≤ 4 ∧ s = 4 ∧ r + xs.sum > 4, fun e s => e = 42 ∧ s = 4, ()) ?step)
+  xapp (Specs.forIn_list (fun (r, xs) s => r ≤ 4 ∧ s = 4 ∧ r + xs.suff.sum > 4, fun e s => e = 42 ∧ s = 4, ()) ?step)
   case pre => simp only [hs]; conv in (List.sum _) => { whnf }; simp
   case step =>
-    intro hd tl b
+    intro hd tl _ _ b
     xstart
     xwp
-    simp only [List.sum_cons]
+    simp only [List.sum_cons, List.sum_nil, add_zero]
     intro b' hinv
     split
     · grind -- simp[hinv, h]
