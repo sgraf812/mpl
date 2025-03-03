@@ -5,6 +5,7 @@ import MPL.SpecAttr
 import MPL.Specs
 import MPL.WPMonad
 import MPL.WPMonadLift
+import MPL.WPSimp
 import Mathlib
 
 namespace MPL
@@ -57,22 +58,21 @@ theorem ite_extrude_yield {c : Prop} [Decidable c] {x y : α} :
     --forIn xs init f = forIn xs init f := by
   --simp only [forIn, forIn'_eq_forIn'_toList]
 
+attribute [wp_simp]
+  wp_pure wp_bind wp_map wp_seq wp_ite wp_dite wp_monadLift
+  pure_bind bind_assoc bind_pure_comp bind_pure map_pure id_map'
+  PredTrans.pure_apply PredTrans.bind_apply PredTrans.map_apply
+  -- List.Zipper.begin_suff List.Zipper.tail_suff List.Zipper.end_suff -- Zipper stuff needed for invariants
+  Std.Range.forIn_eq_forIn_range' Std.Range.forIn'_eq_forIn'_range' Std.Range.size Nat.div_one  -- rewrite to forIn_list
+  Array.forIn_eq_forIn_toList Array.forIn'_eq_forIn'_toList -- rewrite to forIn_list
+  ite_extrude_yield List.forIn_yield_eq_foldlM -- rewrite to foldlM
+  PredTrans.dropFail PredTrans.drop_fail_cond -- TODO: Can we do this whole lifting business with fewer simp rules?
+  MonadState.wp_get MonadStateOf.wp_get StateT.wp_get PredTrans.get
+  MonadState.wp_set MonadStateOf.wp_set StateT.wp_set PredTrans.set
+  ExceptT.map_throw ExceptT.wp_throw PredTrans.throw
+
 macro "xwp" : tactic =>
-  `(tactic| ((try xstart);
-             simp +contextual only [
-               wp_pure, wp_bind, wp_map, wp_seq, wp_ite, wp_dite, wp_monadLift,
-               pure_bind, bind_assoc, bind_pure_comp, bind_pure, id_map',
-               map_pure, ExceptT.map_throw,
-               -- List.Zipper.begin_suff, List.Zipper.tail_suff, List.Zipper.end_suff, -- Zipper stuff needed for invariants
-               Std.Range.forIn_eq_forIn_range', Std.Range.forIn'_eq_forIn'_range', Std.Range.size, Nat.div_one,  -- rewrite to forIn_list
-               Array.forIn_eq_forIn_toList, Array.forIn'_eq_forIn'_toList, -- rewrite to forIn_list
-               ite_extrude_yield, List.forIn_yield_eq_foldlM, -- rewrite to foldlM
-               PredTrans.dropFail, PredTrans.drop_fail_cond, -- TODO: Can we do this whole lifting business with fewer simp rules?
-               MonadState.wp_get, MonadStateOf.wp_get, StateT.wp_get, PredTrans.get,
-               MonadState.wp_set, MonadStateOf.wp_set, StateT.wp_set, PredTrans.set,
-               ExceptT.wp_throw, PredTrans.throw,
-               PredTrans.pure_apply, PredTrans.bind_apply, PredTrans.map_apply --, PredTrans.seq_apply TODO
-             ]))
+  `(tactic| ((try xstart); wp_simp +contextual))
 
 --syntax "xwp" notFollowedBy("|") (ppSpace colGt term:max)* : tactic
 --
