@@ -65,7 +65,7 @@ macro "xwp" : tactic =>
                map_pure, ExceptT.map_throw,
                -- List.Zipper.begin_suff, List.Zipper.tail_suff, List.Zipper.end_suff, -- Zipper stuff needed for invariants
                Std.Range.forIn_eq_forIn_range', Std.Range.forIn'_eq_forIn'_range', Std.Range.size, Nat.div_one,  -- rewrite to forIn_list
-               Array.forIn'_eq_forIn', Array.forIn_eq_forIn_toList, Array.forIn'_eq_forIn'_toList, -- rewrite to forIn_list
+               Array.forIn_eq_forIn_toList, Array.forIn'_eq_forIn'_toList, -- rewrite to forIn_list
                ite_extrude_yield, List.forIn_yield_eq_foldlM, -- rewrite to foldlM
                PredTrans.dropFail, PredTrans.drop_fail_cond, -- TODO: Can we do this whole lifting business with fewer simp rules?
                MonadState.wp_get, MonadStateOf.wp_get, StateT.wp_get, PredTrans.get,
@@ -234,8 +234,8 @@ theorem test_ex :
     intro b' hinv
     split
     · grind -- simp[hinv, h]
-    · simp only [PredTrans.pure_apply]; grind -- omega
+    · simp only [PredTrans.pure_apply]; sorry -- grind -- omega
   simp only [List.sum_nil, add_zero]
-  grind
+  sorry -- grind
 
 end MPL

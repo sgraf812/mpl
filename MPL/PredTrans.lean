@@ -132,9 +132,9 @@ noncomputable instance FailConds.instLattice : {ps : PredShape} → CompleteLatt
 noncomputable instance PostCond.instPreorder : {ps : PredShape} → Preorder (PostCond α ps) := inferInstance
 noncomputable instance PostCond.instLE {ps : PredShape} : LE (PostCond α ps) := inferInstance
 
-attribute [grind =] Prod.le_def Pi.le_def -- le_Prop_eq -- pointfree defn of le_Prop_eq not supported
-@[grind =]
-lemma le_Prop_eq_pointful {p q : Prop} : p ≤ q ↔ p → q := by rfl
+--attribute [grind =] Prod.le_def Pi.le_def -- le_Prop_eq -- pointfree defn of le_Prop_eq not supported
+--@[grind =]
+--lemma le_Prop_eq_pointful {p q : Prop} : p ≤ q ↔ p → q := by rfl
 --@[grind =]
 --lemma PreCond.le_pure_intro {p q : PreCond .pure} : LE.le (α:=PreCond .pure) (self := PreCond.instLattice.toLE) p q ↔ p → q := by rfl
 -- @[grind =]

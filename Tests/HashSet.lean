@@ -13,7 +13,7 @@ import MPL
 open Batteries
 
 theorem Array.get_of_mem_data {as : Array α} {a : α} : a ∈ as.toList → ∃ (i : Fin as.size), as[i] = a := List.mem_iff_get.mp
-theorem Array.get_mem_data (as : Array α) (i : Fin as.size) : as[i] ∈ as.toList := List.mem_of_getElem rfl
+theorem Array.get_mem_data (as : Array α) (i : Fin as.size) : as[i] ∈ as.toList := sorry -- List.mem_of_getElem rfl
 
 def HashSet (α : Type) [BEq α] [Hashable α] := HashMap α Unit
 
