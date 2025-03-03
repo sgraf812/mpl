@@ -24,17 +24,8 @@ variable {α : Type} [BEq α] [Hashable α]
 def empty (α : Type) [BEq α] [Hashable α] : HashSet α :=
   HashMap.empty
 
-def isEmpty (s : HashSet α) : Bool :=
-  HashMap.isEmpty s
-
 def insert (s : HashSet α) (a : α) : HashSet α :=
   HashMap.insert s a ()
-
-def singleton (a : α) : HashSet α :=
-  empty α |>.insert a
-
-def contains (s : HashSet α) (a : α) : Bool :=
-  HashMap.contains s a
 
 def union (s t : HashSet α) : HashSet α :=
   HashMap.fold (init := s) (fun acc a _ => acc.insert a) t
@@ -50,30 +41,12 @@ def toFinset (s : HashSet α) : Finset α :=
 
 variable [LawfulBEq α] [HashMap.LawfulHashable α]
 
-theorem toFinset_sub (s : HashSet α) (a : α) : a ∈ s.toFinset → s.contains a := sorry
-
-theorem sub_toFinset (s : HashSet α) (a : α) : s.contains a → a ∈ s.toFinset := sorry
-
-theorem mem_toFinset (s : HashSet α) (a : α) : a ∈ s.toFinset ↔ s.contains a := sorry
-
-theorem not_mem_toFinset (s : HashSet α) (a : α) : a ∉ s.toFinset ↔ ¬s.contains a := sorry
-
 @[simp]
 theorem toFinset_empty : toFinset (empty α) = ∅ := sorry
 
 theorem toFinset_of_isEmpty (s : HashSet α) : s.isEmpty → s.toFinset = ∅ := sorry
 
-@[simp]
-theorem toFinset_insert (s : HashSet α) (a : α) :
-    toFinset (s.insert a) = Insert.insert a s.toFinset := sorry
-
-@[simp]
-theorem toFinset_singleton (a : α) : toFinset (singleton a) = {a} := by
-  simp [singleton, toFinset_insert]
-
 theorem toFinset_union_sub (s t : HashSet α) : (s.union t).toFinset ⊆ s.toFinset ∪ t.toFinset := sorry
-
-theorem sub_toFinset_union_left (s t : HashSet α) : s.toFinset ⊆ (s.union t).toFinset := sorry
 
 theorem sub_toFinset_union (s t : HashSet α) : s.toFinset ∪ t.toFinset ⊆ (s.union t).toFinset := sorry
 
@@ -88,12 +61,6 @@ theorem sub_toFinset_inter (s t : HashSet α) : s.toFinset ∩ t.toFinset ⊆ (s
 @[simp]
 theorem toFinset_inter (s t : HashSet α) : (s.inter t).toFinset = s.toFinset ∩ t.toFinset :=
   subset_antisymm (toFinset_inter_sub s t) (sub_toFinset_inter s t)
-
-def Union (l : Array (HashSet α)) : HashSet α :=
-  l.foldl (init := empty α) union
-
-theorem toFinset_Union (l : Array (HashSet α)) :
-    toFinset (Union l) = l.foldl (init := ∅) fun acc s => acc ∪ s.toFinset := sorry
 
 -- Wojciech says:
 -- > IIRC, the reason disjointUnion is written as a fold together with a separate
