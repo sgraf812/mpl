@@ -40,23 +40,23 @@ export WPMonad (wp_pure wp_bind wp_map wp_seq)
 end MPL
 open MPL
 
-instance Idd.instLawfulWP : WPMonad Idd .pure where
+instance Idd.instWPMonad : WPMonad Idd .pure where
   wp_pure a := by simp only [wp, PredTrans.pure, Pure.pure, Idd.pure]
   wp_bind x f := by simp only [wp, PredTrans.pure, Bind.bind, Idd.bind, PredTrans.bind]
 
-instance Id.instLawfulWP : WPMonad Id .pure where
+instance Id.instWPMonad : WPMonad Id .pure where
   wp_pure a := by simp only [wp, PredTrans.pure, Pure.pure, Id.run]
   wp_bind x f := by simp only [wp, PredTrans.pure, Bind.bind, Id.run, PredTrans.bind]
 
-instance StateT.instLawfulWP [Monad m] [WP m ps] [WPMonad m ps] : WPMonad (StateT σ m) (.arg σ ps) where
+instance StateT.instWPMonad [Monad m] [WP m ps] [WPMonad m ps] : WPMonad (StateT σ m) (.arg σ ps) where
   wp_pure a := by simp [wp, PredTrans.pure, pure, StateT.pure, wp_pure]
   wp_bind x f := by simp [wp, PredTrans.pure, Bind.bind, bind, PredTrans.bind, StateT.bind]
 
-instance ReaderT.instLawfulWP [Monad m] [WP m ps] [WPMonad m ps] : WPMonad (ReaderT ρ m) (.arg ρ ps) where
+instance ReaderT.instWPMonad [Monad m] [WP m ps] [WPMonad m ps] : WPMonad (ReaderT ρ m) (.arg ρ ps) where
   wp_pure a := by simp [wp, PredTrans.pure, pure, ReaderT.pure, wp_pure]
   wp_bind x f := by simp [wp, PredTrans.pure, Bind.bind, bind, PredTrans.bind, ReaderT.bind]
 
-instance ExceptT.instLawfulWP [Monad m] [WP m ps] [WPMonad m ps] : WPMonad (ExceptT ε m) (.except ε ps) where
+instance ExceptT.instWPMonad [Monad m] [WP m ps] [WPMonad m ps] : WPMonad (ExceptT ε m) (.except ε ps) where
   wp_pure a := by simp [wp, PredTrans.pure, pure, ExceptT.pure, wp_pure]
   wp_bind x f := by
     ext Q
@@ -67,9 +67,17 @@ instance ExceptT.instLawfulWP [Monad m] [WP m ps] [WPMonad m ps] : WPMonad (Exce
     case error a => simp[PredTrans.pure, pure]
     case ok a => congr
 
-instance EStateM.instLawfulWP : WPMonad (EStateM ε σ) (.except ε (.arg σ .pure)) where
+instance EStateM.instWPMonad : WPMonad (EStateM ε σ) (.except ε (.arg σ .pure)) where
   wp_pure a := by simp [wp, PredTrans.pure, pure, EStateM.pure]
   wp_bind x f := by
     ext Q s
     simp [wp, bind, EStateM.bind, eq_iff_iff, PredTrans.bind]
     cases (x s) <;> simp
+
+instance State.instWPMonad : WPMonad (StateM σ) (.arg σ .pure) := inferInstanceAs (WPMonad (StateT σ Id) (.arg σ .pure))
+instance Reader.instWPMonad : WPMonad (ReaderM ρ) (.arg ρ .pure) := inferInstanceAs (WPMonad (ReaderT ρ Id) (.arg ρ .pure))
+theorem Except.instMonad_eq ε : @Except.instMonad ε = @ExceptT.instMonad ε Id Id.instMonad := by
+  have h : Monad (Except ε) = Monad (ExceptT ε Id) := rfl
+  simp[Except.instMonad, ExceptT.instMonad]
+  sorry
+instance Except.instWPMonad : WPMonad (Except ε) (.except ε .pure) := Except.instMonad_eq ε ▸ inferInstanceAs (WPMonad (ExceptT ε Id) (.except ε .pure))

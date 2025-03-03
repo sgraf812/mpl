@@ -79,3 +79,7 @@ instance EStateM.instWP : WP (EStateM ε σ) (.except ε (.arg σ .pure)) where
         simp[wp]
         cases (x s) <;> apply_rules [h.1,h.2.1]
     }
+
+instance State.instWP : WP (StateM σ) (.arg σ .pure) := inferInstanceAs (WP (StateT σ Id) (.arg σ .pure))
+instance Reader.instWP : WP (ReaderM ρ) (.arg ρ .pure) := inferInstanceAs (WP (ReaderT ρ Id) (.arg ρ .pure))
+instance Except.instWP : WP (Except ε) (.except ε .pure) := inferInstanceAs (WP (ExceptT ε Id) (.except ε .pure))
