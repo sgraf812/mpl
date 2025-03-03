@@ -13,6 +13,9 @@ attribute [simp] wp_monadLift
 instance StateT.instWPMonadLift [Monad m] [WP m psm] [LawfulMonad m] [WPMonad m psm] : WPMonadLift m (StateT σ m) psm (.arg σ psm) where
   wp_monadLift := by simp[wp, liftM, MonadLift.monadLift, StateT.lift, PredTrans.frame_arg]
 
+instance ReaderT.instWPMonadLift [Monad m] [WP m psm] [LawfulMonad m] [WPMonad m psm] : WPMonadLift m (ReaderT ρ m) psm (.arg ρ psm) where
+  wp_monadLift := by simp[wp, MonadLift.monadLift, PredTrans.frame_arg]
+
 instance ExceptT.instWPMonadLift [Monad m] [WP m psm] [LawfulMonad m] [WPMonad m psm] : WPMonadLift m (ExceptT ε m) psm (.except ε psm) where
   wp_monadLift := by simp[wp, liftM, MonadLift.monadLift, ExceptT.lift, Function.comp_def, PredTrans.drop_fail_cond]
 
