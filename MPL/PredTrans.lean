@@ -302,24 +302,13 @@ theorem PredTrans.pure_apply {ps : PredShape} {α : Type} (a : α) (Q : PostCond
 theorem PredTrans.map_apply {ps : PredShape} {α β : Type} (f : α → β) (x : PredTrans ps α) (Q : PostCond β ps) :
   (f <$> x).apply Q = x.apply (fun a => Q.1 (f a), Q.2) := by rfl
 
---
---@[simp]
---theorem PredTrans.pure_apply2 {ps : PredShape} {α : Type} (a : α) (Q : PostCond α ps) :
---  (PredTrans.pure a).apply Q = Q.1 a := by rfl
---
 @[simp]
-theorem PredTrans.bind_apply {ps : PredShape} {α β : Type} (trans : PostCond α ps → PreCond ps) (h : PredTrans.Mono trans) (f : α → PredTrans ps β) (Q : PostCond β ps) :
-  (PredTrans.mk trans h >>= f).apply Q = trans (fun a => (f a).apply Q, Q.2) := by rfl
---
---@[simp]
---theorem PredTrans.bind_apply2 {ps : PredShape} {α β : Type} (x : PredTrans ps α) (f : α → PredTrans ps β) (Q : PostCond β ps) :
---  (PredTrans.bind x f).apply Q = x.apply (fun a => (f a).apply Q, Q.2) := by rfl
---
---
---
---@[simp]
---theorem PredTrans.seq_apply {ps : PredShape} {α β : Type} (f : PredTrans ps (α → β)) (x : PredTrans ps α) (Q : PostCond β ps) :
---  (f <*> x).apply Q = f.apply (fun g => x.apply (fun a => Q.1 (g a), Q.2), Q.2) := by rfl
+theorem PredTrans.bind_apply {ps : PredShape} {α β : Type} (x : PredTrans ps α) (f : α → PredTrans ps β) (Q : PostCond β ps) :
+  (x >>= f).apply Q = x.apply (fun a => (f a).apply Q, Q.2) := by rfl
+
+@[simp]
+theorem PredTrans.seq_apply {ps : PredShape} {α β : Type} (f : PredTrans ps (α → β)) (x : PredTrans ps α) (Q : PostCond β ps) :
+  (f <*> x).apply Q = f.apply (fun g => x.apply (fun a => Q.1 (g a), Q.2), Q.2) := by rfl
 
 theorem PredTrans.bind_mono {ps : PredShape} {α β : Type} {x y : PredTrans ps α} {f : α → PredTrans ps β}
   (h : x ≤ y) : x >>= f ≤ y >>= f := by intro Q; apply le_trans (h (_, Q.2)) le_rfl
@@ -363,14 +352,12 @@ def PredTrans.drop_fail_cond (p : PredTrans ps α) : PredTrans (.except ε ps) �
 instance PredTrans.dropFail : MonadLift (PredTrans m) (PredTrans (.except σ m)) where
   monadLift := PredTrans.drop_fail_cond
 
-@[simp]
 def PredTrans.throw {ps : PredShape} {ε : Type} (e : ε) : PredTrans (.except ε ps) α :=
   { apply := fun Q => Q.2.1 e, mono := by
       intro Q₁ Q₂ h
       simp only [apply]
       exact h.2.1 e }
 
-@[simp]
 def PredTrans.get {ps : PredShape} {σ : Type} : PredTrans (.arg σ ps) σ :=
   { apply := fun Q s => Q.1 s s, mono := by
       intro Q₁ Q₂ h
@@ -378,7 +365,6 @@ def PredTrans.get {ps : PredShape} {σ : Type} : PredTrans (.arg σ ps) σ :=
       intro s
       exact h.1 s s }
 
-@[simp]
 def PredTrans.set {ps : PredShape} {σ : Type} (s : σ) : PredTrans (.arg σ ps) PUnit :=
   { apply := fun Q _ => Q.1 ⟨⟩ s, mono := by
       intro Q₁ Q₂ h
@@ -386,7 +372,40 @@ def PredTrans.set {ps : PredShape} {σ : Type} (s : σ) : PredTrans (.arg σ ps)
       intro _
       exact h.1 ⟨⟩ s }
 
+def PredTrans.modifyGet {ps : PredShape} {σ : Type} {α : Type} (f : σ → α × σ) : PredTrans (.arg σ ps) α :=
+  { apply := fun Q s => let ⟨a, s⟩ := f s; Q.1 a s, mono := by
+      intro Q₁ Q₂ h
+      simp only [apply]
+      intro s
+      apply h.1 }
+
+#check PredTrans.modifyGet.eq_def
+#check fun α σ ps (f : σ → α × σ) (Q : PostCond α (.arg σ ps)) => congrArg (fun t => PredTrans.apply t Q) (PredTrans.modifyGet.eq_def f)
+
 @[simp]
+def PredTrans.get_apply {ps} {σ : Type} {Q : PostCond σ (.arg σ ps)} :
+  PredTrans.get.apply Q = fun s => Q.1 s s := rfl
+
+@[simp]
+def PredTrans.set_apply {ps} {σ : Type} {Q : PostCond PUnit (.arg σ ps)} (s : σ) :
+  (PredTrans.set s).apply Q = fun _ => Q.1 ⟨⟩ s := rfl
+
+@[simp]
+def PredTrans.modifyGet_apply {ps} {α : Type} {σ : Type} {Q : PostCond α (.arg σ ps)} (f : σ → α × σ) :
+  (PredTrans.modifyGet f).apply Q = fun s => let ⟨a, s⟩ := f s; Q.1 a s := rfl
+
+@[simp]
+def PredTrans.throw_apply {ps} {α ε : Type} {Q : PostCond α (.except ε ps)} (e : ε) :
+  (PredTrans.throw e).apply Q = Q.2.1 e := rfl
+
+@[simp]
+def PredTrans.dite_apply {ps} {Q : PostCond α ps} (c : Prop) [Decidable c] (t : c → PredTrans ps α) (e : ¬ c → PredTrans ps α) :
+  (if h : c then t h else e h).apply Q = if h : c then (t h).apply Q else (e h).apply Q := by split <;> rfl
+
+@[simp]
+def PredTrans.ite_apply {ps} {Q : PostCond α ps} (c : Prop) [Decidable c] (t : PredTrans ps α) (e : PredTrans ps α) :
+  (if c then t else e).apply Q = if c then t.apply Q else e.apply Q := by split <;> rfl
+
 noncomputable def PredTrans.prePost {ps : PredShape} {α : Type} (P : PreCond ps) (Q : PostCond α ps) : PredTrans ps α :=
   { apply := fun Q' => P ⊓ PreCond.pure (Q ≤ Q'), mono := by
       intro Q₁ Q₂ h
@@ -395,7 +414,6 @@ noncomputable def PredTrans.prePost {ps : PredShape} {α : Type} (P : PreCond ps
       simp only [PreCond.le_pure_pure]
       exact (le_trans · h) }
 
-@[simp]
 noncomputable def PredTrans.post {ps : PredShape} {α : Type} (Q : PostCond α ps) : PredTrans ps α :=
   { apply := fun Q' => PreCond.pure (Q ≤ Q'), mono := by
       intro Q₁ Q₂ h

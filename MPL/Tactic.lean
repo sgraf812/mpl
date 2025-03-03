@@ -60,16 +60,18 @@ theorem ite_extrude_yield {c : Prop} [Decidable c] {x y : α} :
 
 attribute [wp_simp]
   wp_pure wp_bind wp_map wp_seq wp_ite wp_dite wp_monadLift
-  pure_bind bind_assoc bind_pure_comp bind_pure map_pure id_map'
-  PredTrans.pure_apply PredTrans.bind_apply PredTrans.map_apply
+  pure_bind bind_assoc bind_pure_comp bind_pure map_pure id_map' bind_map bind_map_left
+  PredTrans.pure_apply PredTrans.bind_apply PredTrans.map_apply PredTrans.seq_apply PredTrans.ite_apply PredTrans.dite_apply
   -- List.Zipper.begin_suff List.Zipper.tail_suff List.Zipper.end_suff -- Zipper stuff needed for invariants
   Std.Range.forIn_eq_forIn_range' Std.Range.forIn'_eq_forIn'_range' Std.Range.size Nat.div_one  -- rewrite to forIn_list
   Array.forIn_eq_forIn_toList Array.forIn'_eq_forIn'_toList -- rewrite to forIn_list
   ite_extrude_yield List.forIn_yield_eq_foldlM -- rewrite to foldlM
   PredTrans.dropFail PredTrans.drop_fail_cond -- TODO: Can we do this whole lifting business with fewer simp rules?
-  MonadState.wp_get MonadStateOf.wp_get StateT.wp_get PredTrans.get
-  MonadState.wp_set MonadStateOf.wp_set StateT.wp_set PredTrans.set
-  ExceptT.map_throw ExceptT.wp_throw PredTrans.throw
+  MonadState.wp_get MonadStateOf.wp_get StateT.wp_get PredTrans.get_apply -- PredTrans.get
+  MonadState.wp_set MonadStateOf.wp_set StateT.wp_set PredTrans.set_apply -- PredTrans.set
+  MonadState.wp_modify MonadState.wp_modifyGet MonadStateOf.wp_modifyGet StateT.wp_modifyGet PredTrans.modifyGet_apply
+  ExceptT.map_throw ExceptT.wp_throw PredTrans.throw_apply -- PredTrans.throw
+  LawfulMonadLift.lift_pure LawfulMonadLift.lift_bind LawfulMonadLift.lift_map LawfulMonadLift.lift_seq
 
 macro "xwp" : tactic =>
   `(tactic| ((try xstart); wp_simp +contextual))
@@ -227,15 +229,15 @@ theorem test_ex :
   xapp (Specs.forIn_list (fun (r, xs) s => r ≤ 4 ∧ s = 4 ∧ r + xs.suff.sum > 4, fun e s => e = 42 ∧ s = 4, ()) ?step)
   case pre => simp only [hs]; conv in (List.sum _) => { whnf }; simp
   case step =>
-    intro hd tl _ _ b
+    intro b _rpref x suff _h
     xstart
     xwp
     simp only [List.sum_cons, List.sum_nil, add_zero]
     intro b' hinv
     split
     · grind -- simp[hinv, h]
-    · simp only [PredTrans.pure_apply]; sorry -- grind -- omega
+    · omega -- grind
   simp only [List.sum_nil, add_zero]
-  sorry -- grind
+  sorry -- grind -- needs 4.17 lemmas
 
 end MPL

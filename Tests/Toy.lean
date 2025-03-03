@@ -4,7 +4,7 @@ import MPL
 
 open MPL
 
-theorem test_3 :
+theorem test_sum :
   ⦃True⦄
   do
     let mut x := 0
@@ -22,7 +22,36 @@ theorem test_3 :
     -- grind -- does not work yet... Maybe in 4.17
     simp +contextual
     omega
-  sorry -- sgrind
+  intro s; simp; omega -- sgrind
+
+def mkFreshInt [Monad m] : StateT (Nat × Nat) m Nat := do
+  let n ← Prod.fst <$> get
+  modify (fun s => (s.1 + 1, s.2))
+  pure n
+
+theorem mkFreshInt_spec_fail [Monad m] [WP m sh] [LawfulMonad m] [WPMonad m sh] :
+  ⦃fun s => PreCond.pure (s.1 = n ∧ s.2 = o)⦄
+  (mkFreshInt : StateT (Nat × Nat) m Nat)
+  ⦃⇓ r | fun s => PreCond.pure (r = n ∧ s.1 = n + 1 ∧ s.2 = o)⦄ := by
+  unfold mkFreshInt
+  intro s
+  --fail_if_success xstart -- refine xwp_lemma ?_ -- TODO: prevent this; it appears that apply is partially inlined; the s ends up inside the wp
+  sorry
+
+@[spec]
+theorem mkFreshInt_spec [Monad m] [WP m sh] [LawfulMonad m] [WPMonad m sh] :
+  ⦃fun s => PreCond.pure (s.1 = n ∧ s.2 = o)⦄
+  (mkFreshInt : StateT (Nat × Nat) m Nat)
+  ⦃⇓ r | fun s => PreCond.pure (r = n ∧ s.1 = n + 1 ∧ s.2 = o)⦄ := by
+  unfold mkFreshInt
+  xwp
+  intro s
+  simp
+
+@[wp_simp]
+theorem wp_mkFreshInt [Monad m] [WP m sh] [LawfulMonad m] [WPMonad m sh] :
+  wp⟦(mkFreshInt : StateT (Nat × Nat) m Nat)⟧.apply Q = fun s => Q.1 s.1 (s.1 + 1, s.2) := by
+    unfold mkFreshInt; xwp; rfl
 
 theorem test_ex :
   ⦃fun s => s = 4⦄
