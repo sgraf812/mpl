@@ -15,17 +15,9 @@ open Lean Meta Elab Tactic
 theorem xwp_lemma {m : Type → Type} [WP m ps] {α} {x : m α} {P : PreCond ps} {Q : PostCond α ps} :
   {{P}} wp⟦x⟧ {{Q}} → ⦃P⦄ x ⦃Q⦄ := id
 
-theorem wp_apply_triple {m : Type → Type} {ps : PredShape} [WP m ps] {α} {x : m α} {P : PreCond ps} {Q : PostCond α ps}
-  (h : ⦃P⦄ x ⦃Q⦄) :
-  P ≤ wp⟦x⟧.apply Q := h
-
 theorem wp_apply_triple_conseq {m : Type → Type} {ps : PredShape} [WP m ps] {α} {x : m α} {P : PreCond ps} {Q Q' : PostCond α ps}
   (h : ⦃P⦄ x ⦃Q⦄) (hpost : Q ≤ Q') :
   P ≤ wp⟦x⟧.apply Q' := le_trans h (wp⟦x⟧.mono _ _ hpost)
-
-theorem wp_apply_triple_pointfree {m : Type → Type} {ps : PredShape} [WP m ps] {α} {x : m α} {P : PreCond ps} {Q : PostCond α ps}
-  (h : ⦃P⦄ x ⦃Q⦄) :
-  wp x ≤ PredTrans.prePost P Q := PredTrans.le_prePost.mp h
 
 theorem rw_wp {m : Type → Type} {ps : PredShape} [WP m ps] {α} {x : m α} {t : PredTrans ps α}
   (h : wp x = t): wp x ≤ t := h ▸ le_rfl
@@ -70,8 +62,10 @@ attribute [wp_simp]
   MonadState.wp_get MonadStateOf.wp_get StateT.wp_get PredTrans.get_apply -- PredTrans.get
   MonadState.wp_set MonadStateOf.wp_set StateT.wp_set PredTrans.set_apply -- PredTrans.set
   MonadState.wp_modify MonadState.wp_modifyGet MonadStateOf.wp_modifyGet StateT.wp_modifyGet PredTrans.modifyGet_apply
+  MonadReader.wp_read MonadReaderOf.wp_read ReaderT.wp_read
   ExceptT.map_throw ExceptT.wp_throw PredTrans.throw_apply -- PredTrans.throw
   LawfulMonadLift.lift_pure LawfulMonadLift.lift_bind LawfulMonadLift.lift_map LawfulMonadLift.lift_seq
+  refl
 
 macro "xwp" : tactic =>
   `(tactic| ((try xstart); wp_simp +contextual))

@@ -6,7 +6,11 @@ namespace MPL
 class WP (m : Type → Type) (ps : outParam PredShape) where
   wp {α} (x : m α) : PredTrans ps α
 
-notation:max "wp⟦" x "⟧" => WP.wp x
+open Lean.Parser.Term in
+syntax:max "wp⟦" term:min optType "⟧" : term
+macro_rules
+  | `(wp⟦$x:term⟧) => `(WP.wp $x)
+  | `(wp⟦$x:term : $ty⟧) => `(WP.wp ($x : $ty))
 
 @[simp]
 theorem WP.wp_dite {c : Prop} [Decidable c] {t : c → m α} {e : ¬c → m α} [WP m ps] :

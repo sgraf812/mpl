@@ -406,46 +406,54 @@ def PredTrans.dite_apply {ps} {Q : PostCond α ps} (c : Prop) [Decidable c] (t :
 def PredTrans.ite_apply {ps} {Q : PostCond α ps} (c : Prop) [Decidable c] (t : PredTrans ps α) (e : PredTrans ps α) :
   (if c then t else e).apply Q = if c then t.apply Q else e.apply Q := by split <;> rfl
 
-noncomputable def PredTrans.prePost {ps : PredShape} {α : Type} (P : PreCond ps) (Q : PostCond α ps) : PredTrans ps α :=
-  { apply := fun Q' => P ⊓ PreCond.pure (Q ≤ Q'), mono := by
-      intro Q₁ Q₂ h
-      simp only [apply, le_inf_iff, inf_le_left, true_and]
-      refine inf_le_of_right_le ?_
-      simp only [PreCond.le_pure_pure]
-      exact (le_trans · h) }
+@[simp]
+def PredTrans.monadLiftArg_apply {ps} {Q : PostCond α (.arg σ ps)} (t : PredTrans ps α) :
+  (MonadLift.monadLift t : PredTrans (.arg σ ps) α).apply Q = fun s => t.apply (fun a => Q.1 a s, Q.2) := rfl
 
-noncomputable def PredTrans.post {ps : PredShape} {α : Type} (Q : PostCond α ps) : PredTrans ps α :=
-  { apply := fun Q' => PreCond.pure (Q ≤ Q'), mono := by
-      intro Q₁ Q₂ h
-      simp only [apply, le_inf_iff, inf_le_left, true_and]
-      simp only [PreCond.le_pure_pure]
-      exact (le_trans · h) }
+@[simp]
+def PredTrans.monadLiftExcept_apply {ps} {Q : PostCond α (.except ε ps)} (t : PredTrans ps α) :
+  (MonadLift.monadLift t : PredTrans (.except ε ps) α).apply Q = t.apply (fun a => Q.1 a, Q.2.2) := rfl
 
-theorem PredTrans.prePost_apply {ps : PredShape} {α : Type} {P : PreCond ps} {Q : PostCond α ps} :
-  P ≤ (PredTrans.prePost P Q).apply Q := by simp[PredTrans.prePost]
-
-theorem PredTrans.prePost_apply_conseq {ps : PredShape} {α : Type} {P : PreCond ps} {Q Q' : PostCond α ps}
-  (hpost : Q ≤ Q') :
-  P ≤ (PredTrans.prePost P Q).apply Q' := le_trans PredTrans.prePost_apply ((PredTrans.prePost P Q).mono _ _ hpost)
-
-theorem PredTrans.le_prePost {ps : PredShape} {α : Type} {P : PreCond ps} {Q : PostCond α ps} {x : PredTrans ps α} :
-  P ≤ x.apply Q ↔ x ≤ PredTrans.prePost P Q := by
-    constructor
-    · intro h;
-      simp[PredTrans.prePost]
-      intro Q₂
-      simp
-      apply PreCond.imp_pure_extract_r
-      intro hq
-      exact le_trans h (x.mono Q Q₂ hq)
-    · intro h
-      apply le_trans PredTrans.prePost_apply (h Q)
-
-def PredTrans.runState {ps : PredShape} {α} (x : PredTrans (.arg σ ps) α) (s : σ) : PredTrans ps (α × σ) :=
-  { apply Q := x.apply (fun r s' => Q.1 (r, s'), Q.2) s,
-    mono := by
-      intro Q₁ Q₂ h
-      apply x.mono
-      simp[h.2]
-      intro r s'
-      apply h.1 }
+-- noncomputable def PredTrans.prePost {ps : PredShape} {α : Type} (P : PreCond ps) (Q : PostCond α ps) : PredTrans ps α :=
+--   { apply := fun Q' => P ⊓ PreCond.pure (Q ≤ Q'), mono := by
+--       intro Q₁ Q₂ h
+--       simp only [apply, le_inf_iff, inf_le_left, true_and]
+--       refine inf_le_of_right_le ?_
+--       simp only [PreCond.le_pure_pure]
+--       exact (le_trans · h) }
+--
+-- noncomputable def PredTrans.post {ps : PredShape} {α : Type} (Q : PostCond α ps) : PredTrans ps α :=
+--   { apply := fun Q' => PreCond.pure (Q ≤ Q'), mono := by
+--       intro Q₁ Q₂ h
+--       simp only [apply, le_inf_iff, inf_le_left, true_and]
+--       simp only [PreCond.le_pure_pure]
+--       exact (le_trans · h) }
+--
+-- theorem PredTrans.prePost_apply {ps : PredShape} {α : Type} {P : PreCond ps} {Q : PostCond α ps} :
+--   P ≤ (PredTrans.prePost P Q).apply Q := by simp[PredTrans.prePost]
+--
+-- theorem PredTrans.prePost_apply_conseq {ps : PredShape} {α : Type} {P : PreCond ps} {Q Q' : PostCond α ps}
+--   (hpost : Q ≤ Q') :
+--   P ≤ (PredTrans.prePost P Q).apply Q' := le_trans PredTrans.prePost_apply ((PredTrans.prePost P Q).mono _ _ hpost)
+--
+-- theorem PredTrans.le_prePost {ps : PredShape} {α : Type} {P : PreCond ps} {Q : PostCond α ps} {x : PredTrans ps α} :
+--   P ≤ x.apply Q ↔ x ≤ PredTrans.prePost P Q := by
+--     constructor
+--     · intro h;
+--       simp[PredTrans.prePost]
+--       intro Q₂
+--       simp
+--       apply PreCond.imp_pure_extract_r
+--       intro hq
+--       exact le_trans h (x.mono Q Q₂ hq)
+--     · intro h
+--       apply le_trans PredTrans.prePost_apply (h Q)
+--
+-- def PredTrans.runState {ps : PredShape} {α} (x : PredTrans (.arg σ ps) α) (s : σ) : PredTrans ps (α × σ) :=
+--   { apply Q := x.apply (fun r s' => Q.1 (r, s'), Q.2) s,
+--     mono := by
+--       intro Q₁ Q₂ h
+--       apply x.mono
+--       simp[h.2]
+--       intro r s'
+--       apply h.1 }
