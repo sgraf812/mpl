@@ -48,10 +48,10 @@ export WPMonadLift (wp_monadLift)
 attribute [simp] wp_monadLift
 
 instance StateT.instWPMonadLift [Monad m] [WP m psm] [LawfulMonad m] [MonadMorphism m (PredTrans psm) wp] : WPMonadLift m (StateT σ m) psm (.arg σ psm) where
-  wp_monadLift := by intro _ _; ext; simp[wp, MonadLift.monadLift, StateT.lift]
+  wp_monadLift := by intro _ _; ext; simp[wp, liftM, monadLift, MonadLift.monadLift, StateT.lift]
 
 instance ReaderT.instWPMonadLift [Monad m] [WP m psm] [LawfulMonad m] [MonadMorphism m (PredTrans psm) wp] : WPMonadLift m (ReaderT ρ m) psm (.arg ρ psm) where
-  wp_monadLift := by intro _ _; ext; simp[wp, MonadLift.monadLift]
+  wp_monadLift := by intro _ _; ext; simp[wp, liftM, monadLift, MonadLift.monadLift, StateT.lift]
 
 instance ExceptT.instWPMonadLift [Monad m] [WP m psm] [LawfulMonad m] [MonadMorphism m (PredTrans psm) wp] : WPMonadLift m (ExceptT ε m) psm (.except ε psm) where
   wp_monadLift := by intro _ _; ext; simp[wp, liftM, monadLift, MonadLift.monadLift, ExceptT.lift, Function.comp_def, ExceptT.mk]

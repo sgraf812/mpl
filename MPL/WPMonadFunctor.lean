@@ -1,4 +1,5 @@
 import MPL.WPMonad
+import MPL.WPMonadLift
 
 namespace MPL
 
@@ -95,54 +96,94 @@ instance PredTrans.instLawfulMonadFunctorDropFail : LawfulMonadFunctor (PredTran
   monadMap_id := by intro _; rfl
   monadMap_comp := by intro _; simp only [mmap, popExcept_pushExcept, implies_true]
 
-attribute [simp] LawfulMonadFunctor.monadMap_id LawfulMonadFunctor.monadMap_comp
+-- attribute [simp] LawfulMonadFunctor.monadMap_id LawfulMonadFunctor.monadMap_comp
 
-example : ∀ (m : Type → Type) (f : ∀{β}, m β → m β) (f' : ∀{β}, PredTrans ps β → PredTrans ps β) (x : m α) [WP m ps],
-  wp⟦f x⟧ = f' wp⟦x⟧ := sorry
+class WPApp (m : Type → Type) (ps : outParam PredShape) (f : ∀{β}, m β → m β) [WP m ps] where
+  F : ∀ {β}, PredTrans ps β → PredTrans ps β
+  F_natural (x : m α) (g : α → β) : F (g <$> wp⟦x⟧) = g <$> F (wp⟦x⟧)
+  wp_app (x : m α) : wp⟦f x⟧ = F wp⟦x⟧
 
-noncomputable def blah {m : Type → Type} [WP m ps] (f : ∀{β}, m β → m β) : ∀{β}, PredTrans ps β → PredTrans ps β := fun t =>
-  sInf { t' | ∃ x, t ≤ wp⟦x⟧ ∧ t' = wp⟦f x⟧  }
+attribute [simp] WPApp.wp_app WPApp.F_natural WPApp.F
 
-theorem blah_spec {m : Type → Type} [WP m ps] (f : ∀{β}, m β → m β) (x : m α) : blah (m:=m) f wp⟦x⟧ = wp⟦f x⟧ := by
-  simp[blah]
-  apply le_antisymm
-  · apply sInf_le
-    use x
-  · apply le_sInf
-    intro t' ⟨x', ⟨hx, ht⟩⟩
-    subst ht
+instance StateT.instWPApp [MonadWithReaderOf ρ m] [WP m ps] (f : ∀{β}, m β → m β) [base : WPApp m ps f] : WPApp (StateT σ m) (.arg σ ps) (mmap (m:=m) f) where
+  F := mmap (m:=PredTrans ps) base.F
+  F_natural x g := by
+    calc mmap (m:=PredTrans ps) base.F (g <$> wp⟦x⟧)
+      _ = PredTrans.pushArg fun s => base.F ((fun (a, s) => (g a, s)) <$> wp⟦x s⟧) := rfl
+      _ = PredTrans.pushArg fun s => (fun (a, s) => (g a, s)) <$> base.F wp⟦x s⟧ := by simp[base.F_natural]
+      _ = g <$> PredTrans.pushArg fun s => base.F wp⟦x s⟧ := rfl
+  wp_app x := by
+    simp[wp, monadMap, MonadFunctor.monadMap, withTheReader, MonadWithReaderOf.withReader, base.wp_app]
 
-class WPMonadFunctor (m : semiOutParam (Type → Type)) (n : Type → Type) (psm : outParam PredShape) (psn : outParam PredShape)
-  [WP m psm] [WP n psn] [MonadFunctor m n] [MonadFunctor (PredTrans psm) (PredTrans psn)] where
-  wp_monadFunctor {x : n α} :
-    wp (MonadFunctor.monadMap f x : n α) = MonadFunctor.monadMap (wp1 f) (wp x)
+instance ReaderT.instWPApp [MonadWithReaderOf ρ m] [WP m ps] (f : ∀{β}, m β → m β) [base : WPApp m ps f] : WPApp (ReaderT σ m) (.arg σ ps) (mmap (m:=m) f) where
+  F := mmap (m:=PredTrans ps) base.F
+  F_natural x g := by
+    calc mmap (m:=PredTrans ps) base.F (g <$> wp⟦x⟧)
+      _ = PredTrans.pushArg fun s => base.F ((fun (a, s) => (g a, s)) <$> (·, s) <$> wp⟦x s⟧) := rfl
+      _ = PredTrans.pushArg fun s => (fun (a, s) => (g a, s)) <$> base.F ((·, s) <$> wp⟦x s⟧) := by simp[base.F_natural]
+      _ = g <$> PredTrans.pushArg fun s => base.F ((·, s) <$> wp⟦x s⟧) := rfl
+  wp_app x := by
+    simp[wp, monadMap, MonadFunctor.monadMap, withTheReader, MonadWithReaderOf.withReader, base.wp_app, base.F_natural]
 
-export WPMonadLift (wp_monadLift)
-attribute [simp] wp_monadLift
+theorem thing [WP m ps] (x : ExceptT ε m α) : wp⟦x⟧.popExcept = wp⟦x.run⟧ := by simp[wp, ExceptT.run]
+theorem thing2 [WP m ps] (x : StateT σ m α) : wp⟦x⟧.popArg s = wp⟦x.run s⟧ := by simp[wp, StateT.run]
+
+-- the following are just the definitions of wp:
+theorem thing3 [WP m ps] (x : ExceptT ε m α) : PredTrans.pushExcept wp⟦x⟧ = wp⟦x⟧ := by simp[wp]
+theorem thing4 [WP m ps] (x : StateT σ m α) : PredTrans.pushArg (fun s => wp⟦x s⟧) = wp⟦x⟧ := by simp[wp]
+
+instance ExceptT.instWPApp [MonadWithReaderOf ρ m] [WP m ps] (f : ∀{β}, m β → m β) [base : WPApp m ps f] : WPApp (ExceptT ε m) (.except ε ps) (mmap (m:=m) f) where
+  F := mmap (m := PredTrans ps) base.F
+  F_natural {α β} x g := by
+    calc mmap (m:=PredTrans ps) base.F (g <$> wp⟦x⟧)
+      _ = PredTrans.pushExcept (base.F ((g <$> wp⟦x⟧.popExcept) : ExceptT ε (PredTrans ps) β)) := by rfl
+      _ = PredTrans.pushExcept (base.F (ExceptT.map g wp⟦x.run⟧)) := by simp[Functor.map, thing]
+      _ = PredTrans.pushExcept (base.F (((fun | .ok a => .ok (g a) | .error e => .error e) <$> wp⟦x.run⟧))) := sorry -- incredible how such a simple thing can be so difficult
+      _ = PredTrans.pushExcept ((fun | Except.ok a => .ok (g a) | .error e => .error e) <$> base.F wp⟦x.run⟧ : PredTrans ps (Except ε β)) := by simp[base.F_natural]
+      _ = g <$> PredTrans.pushExcept (base.F wp⟦x.run⟧) := by
+        simp[PredTrans.pushExcept, Functor.map, PredTrans.bind, PredTrans.pure]
+        ext Q
+        congr
+        ext e
+        cases e <;> simp
+      _ = g <$> PredTrans.pushExcept (base.F wp⟦x⟧.popExcept) := by simp[thing]
+  wp_app x := by
+    simp[wp, monadMap, MonadFunctor.monadMap, withTheReader, MonadWithReaderOf.withReader, base.wp_app]
+
+instance ReaderT.instWPAppWithReader [WP m ps] (f : ρ → ρ) : WPApp (ReaderT ρ m) (.arg ρ ps) (MonadWithReaderOf.withReader f) where
+  F := PredTrans.withReader f
+  F_natural x g := rfl
+  wp_app x := by simp[wp, MonadWithReaderOf.withReader, PredTrans.withReader]
 
 @[simp]
 theorem ReaderT.wp_withReader [Monad m] [WP m psm] [MonadMorphism m (PredTrans psm) wp] :
   wp (MonadWithReaderOf.withReader f x : ReaderT ρ m α) = PredTrans.withReader f (wp x) := rfl
 
 @[simp]
-theorem MonadWithReaderOf.wp_withTheReader [MonadWithReaderOf ρ m] [WP m sh] :
-  wp (withTheReader ρ f x : m ρ) = wp (MonadWithReaderOf.withReader f x : m ρ) := rfl
+theorem MonadWithReaderOf.wp_withTheReader [MonadWithReaderOf ρ m] [WP m sh] (f : ρ → ρ) (x : m α) :
+  wp (withTheReader ρ f x) = wp (MonadWithReaderOf.withReader f x) := rfl
 
 @[simp]
-theorem MonadWithReader.wp_withReader [MonadWithReaderOf ρ m] [WP m sh] :
-  wp (MonadWithReader.withReader f x : m ρ) = wp (MonadWithReaderOf.withReader f x : m ρ) := rfl
+theorem MonadWithReader.wp_withReader [MonadWithReaderOf ρ m] [WP m sh] (f : ρ → ρ) (x : m α) :
+  wp (MonadWithReader.withReader f x) = wp (MonadWithReaderOf.withReader f x) := rfl
 
 @[simp]
-theorem MonadWithReaderOf.wp_withReader [MonadWithReaderOf ρ m] [WP m msh] [WP n nsh] [MonadFunctor m n] [MonadFunctor (PredTrans msh) (PredTrans nsh)] :
-  wp (withTheReader ρ f x : n ρ) = monadMap (m:= PredTrans msh) _ (wp x) := by
-    simp[withReader, withTheReader, MonadWithReaderOf.withReader]
--- wp : ∀ ρ, n ρ → PredTrans nsh ρ
--- wp : ∀ ρ, n ρ → PredTrans nsh ρ
+theorem MonadWithReaderOf.wp_withReader [MonadWithReaderOf ρ m] [WP m msh] [WP n nsh] [MonadFunctor m n] [MonadFunctor (PredTrans msh) (PredTrans nsh)] (f : ρ → ρ) (x : n α) :
+  wp (MonadWithReaderOf.withReader f x) = wp (MonadFunctor.monadMap (m:=m) (MonadWithReaderOf.withReader f) x) := rfl
 
 @[simp]
-theorem MonadWithReaderOf.wp_withReader2 (x : StateT Nat (ReaderT Bool Id) α) :
-  wp (withTheReader Bool f x : StateT Nat (ReaderT Bool Id) α) = monadMap (PredTrans.withReader f) (wp x) := by
-    simp[withReader, withTheReader, MonadWithReaderOf.withReader]
-    simp[monadMap]
+theorem MonadWithReaderOf.wp_withReader2 (x : ReaderT Bool Id Nat) :
+  wp (withTheReader Bool f x : ReaderT Bool Id Nat) = pure 0 := by
+    simp
+    sorry
+
+@[simp]
+theorem MonadWithReaderOf.wp_withReader3 (x : StateT Nat (ReaderT Bool Id) Nat) :
+  wp (withTheReader Bool f x : StateT Nat (ReaderT Bool Id) Nat) = pure 0 := by
+    let inst' := inferInstanceAs (WPApp (StateT Nat (ReaderT Bool Id)) _ (MonadFunctor.monadMap (m:=ReaderT Bool Id) (MonadWithReaderOf.withReader f)))
+    simp[inst'.wp_app, WPApp.F]
+    simp[WPApp.F]
+
+    sorry
 
 end MPL

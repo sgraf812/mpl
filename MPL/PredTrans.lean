@@ -350,14 +350,6 @@ def PredTrans.modify {ps : PredShape} {σ : Type} (f : σ → σ) : PredTrans (.
   let s ← PredTrans.get
   PredTrans.set (f s)
 
-@[simp]
-def PredTrans.withReader {ps : PredShape} {σ : Type} (f : σ → σ) (x : PredTrans (.arg σ ps) α) : PredTrans (.arg σ ps) α := do
-  let s ← PredTrans.get
-  PredTrans.set (f s)
-  let a ← x
-  PredTrans.set s
-  pure a
-
 -- The interpretation of `StateT σ (PredTrans ps) α` into `PredTrans (.arg σ ps) α`.
 -- Think: modifyGetM
 def PredTrans.pushArg {ps : PredShape} {σ : Type} {α : Type} (x : StateT σ (PredTrans ps) α) : PredTrans (.arg σ ps) α :=
@@ -404,10 +396,13 @@ def PredTrans.modifyGet {ps : PredShape} {σ : Type} {α : Type} (f : σ → α 
 theorem PredTrans.modifyGet_pure {ps : PredShape} {σ : Type} {α : Type} (a : α) :
   PredTrans.modifyGet (ps:=ps) (σ:=σ) (fun s => (a, s)) = Pure.pure a := rfl
 
-instance PredTrans.instMonadLiftArg : MonadLift (PredTrans m) (PredTrans (.arg σ m)) where
-  monadLift x := PredTrans.pushArg (fun s => (·, s) <$> x)
+def PredTrans.withReader {ps : PredShape} {σ : Type} (f : σ → σ) (x : PredTrans (.arg σ ps) α) : PredTrans (.arg σ ps) α :=
+  PredTrans.pushArg fun r => do let (a, _) ← PredTrans.popArg x (f r); Pure.pure (a, r)
 
-instance PredTrans.instMonadLiftExcept : MonadLift (PredTrans m) (PredTrans (.except σ m)) where
+instance PredTrans.instMonadLiftArg : MonadLift (PredTrans m) (PredTrans (.arg σ m)) where
+  monadLift x := PredTrans.pushArg (liftM x)
+
+instance PredTrans.instMonadLiftExcept : MonadLift (PredTrans m) (PredTrans (.except ε m)) where
   monadLift x := PredTrans.pushExcept (liftM x)
 
 instance PredTrans.instMonadFunctorArg : MonadFunctor (PredTrans m) (PredTrans (.arg σ m)) where
@@ -479,11 +474,23 @@ instance PredTrans.instMonadMorphismPopArg : MonadMorphism (PredTrans (.arg σ p
   pure_pure := by intros; rfl
   bind_bind := by intros; rfl
 
+-- instance PredTrans.instMonadMorphismWithReader (f : ρ → ρ) : MonadMorphism (PredTrans (.arg ρ ps)) (PredTrans (.arg ρ ps)) (PredTrans.withReader f) where
+--   pure_pure := by intros; rfl
+--   bind_bind x k := by
+--     have key : ∀ r, x.popArg r = (·.1, r) <$> x.popArg r := sorry -- A property of the range of wp at ReaderT...
+--     replace key : ∀ Q r, x.apply Q r = x.apply (fun a _ => Q.1 a r, Q.2) r := sorry -- same fact, more easily applicable
+--     ext Q r
+--     simp[withReader, key]
+
 @[simp]
 theorem PredTrans.pushArg_popArg : pushArg (popArg x) = x := rfl
 
 @[simp]
 theorem PredTrans.popArg_pushArg : popArg (pushArg f) = f := rfl
+
+-- Just a reminder for me that the following would not hold for a suitable defn of pushReader and popReader:
+--theorem PredTrans.pushReader_popReader : pushReader (popReader x) = x := sorry
+--  goal: x.apply (fun a x => Q.1 a x✝, Q.2) x✝ = x.apply Q x✝
 
 instance PredTrans.instMonadMorphismPushExcept : MonadMorphism (ExceptT ε (PredTrans ps)) (PredTrans (.except ε ps)) (PredTrans.pushExcept) where
   pure_pure := by intros; rfl
