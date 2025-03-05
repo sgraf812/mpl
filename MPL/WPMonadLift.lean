@@ -19,27 +19,25 @@ theorem LawfulMonadLift.monadLift_seq {m n : Type → Type} [Monad m] [Monad n] 
     MonadLift.monadLift (f <*> x) = (MonadLift.monadLift f : n (α → β)) <*> (MonadLift.monadLift x : n α) := by
     simp[liftM, MonadLift.monadLift, ←bind_map, monadLift_bind, monadLift_map]
 
-instance StateT.instLawfulMonadLift [Monad m] [LawfulMonad m] : LawfulMonadLift m (StateT σ m) where
-  monadLift_pure x := by ext; simp[liftM, MonadLift.monadLift, StateT.lift]
-  monadLift_bind x f := by ext; simp[liftM, MonadLift.monadLift, StateT.lift]
+instance StateT.instLiftMonadMorphism [Monad m] [LawfulMonad m] : MonadMorphism m (StateT σ m) MonadLift.monadLift where
+  pure_pure x := by ext; simp[liftM, MonadLift.monadLift, StateT.lift]
+  bind_bind x f := by ext; simp[liftM, MonadLift.monadLift, StateT.lift]
 
-instance ReaderT.instLawfulMonadLift [Monad m] [LawfulMonad m] : LawfulMonadLift m (ReaderT ρ m) where
-  monadLift_pure x := by ext; simp[liftM, MonadLift.monadLift, ReaderT.run, pure, ReaderT.pure]
-  monadLift_bind x f := by ext; simp[liftM, MonadLift.monadLift, ReaderT.run, bind, ReaderT.bind]
+instance ReaderT.instLiftMonadMorphism [Monad m] [LawfulMonad m] : MonadMorphism m (ReaderT ρ m) MonadLift.monadLift where
+  pure_pure x := by ext; simp[liftM, MonadLift.monadLift, ReaderT.run, pure, ReaderT.pure]
+  bind_bind x f := by ext; simp[liftM, MonadLift.monadLift, ReaderT.run, bind, ReaderT.bind]
 
-instance ExceptT.instLawfulMonadLift [Monad m] [LawfulMonad m] : LawfulMonadLift m (ExceptT ε m) where
-  monadLift_pure x := by ext; simp[liftM, MonadLift.monadLift, ExceptT.lift]
-  monadLift_bind x f := by ext; simp[liftM, MonadLift.monadLift, ExceptT.lift, ExceptT.mk, bind, ExceptT.bind, ExceptT.bindCont]
+instance ExceptT.instLiftMonadMorphism [Monad m] [LawfulMonad m] : MonadMorphism m (ExceptT ε m) MonadLift.monadLift where
+  pure_pure x := by ext; simp[liftM, MonadLift.monadLift, ExceptT.lift]
+  bind_bind x f := by ext; simp[liftM, MonadLift.monadLift, ExceptT.lift, ExceptT.mk, bind, ExceptT.bind, ExceptT.bindCont]
 
-instance PredTrans.instLawfulMonadLiftArg : LawfulMonadLift (PredTrans ps) (PredTrans (.arg σ ps)) where
-  monadLift_pure x := by ext; simp
-  monadLift_bind x f := by ext Q σ; simp[bind, PredTrans.bind]
+instance PredTrans.instLiftMonadMorphismArg : MonadMorphism (PredTrans ps) (PredTrans (.arg σ ps)) MonadLift.monadLift where
+  pure_pure x := by ext; simp
+  bind_bind x f := by ext Q σ; simp[bind, PredTrans.bind]
 
-instance PredTrans.instLawfulMonadLiftDropFail : LawfulMonadLift (PredTrans ps) (PredTrans (.except ε ps)) where
-  monadLift_pure x := by ext; simp
-  monadLift_bind x f := by ext Q; simp[bind, PredTrans.bind]
-
-attribute [simp] LawfulMonadLift.monadLift_pure LawfulMonadLift.monadLift_bind LawfulMonadLift.monadLift_map LawfulMonadLift.monadLift_seq
+instance PredTrans.instLiftMonadMorphismDropFail : MonadMorphism (PredTrans ps) (PredTrans (.except ε ps)) MonadLift.monadLift where
+  pure_pure x := by ext; simp
+  bind_bind x f := by ext Q; simp[bind, PredTrans.bind]
 
 class WPMonadLift (m : semiOutParam (Type → Type)) (n : Type → Type) (psm : outParam PredShape) (psn : outParam PredShape)
   [WP m psm] [WP n psn] [MonadLift m n] [MonadLift (PredTrans psm) (PredTrans psn)] where
@@ -49,22 +47,22 @@ class WPMonadLift (m : semiOutParam (Type → Type)) (n : Type → Type) (psm : 
 export WPMonadLift (wp_monadLift)
 attribute [simp] wp_monadLift
 
-instance StateT.instWPMonadLift [Monad m] [WP m psm] [LawfulMonad m] [WPMonad m psm] : WPMonadLift m (StateT σ m) psm (.arg σ psm) where
-  wp_monadLift := by simp[wp, liftM, MonadLift.monadLift, StateT.lift, PredTrans.frame_arg]
+instance StateT.instWPMonadLift [Monad m] [WP m psm] [LawfulMonad m] [MonadMorphism m (PredTrans psm) wp] : WPMonadLift m (StateT σ m) psm (.arg σ psm) where
+  wp_monadLift := by intro _ _; ext; simp[wp, MonadLift.monadLift, StateT.lift]
 
-instance ReaderT.instWPMonadLift [Monad m] [WP m psm] [LawfulMonad m] [WPMonad m psm] : WPMonadLift m (ReaderT ρ m) psm (.arg ρ psm) where
-  wp_monadLift := by simp[wp, MonadLift.monadLift, PredTrans.frame_arg]
+instance ReaderT.instWPMonadLift [Monad m] [WP m psm] [LawfulMonad m] [MonadMorphism m (PredTrans psm) wp] : WPMonadLift m (ReaderT ρ m) psm (.arg ρ psm) where
+  wp_monadLift := by intro _ _; ext; simp[wp, MonadLift.monadLift]
 
-instance ExceptT.instWPMonadLift [Monad m] [WP m psm] [LawfulMonad m] [WPMonad m psm] : WPMonadLift m (ExceptT ε m) psm (.except ε psm) where
-  wp_monadLift := by simp[wp, liftM, MonadLift.monadLift, ExceptT.lift, Function.comp_def, PredTrans.drop_fail_cond]
+instance ExceptT.instWPMonadLift [Monad m] [WP m psm] [LawfulMonad m] [MonadMorphism m (PredTrans psm) wp] : WPMonadLift m (ExceptT ε m) psm (.except ε psm) where
+  wp_monadLift := by intro _ _; ext; simp[wp, liftM, monadLift, MonadLift.monadLift, ExceptT.lift, Function.comp_def, ExceptT.mk]
 
 end MPL
 open MPL
 
 @[simp]
-theorem ReaderT.wp_read [Monad m] [WP m sh] [WPMonad m sh] :
+theorem ReaderT.wp_read [Monad m] [WP m psm] [MonadMorphism m (PredTrans psm) wp] :
   wp (MonadReaderOf.read : ReaderT ρ m ρ) = PredTrans.get := by
-    simp[wp, MonadReaderOf.read, ReaderT.read, pure, PredTrans.pure, PredTrans.get]
+    ext; simp[wp, MonadReaderOf.read, ReaderT.read, pure, PredTrans.pure, PredTrans.get]
 
 @[simp]
 theorem MonadReaderOf.wp_readThe [MonadReaderOf ρ m] [WP m sh] :
@@ -82,9 +80,9 @@ theorem MonadReaderOf.wp_read [MonadReaderOf ρ m] [WP m msh] [WP n nsh] [MonadL
     simp only [read, liftM, monadLift, wp_monadLift, MonadReader.wp_read]
 
 @[simp]
-theorem StateT.wp_get [WP m sh] [Monad m] [WPMonad m sh] :
+theorem StateT.wp_get [WP m psm] [Monad m] [MonadMorphism m (PredTrans psm) wp] :
   wp (MonadStateOf.get : StateT σ m σ) = PredTrans.get := by
-    simp[wp, MonadState.get, getThe, MonadStateOf.get, StateT.get, pure, PredTrans.pure, PredTrans.get]
+    ext; simp[wp, MonadState.get, getThe, MonadStateOf.get, StateT.get, pure, PredTrans.pure, PredTrans.get]
 
 @[simp]
 theorem MonadState.wp_get [WP m sh] [MonadStateOf σ m] :
@@ -96,9 +94,9 @@ theorem MonadStateOf.wp_get [WP m msh] [WP n nsh] [MonadLift m n] [MonadLift (Pr
     simp [MonadStateOf.get, liftM, monadLift]
 
 @[simp]
-theorem StateT.wp_set [WP m sh] [Monad m] [WPMonad m sh] (x : σ) :
+theorem StateT.wp_set [WP m sh] [Monad m] [MonadMorphism m (PredTrans sh) wp] (x : σ) :
   wp (MonadState.set x : StateT σ m PUnit) = PredTrans.set x := by
-    simp[wp, MonadState.set, MonadStateOf.set, StateT.set, pure, PredTrans.pure, PredTrans.set]
+    ext; simp[wp, MonadState.set, MonadStateOf.set, StateT.set, pure, PredTrans.pure, PredTrans.set]
 
 @[simp]
 theorem MonadStateOf.wp_set [WP m msh] [WP n nsh] [MonadLift m n] [MonadLift (PredTrans msh) (PredTrans nsh)] [MonadStateOf σ m] [WPMonadLift m n msh nsh] :
@@ -110,7 +108,7 @@ theorem MonadState.wp_set [WP m sh] [MonadStateOf σ m] :
   wp (MonadState.set x : m PUnit) = wp (MonadStateOf.set x : m PUnit) := rfl
 
 @[simp]
-theorem StateT.wp_modifyGet [WP m sh] [Monad m] [WPMonad m sh]
+theorem StateT.wp_modifyGet [WP m sh] [Monad m] [MonadMorphism m (PredTrans sh) wp]
   (f : σ → α × σ) :
   wp (MonadStateOf.modifyGet f : StateT σ m α) = PredTrans.modifyGet f := by
     simp[wp, MonadStateOf.modifyGet, StateT.modifyGet, pure, PredTrans.pure, PredTrans.modifyGet]
@@ -131,6 +129,12 @@ theorem MonadState.wp_modify [WP m msh] [MonadStateOf σ m]
   wp (modify f : m PUnit) = wp ((MonadStateOf.modifyGet fun s => ((), f s)) : m PUnit) := rfl
 
 @[simp]
-theorem ExceptT.wp_throw [Monad m] [WP m stack] [WPMonad m stack] :
+theorem ExceptT.wp_throw [Monad m] [WP m ps] [MonadMorphism m (PredTrans ps) wp] :
   wp (throw e : ExceptT ε m α) = PredTrans.throw e := by
-    simp[wp, pure, PredTrans.pure, PredTrans.throw]
+    ext; simp[wp, throw, throwThe, MonadExceptOf.throw, ExceptT.mk, pure, PredTrans.pure, PredTrans.throw]
+
+-- MonadExceptOf is not lifted via MonadLift (tryCatch) but rather via individual instances for StateT etc.
+-- @[simp]
+-- theorem MonadExceptOf.wp_throw [WP m msh] [WP n nsh] [MonadLift m n] [MonadLift (PredTrans msh) (PredTrans nsh)] [MonadExceptOf ε m] [WPMonadLift m n msh nsh] :
+--   wp (MonadExceptOf.throw (ε:=ε) e : n α) = MonadLift.monadLift (wp (MonadExceptOf.throw (ε:=ε) e : m α)) := by
+--     simp [MonadStateOf.set, liftM, monadLift]

@@ -57,24 +57,24 @@ theorem triple_extract_persistent {ps : PredShape} {α} {m : Type → Type} [WP 
   (x : m α) (h : P → triple x P' Q) :
   triple x (PreCond.pure P ⊓ P') Q := PreCond.imp_pure_extract_l h
 
-theorem triple_pure {m : Type → Type} [Monad m] [WP m ps] [WPMonad m ps] {α} {Q : PostCond α ps} (a : α) (himp : P ≤ Q.1 a) :
-  triple (pure (f:=m) a) P Q := by apply le_trans himp (by simp only [wp_pure, PredTrans.pure_apply, le_refl])
+theorem triple_pure {m : Type → Type} [Monad m] [WP m ps] [MonadMorphism m (PredTrans ps) wp] {α} {Q : PostCond α ps} (a : α) (himp : P ≤ Q.1 a) :
+  triple (pure (f:=m) a) P Q := by apply le_trans himp (by simp only [pure_pure, PredTrans.pure_apply, le_refl])
 
-theorem triple_bind {m : Type → Type} [Monad m] [WP m ps] [WPMonad m ps] {α β} {P : PreCond ps} {Q : α → PreCond ps} {R : PostCond β ps} (x : m α) (f : α → m β)
+theorem triple_bind {m : Type → Type} [Monad m] [WP m ps] [MonadMorphism m (PredTrans ps) wp] {α β} {P : PreCond ps} {Q : α → PreCond ps} {R : PostCond β ps} (x : m α) (f : α → m β)
   (hx : triple x P (Q, R.2))
   (hf : ∀ b, triple (f b) (Q b) R) :
   triple (x >>= f) P R := by
     apply le_trans hx
-    simp only [wp_bind]
+    simp only [bind_bind]
     apply wp⟦x⟧.mono _ _
     simp only [Prod.mk_le_mk, le_refl, and_true]
     exact hf
 
-theorem triple_bind2 {m : Type → Type} [Monad m] [WP m ps] [WPMonad m ps] {α β} {P : PreCond ps} {R : PostCond β ps} (x : m α) (f : α → m β)
+theorem triple_bind2 {m : Type → Type} [Monad m] [WP m ps] [MonadMorphism m (PredTrans ps) wp] {α β} {P : PreCond ps} {R : PostCond β ps} (x : m α) (f : α → m β)
   (h : triple x P (fun a => wp⟦f a⟧.apply R, R.2)) :
   triple (x >>= f) P R := triple_bind x f h (fun _ => le_rfl)
 
---theorem triple_bind_pre {m : Type → Type} [Monad m] [WP m ps] [WPMonad m ps] {α β} {P : PreCond ps} {Q : PostCond β ps} (x : m α) (f : α → m β)
+--theorem triple_bind_pre {m : Type → Type} [Monad m] [WP m ps] [MonadMorphism m (PredTrans ps) wp] {α β} {P : PreCond ps} {Q : PostCond β ps} (x : m α) (f : α → m β)
 --  (hx : triple wp⟦x⟧ P (fun a => triple wp⟦f a⟧ Q, Q.2)) :
 --  triple wp⟦x >>= f⟧ P R := by
 --    apply le_trans hx
@@ -91,15 +91,15 @@ theorem triple_extract_persistent_true {ps : PredShape} {α} {m : Type → Type}
     exact triple_extract_persistent x h
 
 /-
-theorem triple_conseq_l {m : Type → Type} [Monad m] [WP m ps] [WPMonad m ps] {P P' : PreCond ps} {Q : PostCond α ps}
+theorem triple_conseq_l {m : Type → Type} [Monad m] [WP m ps] [MonadMorphism m (PredTrans ps) wp] {P P' : PreCond ps} {Q : PostCond α ps}
   (x : m α) (hp : P ≤ P') (h : triple x P' Q) :
   triple x P Q := triple_conseq x hp le_rfl h
 
-theorem triple_conseq_r {m : Type → Type} [Monad m] [WP m ps] [WPMonad m ps] {P : PreCond ps} {Q Q' : PostCond α ps}
+theorem triple_conseq_r {m : Type → Type} [Monad m] [WP m ps] [MonadMorphism m (PredTrans ps) wp] {P : PreCond ps} {Q Q' : PostCond α ps}
   (x : m α) (hq : Q ≤ Q') (h : triple x P Q) :
   triple x P Q' := triple_conseq x le_rfl hq h
 
---theorem triple_map {m : Type → Type} [Monad m] [LawfulMonad m] [WP m ps] [WPMonad m ps] (f : α → β) (x : m α)
+--theorem triple_map {m : Type → Type} [Monad m] [LawfulMonad m] [WP m ps] [MonadMorphism m (PredTrans ps) wp] (f : α → β) (x : m α)
 --  (h : triple x P (fun a => Q.1 (f a), Q.2)) :
 --  triple (f <$> x) P Q := by
 --    simp only [← bind_pure_comp]
@@ -108,7 +108,7 @@ theorem triple_conseq_r {m : Type → Type} [Monad m] [WP m ps] [WPMonad m ps] {
 --    apply triple_pure
 --    simp only [le_refl]
 
---theorem triple_seq {m : Type → Type} [Monad m] [LawfulMonad m] [WP m ps] [WPMonad m ps] (f : m (α → β)) (x : m α) {Q : (α → β) → PreCond ps}
+--theorem triple_seq {m : Type → Type} [Monad m] [LawfulMonad m] [WP m ps] [MonadMorphism m (PredTrans ps) wp] (f : m (α → β)) (x : m α) {Q : (α → β) → PreCond ps}
 --  (hf : triple f P (Q, R.2))
 --  (hx : ∀ f, triple x (Q f) (fun a => R.1 (f a), R.2)) :
 --  triple (f <*> x) P R := by

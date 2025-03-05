@@ -1,4 +1,5 @@
 import Mathlib.Order.CompleteLattice
+import MPL.MonadMorphism
 
 namespace MPL
 
@@ -324,34 +325,6 @@ instance : LawfulMonad (PredTrans ps) where
   seqRight_eq := sorry
   pure_seq := sorry
 
-@[simp]
-def PredTrans.frame_arg (p : PredTrans m α) : PredTrans (.arg σ m) α :=
-  { apply := fun Q s => p.apply (fun a => Q.1 a s, Q.2), mono := by
-      intro Q₁ Q₂ h
-      simp only [apply]
-      intro s
-      simp
-      apply p.mono
-      simp[h.2]
-      intro a
-      apply h.1 }
-
-@[simp]
-instance PredTrans.liftArg : MonadLift (PredTrans m) (PredTrans (.arg σ m)) where
-  monadLift := PredTrans.frame_arg
-
-@[simp]
-def PredTrans.drop_fail_cond (p : PredTrans ps α) : PredTrans (.except ε ps) α :=
-  { apply := fun Q => p.apply (Q.1, Q.2.2), mono := by
-      intro Q₁ Q₂ h
-      simp only [apply]
-      apply p.mono
-      simp[h.1, h.2.2] }
-
-@[simp]
-instance PredTrans.dropFail : MonadLift (PredTrans m) (PredTrans (.except σ m)) where
-  monadLift := PredTrans.drop_fail_cond
-
 def PredTrans.throw {ps : PredShape} {ε : Type} (e : ε) : PredTrans (.except ε ps) α :=
   { apply := fun Q => Q.2.1 e, mono := by
       intro Q₁ Q₂ h
@@ -372,12 +345,76 @@ def PredTrans.set {ps : PredShape} {σ : Type} (s : σ) : PredTrans (.arg σ ps)
       intro _
       exact h.1 ⟨⟩ s }
 
-def PredTrans.modifyGet {ps : PredShape} {σ : Type} {α : Type} (f : σ → α × σ) : PredTrans (.arg σ ps) α :=
-  { apply := fun Q s => let ⟨a, s⟩ := f s; Q.1 a s, mono := by
+@[simp]
+def PredTrans.modify {ps : PredShape} {σ : Type} (f : σ → σ) : PredTrans (.arg σ ps) PUnit := do
+  let s ← PredTrans.get
+  PredTrans.set (f s)
+
+@[simp]
+def PredTrans.withReader {ps : PredShape} {σ : Type} (f : σ → σ) (x : PredTrans (.arg σ ps) α) : PredTrans (.arg σ ps) α := do
+  let s ← PredTrans.get
+  PredTrans.set (f s)
+  let a ← x
+  PredTrans.set s
+  pure a
+
+-- The interpretation of `StateT σ (PredTrans ps) α` into `PredTrans (.arg σ ps) α`.
+-- Think: modifyGetM
+def PredTrans.pushArg {ps : PredShape} {σ : Type} {α : Type} (x : StateT σ (PredTrans ps) α) : PredTrans (.arg σ ps) α :=
+  { apply := fun Q s => (x s).apply (fun (a, s) => Q.1 a s, Q.2), mono := by
       intro Q₁ Q₂ h
       simp only [apply]
       intro s
+      apply (x s).mono
+      exact ⟨fun p => h.1 p.1 p.2, h.2⟩ }
+
+def PredTrans.popArg {ps : PredShape} {α} (x : PredTrans (.arg σ ps) α) : StateT σ (PredTrans ps) α := fun s =>
+  { apply Q := x.apply (fun r s' => Q.1 (r, s'), Q.2) s,
+    mono := by
+      intro Q₁ Q₂ h
+      apply x.mono
+      simp[h.2]
+      intro r s'
       apply h.1 }
+
+-- The interpretation of `ExceptT ε (PredTrans ps) α` into `PredTrans (.except ε ps) α`
+def PredTrans.pushExcept {ps : PredShape} {α ε} (x : ExceptT ε (PredTrans ps) α) : PredTrans (.except ε ps) α :=
+  { apply Q := x.apply (fun | .ok a => Q.1 a | .error e => Q.2.1 e, Q.2.2),
+    mono := by
+      intro Q₁ Q₂ h
+      apply x.mono
+      simp
+      exact ⟨fun | .ok a => h.1 a | .error e => h.2.1 e, h.2.2⟩ }
+
+def PredTrans.popExcept {ps : PredShape} {α} (x : PredTrans (.except ε ps) α) : ExceptT ε (PredTrans ps) α :=
+  { apply Q := x.apply (fun a => Q.1 (.ok a), fun e => Q.1 (.error e), Q.2),
+    mono := by
+      intro Q₁ Q₂ h
+      apply x.mono
+      exact ⟨fun a => h.1 (.ok a), fun e => h.1 (.error e), h.2⟩ }
+
+def PredTrans.modifyGet {ps : PredShape} {σ : Type} {α : Type} (f : σ → α × σ) : PredTrans (.arg σ ps) α :=
+  pushArg (fun a => pure (f a))
+
+-- @[simp]
+-- theorem PredTrans.modifyGetM_modifyGet {ps : PredShape} {σ : Type} {α : Type} (f : σ → α × σ) :
+--   PredTrans.pushArg (ps:=ps) (fun s => Pure.pure (f s)) = PredTrans.modifyGet f := rfl
+
+@[simp]
+theorem PredTrans.modifyGet_pure {ps : PredShape} {σ : Type} {α : Type} (a : α) :
+  PredTrans.modifyGet (ps:=ps) (σ:=σ) (fun s => (a, s)) = Pure.pure a := rfl
+
+instance PredTrans.instMonadLiftArg : MonadLift (PredTrans m) (PredTrans (.arg σ m)) where
+  monadLift x := PredTrans.pushArg (fun s => (·, s) <$> x)
+
+instance PredTrans.instMonadLiftExcept : MonadLift (PredTrans m) (PredTrans (.except σ m)) where
+  monadLift x := PredTrans.pushExcept (liftM x)
+
+instance PredTrans.instMonadFunctorArg : MonadFunctor (PredTrans m) (PredTrans (.arg σ m)) where
+  monadMap f x := PredTrans.pushArg (fun s => f (PredTrans.popArg x s))
+
+instance PredTrans.instMonadFunctorExcept : MonadFunctor (PredTrans m) (PredTrans (.except ε m)) where
+  monadMap f x := PredTrans.pushExcept (f x.popExcept)
 
 #check PredTrans.modifyGet.eq_def
 #check fun α σ ps (f : σ → α × σ) (Q : PostCond α (.arg σ ps)) => congrArg (fun t => PredTrans.apply t Q) (PredTrans.modifyGet.eq_def f)
@@ -395,8 +432,16 @@ def PredTrans.modifyGet_apply {ps} {α : Type} {σ : Type} {Q : PostCond α (.ar
   (PredTrans.modifyGet f).apply Q = fun s => let ⟨a, s⟩ := f s; Q.1 a s := rfl
 
 @[simp]
+def PredTrans.modifyGetM_apply {ps} {α : Type} {σ : Type} {Q : PostCond α (.arg σ ps)} (f : σ → PredTrans ps (α × σ)) :
+  (PredTrans.pushArg f).apply Q = fun s => (f s).apply (fun ⟨a, s⟩ => Q.1 a s, Q.2) := rfl
+
+@[simp]
 def PredTrans.throw_apply {ps} {α ε : Type} {Q : PostCond α (.except ε ps)} (e : ε) :
   (PredTrans.throw e).apply Q = Q.2.1 e := rfl
+
+@[simp]
+def PredTrans.mkExcept_apply {ps} {α ε} {Q : PostCond α (.except ε ps)} (x : PredTrans ps (Except ε α)) :
+  (PredTrans.pushExcept x).apply Q = x.apply (fun | .ok a => Q.1 a | .error e => Q.2.1 e, Q.2.2) := rfl
 
 @[simp]
 def PredTrans.dite_apply {ps} {Q : PostCond α ps} (c : Prop) [Decidable c] (t : c → PredTrans ps α) (e : ¬ c → PredTrans ps α) :
@@ -413,6 +458,57 @@ def PredTrans.monadLiftArg_apply {ps} {Q : PostCond α (.arg σ ps)} (t : PredTr
 @[simp]
 def PredTrans.monadLiftExcept_apply {ps} {Q : PostCond α (.except ε ps)} (t : PredTrans ps α) :
   (MonadLift.monadLift t : PredTrans (.except ε ps) α).apply Q = t.apply (fun a => Q.1 a, Q.2.2) := rfl
+
+@[simp]
+def PredTrans.runArg_apply {ps} {Q : PostCond (α × σ) ps} (t : PredTrans (.arg σ ps) α) :
+  (t.popArg s).apply Q = t.apply (fun a s => Q.1 (a, s), Q.2) s := rfl
+
+@[simp]
+def PredTrans.monadMapArg_apply {ps} {Q : PostCond α (.arg σ ps)} (f : ∀{β}, PredTrans ps β → PredTrans ps β) (t : PredTrans (.arg σ ps) α) :
+  (MonadFunctor.monadMap (m:=PredTrans ps) f t).apply Q = fun s => (f (t.popArg s)).apply (fun (a, s) => Q.1 a s, Q.2) := rfl
+
+@[simp]
+def PredTrans.monadMapExcept_apply {ps} {Q : PostCond α (.except ε ps)} (f : ∀{β}, PredTrans ps β → PredTrans ps β) (t : PredTrans (.except ε ps) α) :
+  (MonadFunctor.monadMap (m:=PredTrans ps) f t).apply Q = (f t.popExcept).apply (fun | .ok a => Q.1 a | .error e => Q.2.1 e, Q.2.2) := rfl
+
+instance PredTrans.instMonadMorphismPushArg : MonadMorphism (StateT σ (PredTrans ps)) (PredTrans (.arg σ ps)) (PredTrans.pushArg) where
+  pure_pure := by intros; rfl
+  bind_bind := by intros; rfl
+
+instance PredTrans.instMonadMorphismPopArg : MonadMorphism (PredTrans (.arg σ ps)) (StateT σ (PredTrans ps)) (PredTrans.popArg) where
+  pure_pure := by intros; rfl
+  bind_bind := by intros; rfl
+
+@[simp]
+theorem PredTrans.pushArg_popArg : pushArg (popArg x) = x := rfl
+
+@[simp]
+theorem PredTrans.popArg_pushArg : popArg (pushArg f) = f := rfl
+
+instance PredTrans.instMonadMorphismPushExcept : MonadMorphism (ExceptT ε (PredTrans ps)) (PredTrans (.except ε ps)) (PredTrans.pushExcept) where
+  pure_pure := by intros; rfl
+  bind_bind := by
+    intro _ _ x f
+    ext Q
+    simp only [pushExcept, Bind.bind, ExceptT.bind, ExceptT.mk, bind, ExceptT.bindCont]
+    congr
+    ext x
+    cases x <;> simp
+
+instance PredTrans.instMonadMorphismPopExcept : MonadMorphism (PredTrans (.except ε ps)) (ExceptT ε (PredTrans ps)) (PredTrans.popExcept) where
+  pure_pure := by intros; rfl
+  bind_bind := by intros; rfl
+
+@[simp]
+theorem PredTrans.pushExcept_popExcept : pushExcept (popExcept x) = x := rfl
+
+@[simp]
+theorem PredTrans.popExcept_pushExcept : popExcept (pushExcept x) = x := by
+  ext Q
+  simp only [ExceptT.run, popExcept, pushExcept]
+  congr
+  ext x
+  cases x <;> simp
 
 -- noncomputable def PredTrans.prePost {ps : PredShape} {α : Type} (P : PreCond ps) (Q : PostCond α ps) : PredTrans ps α :=
 --   { apply := fun Q' => P ⊓ PreCond.pure (Q ≤ Q'), mono := by
@@ -449,11 +545,3 @@ def PredTrans.monadLiftExcept_apply {ps} {Q : PostCond α (.except ε ps)} (t : 
 --     · intro h
 --       apply le_trans PredTrans.prePost_apply (h Q)
 --
--- def PredTrans.runState {ps : PredShape} {α} (x : PredTrans (.arg σ ps) α) (s : σ) : PredTrans ps (α × σ) :=
---   { apply Q := x.apply (fun r s' => Q.1 (r, s'), Q.2) s,
---     mono := by
---       intro Q₁ Q₂ h
---       apply x.mono
---       simp[h.2]
---       intro r s'
---       apply h.1 }

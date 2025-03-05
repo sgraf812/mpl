@@ -26,4 +26,6 @@ theorem MonadMorphism.ite_ite {c : Prop} [Decidable c] {t : m α} {e : m α} [Mo
   morph (ite c t e) = if c then morph t else morph e := by
   split <;> simp
 
+export MonadMorphism (pure_pure bind_bind map_map seq_seq)
+
 end MPL

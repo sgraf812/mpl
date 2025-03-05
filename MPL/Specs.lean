@@ -68,7 +68,7 @@ end List
 #check Subtype
 --@[spec]
 theorem Specs.forIn_list {α β} ⦃m : Type → Type⦄
-  [Monad m] [LawfulMonad m] [WP m ps] [WPMonad m ps]
+  [Monad m] [LawfulMonad m] [WP m ps] [MonadMorphism m _ wp]
   {xs : List α} {init : β} {f : α → β → m (ForInStep β)}
   (inv : PostCond (β × List.Zipper xs) ps)
   (step : ∀ b rpref x suff (h : xs = rpref.reverse ++ x :: suff),
@@ -100,7 +100,7 @@ theorem Specs.forIn_list {α β} ⦃m : Type → Type⦄
 -- using the postcondition as a constant invariant:
 @[spec]
 theorem Specs.forIn_list_const_inv {α β : Type} ⦃m : Type → Type⦄
-  [Monad m] [LawfulMonad m] [WP m ps] [WPMonad m ps]
+  [Monad m] [LawfulMonad m] [WP m ps] [MonadMorphism m _ wp]
   {xs : List α} {init : β} {f : α → β → m (ForInStep β)}
   {inv : PostCond β ps}
   (step : ∀ hd b,
@@ -112,7 +112,7 @@ theorem Specs.forIn_list_const_inv {α β : Type} ⦃m : Type → Type⦄
 
 --@[spec]
 theorem Specs.foldlM_list {α β} ⦃m : Type → Type⦄
-  [Monad m] [LawfulMonad m] [WP m ps] [WPMonad m ps]
+  [Monad m] [LawfulMonad m] [WP m ps] [MonadMorphism m _ wp]
   {xs : List α} {init : β} {f : β → α → m β}
   (inv : PostCond (β × List.Zipper xs) ps)
   (step : ∀ b rpref x suff (h : xs = rpref.reverse ++ x :: suff),
@@ -124,13 +124,13 @@ theorem Specs.foldlM_list {α β} ⦃m : Type → Type⦄
     simp only [List.forIn_yield_eq_foldlM, id_map']
   rw[this]
   apply Specs.forIn_list inv
-  simp only [triple, wp_map, PredTrans.map_apply]
+  simp only [triple, map_map, PredTrans.map_apply]
   exact step
 
 -- using the postcondition as a constant invariant:
 @[spec]
 theorem Specs.foldlM_list_const_inv {α β : Type} ⦃m : Type → Type⦄
-  [Monad m] [LawfulMonad m] [WP m ps] [WPMonad m ps]
+  [Monad m] [LawfulMonad m] [WP m ps] [MonadMorphism m _ wp]
   {xs : List α} {init : β} {f : β → α → m β}
   {inv : PostCond β ps}
   (step : ∀ hd b,

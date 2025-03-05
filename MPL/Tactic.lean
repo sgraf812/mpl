@@ -51,7 +51,7 @@ theorem ite_extrude_yield {c : Prop} [Decidable c] {x y : α} :
   --simp only [forIn, forIn'_eq_forIn'_toList]
 
 attribute [wp_simp]
-  wp_pure wp_bind wp_map wp_seq wp_ite wp_dite wp_monadLift
+  pure_pure bind_bind map_map seq_seq MonadMorphism.ite_ite MonadMorphism.dite_dite wp_monadLift
   pure_bind bind_assoc bind_pure_comp bind_pure map_pure id_map' bind_map bind_map_left
   PredTrans.pure_apply PredTrans.bind_apply PredTrans.map_apply PredTrans.seq_apply PredTrans.ite_apply PredTrans.dite_apply
   -- List.Zipper.begin_suff List.Zipper.tail_suff List.Zipper.end_suff -- Zipper stuff needed for invariants
@@ -64,7 +64,6 @@ attribute [wp_simp]
   MonadState.wp_modify MonadState.wp_modifyGet MonadStateOf.wp_modifyGet StateT.wp_modifyGet PredTrans.modifyGet_apply
   MonadReader.wp_read MonadReaderOf.wp_read ReaderT.wp_read
   ExceptT.map_throw ExceptT.wp_throw PredTrans.throw_apply -- PredTrans.throw
-  LawfulMonadLift.lift_pure LawfulMonadLift.lift_bind LawfulMonadLift.lift_map LawfulMonadLift.lift_seq
   refl
 
 macro "xwp" : tactic =>
