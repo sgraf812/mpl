@@ -5,6 +5,7 @@ import MPL.SpecAttr
 import MPL.Specs
 import MPL.WPMonad
 import MPL.WPMonadLift
+import MPL.WPMonadFunctor
 import MPL.WPSimp
 import Mathlib
 
@@ -51,20 +52,47 @@ theorem ite_extrude_yield {c : Prop} [Decidable c] {x y : α} :
   --simp only [forIn, forIn'_eq_forIn'_toList]
 
 attribute [wp_simp]
-  pure_pure bind_bind map_map seq_seq MonadMorphism.ite_ite MonadMorphism.dite_dite wp_monadLift
-  pure_bind bind_assoc bind_pure_comp bind_pure map_pure id_map' bind_map bind_map_left
-  PredTrans.pure_apply PredTrans.bind_apply PredTrans.map_apply PredTrans.seq_apply PredTrans.ite_apply PredTrans.dite_apply
+  refl
+  -- Lawful monad normalization:
+  pure_bind bind_assoc bind_pure_comp bind_pure map_pure id_map' bind_map bind_map_left ExceptT.map_throw
+  -- MonadMorphism normalization:
+  pure_pure PredTrans.pure_apply
+  bind_bind PredTrans.bind_apply
+  map_map PredTrans.map_apply
+  seq_seq PredTrans.seq_apply
+  MonadMorphism.ite_ite PredTrans.ite_apply
+  MonadMorphism.dite_dite PredTrans.dite_apply
   -- List.Zipper.begin_suff List.Zipper.tail_suff List.Zipper.end_suff -- Zipper stuff needed for invariants
+    -- List.Zipper.begin_suff List.Zipper.tail_suff List.Zipper.end_suff -- Zipper stuff needed for invariants
   Std.Range.forIn_eq_forIn_range' Std.Range.forIn'_eq_forIn'_range' Std.Range.size Nat.div_one  -- rewrite to forIn_list
   Array.forIn_eq_forIn_toList Array.forIn'_eq_forIn'_toList -- rewrite to forIn_list
   ite_extrude_yield List.forIn_yield_eq_foldlM -- rewrite to foldlM
-  PredTrans.dropFail PredTrans.drop_fail_cond -- TODO: Can we do this whole lifting business with fewer simp rules?
-  MonadState.wp_get MonadStateOf.wp_get StateT.wp_get PredTrans.get_apply -- PredTrans.get
-  MonadState.wp_set MonadStateOf.wp_set StateT.wp_set PredTrans.set_apply -- PredTrans.set
-  MonadState.wp_modify MonadState.wp_modifyGet MonadStateOf.wp_modifyGet StateT.wp_modifyGet PredTrans.modifyGet_apply
-  MonadReader.wp_read MonadReaderOf.wp_read ReaderT.wp_read
-  ExceptT.map_throw ExceptT.wp_throw PredTrans.throw_apply -- PredTrans.throw
-  refl
+  -- state, reader, except ..Of impls
+  StateT.wp_get PredTrans.get_apply
+  StateT.wp_set PredTrans.set_apply
+  StateT.wp_modifyGet PredTrans.modifyGet_apply
+  ReaderT.wp_read -- PredTrans.read is PredTrans.get, apply rule above
+  ReaderT.wp_withReader PredTrans.withReader_apply
+  ExceptT.wp_throw PredTrans.throw_apply
+  -- MonadLift implementation
+  wp_monadLift -- apply lemma per MonadLift instance (see below)
+--  PredTrans.instMonadLiftArg PredTrans.instMonadLiftExcept ExceptT.instMonadLift StateT.instMonadLift ExceptT.lift
+  PredTrans.monadLiftArg_apply PredTrans.monadLiftExcept_apply
+--  PredTrans.pushArg_apply PredTrans.popArg_apply PredTrans.pushExcept_apply PredTrans.popExcept_apply
+--  PredTrans.pushArg_popArg PredTrans.popArg_pushArg PredTrans.pushExcept_popExcept PredTrans.popExcept_pushExcept
+  -- MonadFunctor implementation
+  wp_monadFunctor -- apply lemma per MonadFunctor instance (see below)
+--  PredTrans.instMonadFunctorArg PredTrans.instMonadFunctorExcept -- defined in terms of push* and pop*; see above
+  PredTrans.monadMapArg_apply PredTrans.monadMapExcept_apply
+  -- PredTrans.popArg_apply PredTrans.popExcept_apply
+  -- lifting state
+  MonadState.wp_get MonadStateOf.wp_get StateT.wp_get
+  MonadState.wp_set MonadStateOf.wp_set StateT.wp_set
+  MonadState.wp_modify MonadState.wp_modifyGet MonadStateOf.wp_modifyGet
+  -- lifting reader
+  MonadReader.wp_read MonadReaderOf.wp_readThe MonadReaderOf.wp_read
+  MonadWithReader.wp_withReader MonadWithReaderOf.wp_withTheReader MonadWithReaderOf.wp_withTheReader
+  -- lifting except (none yet; requires a bunch of lemmas per ReaderT, StateT, ExceptT, etc.)
 
 macro "xwp" : tactic =>
   `(tactic| ((try xstart); wp_simp +contextual))

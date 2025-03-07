@@ -3,23 +3,25 @@ import MPL.MonadMorphism
 
 open MPL
 
-instance Idd.instWPMonadMorphism : MonadMorphism Idd (PredTrans .pure) wp where
+abbrev WPMonad m sh [Monad m] [WP m sh] := MonadMorphism m (PredTrans sh) wp
+
+instance Idd.instWPMonadMorphism : WPMonad Idd .pure where
   pure_pure a := by simp only [wp, PredTrans.pure, Pure.pure, Idd.pure]
   bind_bind x f := by simp only [wp, PredTrans.pure, Bind.bind, Idd.bind, PredTrans.bind]
 
-instance Id.instWPMonadMorphism : MonadMorphism Id (PredTrans .pure) wp where
+instance Id.instWPMonadMorphism : WPMonad Id .pure where
   pure_pure a := by simp only [wp, PredTrans.pure, Pure.pure, Id.run]
   bind_bind x f := by simp only [wp, PredTrans.pure, Bind.bind, Id.run, PredTrans.bind]
 
-instance StateT.instWPMonadMorphism [Monad m] [WP m ps] [MonadMorphism m (PredTrans ps) wp] : MonadMorphism (StateT σ m) (PredTrans (.arg σ ps)) wp where
+instance StateT.instWPMonadMorphism [Monad m] [WP m ps] [WPMonad m ps] : WPMonad (StateT σ m) (.arg σ ps) where
   pure_pure a := by ext; simp [wp, pure, StateT.pure, PredTrans.pure]
   bind_bind x f := by ext; simp [wp, Bind.bind, bind, PredTrans.bind, StateT.bind]
 
-instance ReaderT.instWPMonadMorphism [Monad m] [WP m ps] [MonadMorphism m (PredTrans ps) wp] : MonadMorphism (ReaderT ρ m) (PredTrans (.arg ρ ps)) wp where
+instance ReaderT.instWPMonadMorphism [Monad m] [WP m ps] [WPMonad m ps] : WPMonad (ReaderT ρ m) (.arg ρ ps) where
   pure_pure a := by ext; simp [wp, pure, ReaderT.pure, PredTrans.pure]
   bind_bind x f := by ext; simp [wp, Bind.bind, bind, PredTrans.bind, ReaderT.bind]
 
-instance ExceptT.instWPMonadMorphism [Monad m] [WP m ps] [MonadMorphism m (PredTrans ps) wp] : MonadMorphism (ExceptT ε m) (PredTrans (.except ε ps)) wp where
+instance ExceptT.instWPMonadMorphism [Monad m] [WP m ps] [WPMonad m ps] : WPMonad (ExceptT ε m) (.except ε ps) where
   pure_pure a := by ext; simp [wp, PredTrans.pure, pure, ExceptT.pure, ExceptT.mk, pure_pure]
   bind_bind x f := by
     ext Q
@@ -30,20 +32,20 @@ instance ExceptT.instWPMonadMorphism [Monad m] [WP m ps] [MonadMorphism m (PredT
     case error a => simp[PredTrans.pure, pure]
     case ok a => congr
 
-instance EStateM.instWPMonadMorphism : MonadMorphism (EStateM ε σ) (PredTrans (.except ε (.arg σ .pure))) wp where
+instance EStateM.instWPMonadMorphism : WPMonad (EStateM ε σ) (.except ε (.arg σ .pure)) where
   pure_pure a := by simp [wp, PredTrans.pure, pure, EStateM.pure]
   bind_bind x f := by
     ext Q s
     simp [wp, bind, EStateM.bind, eq_iff_iff, PredTrans.bind]
     cases (x s) <;> simp
 
-instance State.instWPMonadMorphism : MonadMorphism (StateM σ) (PredTrans (.arg σ .pure)) wp :=
-  inferInstanceAs (MonadMorphism (StateT σ Id) (PredTrans (.arg σ .pure)) wp)
-instance Reader.instWPMonadMorphism : MonadMorphism (ReaderM ρ) (PredTrans (.arg ρ .pure)) wp :=
-  inferInstanceAs (MonadMorphism (ReaderT ρ Id) (PredTrans (.arg ρ .pure)) wp)
+instance State.instWPMonadMorphism : WPMonad (StateM σ) (.arg σ .pure) :=
+  inferInstanceAs (WPMonad (StateT σ Id) (.arg σ .pure))
+instance Reader.instWPMonadMorphism : WPMonad (ReaderM ρ) (.arg ρ .pure) :=
+  inferInstanceAs (WPMonad (ReaderT ρ Id) (.arg ρ .pure))
 theorem Except.instMonad_eq ε : @Except.instMonad ε = @ExceptT.instMonad ε Id Id.instMonad := by
   have h : Monad (Except ε) = Monad (ExceptT ε Id) := rfl
   simp[Except.instMonad, ExceptT.instMonad]
   sorry
-instance Except.instWPMonadMorphism : MonadMorphism (Except ε) (PredTrans (.except ε .pure)) wp :=
-  Except.instMonad_eq ε ▸ inferInstanceAs (MonadMorphism (ExceptT ε Id) (PredTrans (.except ε .pure)) wp)
+instance Except.instWPMonadMorphism : WPMonad (Except ε) (.except ε .pure) :=
+  Except.instMonad_eq ε ▸ inferInstanceAs (WPMonad (ExceptT ε Id) (.except ε .pure))

@@ -44,7 +44,7 @@ theorem Id.by_wp {α} {x : α} {prog : Id α} (h : x = Id.run prog) (P : α → 
 instance Idd.instWP : WP Idd .pure where
   wp x := PredTrans.pure x.run
 
-theorem Idd.by_wp {α} {x : α} {prog : Idd α} (h : x = Idd.run prog) (P : α → Prop) :
+theorem Idd.by_wp {α} {x : α} {prog : Idd α} (h : Idd.run prog = x) (P : α → Prop) :
   (wp prog).apply (PostCond.total P) → P x := h ▸ id
 
 instance StateT.instWP [WP m ps] : WP (StateT σ m) (.arg σ ps) where
@@ -75,3 +75,28 @@ instance EStateM.instWP : WP (EStateM ε σ) (.except ε (.arg σ .pure)) where
 instance State.instWP : WP (StateM σ) (.arg σ .pure) := inferInstanceAs (WP (StateT σ Id) (.arg σ .pure))
 instance Reader.instWP : WP (ReaderM ρ) (.arg ρ .pure) := inferInstanceAs (WP (ReaderT ρ Id) (.arg ρ .pure))
 instance Except.instWP : WP (Except ε) (.except ε .pure) := inferInstanceAs (WP (ExceptT ε Id) (.except ε .pure))
+
+@[simp]
+theorem WP.popExcept_wp [WP m ps] (x : ExceptT ε m α) :
+  wp⟦x⟧.popExcept = wp⟦x.run⟧ := by simp[wp, ExceptT.run]
+
+@[simp]
+theorem WP.popArg_wp [WP m ps] (x : StateT σ m α) :
+  wp⟦x⟧.popArg s = wp⟦x.run s⟧ := by simp[wp, StateT.run]
+
+@[simp]
+theorem WP.StateT_run_apply [WP m ps] (x : StateT σ m α) :
+  wp⟦x.run s⟧.apply Q = wp⟦x⟧.apply (fun a s => Q.1 (a, s), Q.2) s := rfl
+
+@[simp]
+theorem WP.ExceptT_run_apply [WP m ps] (x : ExceptT ε m α) :
+  wp⟦x.run⟧.apply Q = wp⟦x⟧.apply (fun a => Q.1 (.ok a), fun e => Q.1 (.error e), Q.2) := by
+    simp[wp, ExceptT.run]
+    congr
+    (ext x; cases x) <;> rfl
+
+-- the following are just the definitions of wp:
+-- @[simp] -- leads to errors in WPMonad
+theorem WP.pushExcept_wp [WP m ps] (x : ExceptT ε m α) : PredTrans.pushExcept wp⟦x⟧ = wp⟦x⟧ := by simp[wp]
+-- @[simp] -- leads to errors
+theorem WP.pushArg_wp [WP m ps] (x : StateT σ m α) : PredTrans.pushArg (fun s => wp⟦x s⟧) = wp⟦x⟧ := by simp[wp]

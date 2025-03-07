@@ -76,7 +76,7 @@ theorem MonadReader.wp_read [MonadReaderOf ρ m] [WP m sh] :
 
 @[simp]
 theorem MonadReaderOf.wp_read [MonadReaderOf ρ m] [WP m msh] [WP n nsh] [MonadLift m n] [MonadLift (PredTrans msh) (PredTrans nsh)] [WPMonadLift m n msh nsh] :
-  wp (MonadReaderOf.read : n ρ) = wp (MonadReaderOf.read : m ρ) := by
+  wp (MonadReaderOf.read : n ρ) = MonadLift.monadLift (wp (MonadReaderOf.read : m ρ)) := by
     simp only [read, liftM, monadLift, wp_monadLift, MonadReader.wp_read]
 
 @[simp]
@@ -94,7 +94,7 @@ theorem MonadStateOf.wp_get [WP m msh] [WP n nsh] [MonadLift m n] [MonadLift (Pr
     simp [MonadStateOf.get, liftM, monadLift]
 
 @[simp]
-theorem StateT.wp_set [WP m sh] [Monad m] [MonadMorphism m (PredTrans sh) wp] (x : σ) :
+theorem StateT.wp_set [WP m sh] [Monad m] [MonadMorphism m _ wp] (x : σ) :
   wp (MonadState.set x : StateT σ m PUnit) = PredTrans.set x := by
     ext; simp[wp, MonadState.set, MonadStateOf.set, StateT.set, pure, PredTrans.pure, PredTrans.set]
 
