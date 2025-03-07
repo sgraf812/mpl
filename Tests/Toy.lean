@@ -84,6 +84,16 @@ theorem test_ex :
 
 -- theorem forIn_break_throw : forIn xs ⟨none, init⟩ f = (forIn xs init (fun x s => do match (← f x s) with | .yield )).
 
+example :
+  wp (m:= ExceptT String (StateT Nat (ReaderT Bool Id)))
+     (withTheReader Bool not (do if (← read) then return 0 else return 1))
+  =
+  wp (m:= ExceptT String (StateT Nat (ReaderT Bool Id)))
+     (do if (← read) then return 1 else return 0) := by
+    ext Q : 2
+    xwp
+    simp[ite_app]
+
 theorem test_loop_break :
   ⦃fun s => s = 42⦄
   do

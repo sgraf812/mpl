@@ -21,10 +21,6 @@ theorem WP.seq_apply [WP m ps] [Monad m] [WPMonad m ps] [LawfulMonad m] (f : m (
   wp⟦f <*> x⟧.apply Q = wp⟦f⟧.apply (fun f => wp⟦x⟧.apply (fun a => Q.1 (f a), Q.2), Q.2) := by
     simp only [seq_seq, PredTrans.seq_apply]
 
-@[simp]
-theorem WP.map_wp [WP m ps] [Monad m] [WPMonad m ps] [LawfulMonad m] (x : m α) :
-  f <$> wp⟦x⟧ = wp⟦f <$> x⟧ := by simp only [map_map]
-
 instance Idd.instWPMonad : WPMonad Idd .pure where
   pure_pure a := by simp only [wp, PredTrans.pure, Pure.pure, Idd.pure]
   bind_bind x f := by simp only [wp, PredTrans.pure, Bind.bind, Idd.bind, PredTrans.bind]
