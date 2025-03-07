@@ -42,7 +42,7 @@ example : PostCond α (except ε pure) = ((α → Prop) × (ε → Prop) × Unit
 example : PostCond α (arg σ (except ε pure)) = ((α → σ → Prop) × (ε → Prop) × Unit) := rfl
 example : PostCond α (except ε (arg σ₁ pure)) = ((α → σ₁ → Prop) × (ε → σ₁ → Prop) × Unit) := rfl
 example : PostCond α (arg σ₂ (except ε (arg σ₁ pure))) = ((α → σ₂ → σ₁ → Prop) × (ε → σ₁ → Prop) × Unit) := rfl
-example : PostCond α (except ε₂ (arg σ₂ (except ε₁ (arg σ₁ pure)))) = ((α → σ₂ → σ₁ → Prop) × (ε₂ → σ₂ → σ₁ → Prop) × (ε₁ → σ₁ → Prop) × Unit) := rfl
+example : PostCond α (.except ε₂ (.arg σ₂ (.except ε₁ (.arg σ₁ .pure)))) = ((α → σ₂ → σ₁ → Prop) × (ε₂ → σ₂ → σ₁ → Prop) × (ε₁ → σ₁ → Prop) × Unit) := rfl
 
 -- #reduce (types := true) ((do pure ((← MonadReaderOf.read) < 13 ∧ (← MonadReaderOf.read) = "hi")) : PreCond (state Nat (state String pure)) Prop)
 
@@ -240,7 +240,7 @@ structure PredTrans (ps : PredShape) (α : Type) : Type where
 --infix:100 " ⇐ " => PredTrans.apply
 
 def PredTrans.le {ps : PredShape} {α : Type} (x y : PredTrans ps α) : Prop :=
-  y.apply ≤ x.apply
+  y.apply ≤ x.apply -- the weaker the precondition, the smaller the PredTrans
 noncomputable def PredTrans.top {ps : PredShape} {α : Type} : PredTrans ps α :=
   PredTrans.mk ⊥ sorry
 noncomputable def PredTrans.bot {ps : PredShape} {α : Type} : PredTrans ps α :=
@@ -409,9 +409,6 @@ instance PredTrans.instMonadFunctorArg : MonadFunctor (PredTrans m) (PredTrans (
 
 instance PredTrans.instMonadFunctorExcept : MonadFunctor (PredTrans m) (PredTrans (.except ε m)) where
   monadMap f x := PredTrans.pushExcept (f x.popExcept)
-
-#check PredTrans.modifyGet.eq_def
-#check fun α σ ps (f : σ → α × σ) (Q : PostCond α (.arg σ ps)) => congrArg (fun t => PredTrans.apply t Q) (PredTrans.modifyGet.eq_def f)
 
 @[simp]
 def PredTrans.get_apply {ps} {σ : Type} {Q : PostCond σ (.arg σ ps)} :

@@ -65,8 +65,6 @@ theorem Zipper.atSuff_tail (l : List α) (h : hd::tl <:+ l): (Zipper.atSuff h).t
 
 end List
 
-#check Subtype
---@[spec]
 theorem Specs.forIn_list {α β} ⦃m : Type → Type⦄
   [Monad m] [LawfulMonad m] [WP m ps] [MonadMorphism m _ wp]
   {xs : List α} {init : β} {f : α → β → m (ForInStep β)}
@@ -110,7 +108,6 @@ theorem Specs.forIn_list_const_inv {α β : Type} ⦃m : Type → Type⦄
   ⦃inv.1 init⦄ forIn xs init f ⦃inv⦄ :=
     Specs.forIn_list (fun p => inv.1 p.1, inv.2) (fun b _ hd _ _ => step hd b)
 
---@[spec]
 theorem Specs.foldlM_list {α β} ⦃m : Type → Type⦄
   [Monad m] [LawfulMonad m] [WP m ps] [MonadMorphism m _ wp]
   {xs : List α} {init : β} {f : β → α → m β}

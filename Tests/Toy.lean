@@ -35,7 +35,7 @@ theorem mkFreshInt_spec_fail [Monad m] [WP m sh] [LawfulMonad m] [WPMonad m sh] 
   ⦃⇓ r | fun s => PreCond.pure (r = n ∧ s.1 = n + 1 ∧ s.2 = o)⦄ := by
   unfold mkFreshInt
   intro s
-  --fail_if_success xstart -- refine xwp_lemma ?_ -- TODO: prevent this; it appears that apply is partially inlined; the s ends up inside the wp
+  fail_if_success xstart
   sorry
 
 @[spec]
@@ -49,7 +49,7 @@ theorem mkFreshInt_spec [Monad m] [WP m sh] [LawfulMonad m] [WPMonad m sh] :
   simp
 
 @[wp_simp]
-theorem wp_mkFreshInt [Monad m] [WP m sh] [LawfulMonad m] [WPMonad m sh] :
+theorem wp_mkFreshInt_apply [Monad m] [WP m sh] [LawfulMonad m] [WPMonad m sh] :
   wp⟦(mkFreshInt : StateT (Nat × Nat) m Nat)⟧.apply Q = fun s => Q.1 s.1 (s.1 + 1, s.2) := by
     unfold mkFreshInt; xwp
 
@@ -82,6 +82,71 @@ theorem test_ex :
   simp only [List.sum_nil, add_zero]
   sorry -- sgrind
 
+-- theorem forIn_break_throw : forIn xs ⟨none, init⟩ f = (forIn xs init (fun x s => do match (← f x s) with | .yield )).
+
+theorem test_loop_break :
+  ⦃fun s => s = 42⦄
+  do
+    let mut x := 0
+    let s ← get
+    for i in [1:s] do { x := x + i; if x > 4 then break }
+    (set 1 : StateT Nat Idd PUnit)
+    return x
+  ⦃⇓ r | fun s => r > 4 ∧ s = 1⦄ := by
+  xstart
+  intro s hs
+  xwp
+  -- xbind -- optional
+  xapp (Specs.forIn_list (fun (r, xs) s => (r ≤ 4 ∧ r = xs.rpref.sum ∨ r > 4) ∧ s = 42, ()) ?step)
+  case pre => simp only [hs]; conv in (List.sum _) => { whnf }; simp
+  case step =>
+    intro b pref x suff h
+    xstart
+    xwp
+    simp only [h, List.sum_cons]
+    intro b' hinv
+    split
+    · grind -- simp[hinv, h]
+    · simp only [PredTrans.pure_apply]; sorry -- grind -- omega
+  intro r s' ⟨h, hs'⟩
+  simp[hs] at h
+  (conv at h in (List.sum _) => whnf)
+  simp[hs] at h
+  omega
+
+theorem get_spec [Monad m] [WP m ps] [WPMonad m ps] {Q : PostCond σ (.arg σ ps)}: ⦃fun s => Q.1 s s⦄ (get : StateT σ m σ) ⦃Q⦄ := by xwp
+
+theorem test_loop_early_return :
+  ⦃fun s => s = 4⦄
+  do
+    let mut x := 0
+    let s ← get
+    for i in [1:s] do { x := x + i; if x > 4 then return 42 }
+    (set 1 : StateT Nat Idd PUnit)
+    return x
+  ⦃⇓ r | fun s => r = 42 ∧ s = 4⦄ := by
+  xstart
+  simp only [gt_iff_lt, bind_pure_comp, map_pure, Std.Range.forIn_eq_forIn_range', Std.Range.size,
+    add_tsub_cancel_right, Nat.div_one, pure_bind]-- , bind_bind, MonadState.wp_get, StateT.wp_get,
+    -- PredTrans.bind_apply, PredTrans.get_apply]
+  intro s hs
+  xapp get_spec
+  xbind
+  xapp (Specs.forIn_list (fun (r, xs) s => (r.1 = none ∧ r.2 = xs.rpref.sum ∧ r.2 ≤ 4 ∨ r.1 = some 42 ∧ r.2 > 4) ∧ s = 4, ()) ?step)
+  case pre => simp[hs]
+  case step =>
+    intro b pref x suff h s ⟨h, hs⟩
+    xwp
+    split
+    case isTrue h => simp_all[h]
+    case isFalse h => simp_all[h]; omega
+  intro ⟨r,x⟩ s' ⟨h, hs'⟩
+  xwp
+  cases r
+  case none => simp[hs] at h; (conv at h in (List.sum _) => whnf); exfalso; clear s' hs' s hs; sorry -- omega -- WTF why doesn't omega
+  case some r => simp_all
+
+example : x = 6 ∧ x ≤ 4 → False := by intro h; omega
 section UserStory1
 
 def FinSimpleGraph (n : ℕ) := SimpleGraph (Fin n)
@@ -204,7 +269,7 @@ theorem addRandomEvens_spec (n k) : ⦃True⦄ (addRandomEvens n k) ⦃⇓r | r 
   intro hd b hinv
   xwp
   xapp IO.rand_spec
-  sorry -- sgrind -- (try simp); grind
+  intro h r; simp_all -- sgrind -- (try simp); grind
 
 /-- Since we're adding even numbers to our number twice, and summing,
 the entire result is even. -/

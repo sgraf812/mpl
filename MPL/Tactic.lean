@@ -13,17 +13,11 @@ namespace MPL
 
 open Lean Meta Elab Tactic
 
-theorem xwp_lemma {m : Type → Type} [WP m ps] {α} {x : m α} {P : PreCond ps} {Q : PostCond α ps} :
-  {{P}} wp⟦x⟧ {{Q}} → ⦃P⦄ x ⦃Q⦄ := id
-
 theorem wp_apply_triple_conseq {m : Type → Type} {ps : PredShape} [WP m ps] {α} {x : m α} {P : PreCond ps} {Q Q' : PostCond α ps}
   (h : ⦃P⦄ x ⦃Q⦄) (hpost : Q ≤ Q') :
   P ≤ wp⟦x⟧.apply Q' := le_trans h (wp⟦x⟧.mono _ _ hpost)
 
-theorem rw_wp {m : Type → Type} {ps : PredShape} [WP m ps] {α} {x : m α} {t : PredTrans ps α}
-  (h : wp x = t): wp x ≤ t := h ▸ le_rfl
-
-macro "xstart" : tactic => `(tactic| (refine xwp_lemma ?_))
+macro "xstart" : tactic => `(tactic| unfold triple)
 
 @[simp]
 theorem ite_extrude_yield {c : Prop} [Decidable c] {x y : α} :
@@ -56,46 +50,44 @@ attribute [wp_simp]
   -- Lawful monad normalization:
   pure_bind bind_assoc bind_pure_comp bind_pure map_pure id_map' bind_map bind_map_left ExceptT.map_throw
   -- MonadMorphism normalization:
-  pure_pure PredTrans.pure_apply
-  bind_bind PredTrans.bind_apply
-  map_map PredTrans.map_apply
-  seq_seq PredTrans.seq_apply
-  MonadMorphism.ite_ite PredTrans.ite_apply
-  MonadMorphism.dite_dite PredTrans.dite_apply
+--  pure_pure PredTrans.pure_apply
+--  bind_bind PredTrans.bind_apply
+--  map_map PredTrans.map_apply
+--  seq_seq PredTrans.seq_apply
+--  MonadMorphism.ite_ite PredTrans.ite_apply
+--  MonadMorphism.dite_dite PredTrans.dite_apply
+  WP.pure_apply WP.bind_apply WP.map_apply WP.seq_apply
+  WP.ite_apply WP.dite_apply
+  -- MonadLift implementation
+  WP.monadLift_apply PredTrans.monadLiftArg_apply PredTrans.monadLiftExcept_apply
+  -- MonadFunctor implementation
+  WP.monadMap_apply PredTrans.monadMapArg_apply PredTrans.monadMapExcept_apply
+  WP.popArg_wp WP.popExcept_wp WP.StateT_run_apply WP.ExceptT_run_apply
+  WP.wp1_apply
   -- List.Zipper.begin_suff List.Zipper.tail_suff List.Zipper.end_suff -- Zipper stuff needed for invariants
     -- List.Zipper.begin_suff List.Zipper.tail_suff List.Zipper.end_suff -- Zipper stuff needed for invariants
   Std.Range.forIn_eq_forIn_range' Std.Range.forIn'_eq_forIn'_range' Std.Range.size Nat.div_one  -- rewrite to forIn_list
   Array.forIn_eq_forIn_toList Array.forIn'_eq_forIn'_toList -- rewrite to forIn_list
   ite_extrude_yield List.forIn_yield_eq_foldlM -- rewrite to foldlM
   -- state, reader, except ..Of impls
-  StateT.wp_get PredTrans.get_apply
-  StateT.wp_set PredTrans.set_apply
-  StateT.wp_modifyGet PredTrans.modifyGet_apply
-  ReaderT.wp_read -- PredTrans.read is PredTrans.get, apply rule above
-  ReaderT.wp_withReader PredTrans.withReader_apply
-  ExceptT.wp_throw PredTrans.throw_apply
-  -- MonadLift implementation
-  wp_monadLift -- apply lemma per MonadLift instance (see below)
---  PredTrans.instMonadLiftArg PredTrans.instMonadLiftExcept ExceptT.instMonadLift StateT.instMonadLift ExceptT.lift
-  PredTrans.monadLiftArg_apply PredTrans.monadLiftExcept_apply
---  PredTrans.pushArg_apply PredTrans.popArg_apply PredTrans.pushExcept_apply PredTrans.popExcept_apply
---  PredTrans.pushArg_popArg PredTrans.popArg_pushArg PredTrans.pushExcept_popExcept PredTrans.popExcept_pushExcept
-  -- MonadFunctor implementation
-  wp_monadFunctor -- apply lemma per MonadFunctor instance (see below)
---  PredTrans.instMonadFunctorArg PredTrans.instMonadFunctorExcept -- defined in terms of push* and pop*; see above
-  PredTrans.monadMapArg_apply PredTrans.monadMapExcept_apply
-  -- PredTrans.popArg_apply PredTrans.popExcept_apply
+  StateT.get_apply
+  StateT.set_apply
+  StateT.modifyGet_apply
+  ReaderT.read_apply
+  ReaderT.withReader_apply
+  ExceptT.throw_apply
   -- lifting state
-  MonadState.wp_get MonadStateOf.wp_get StateT.wp_get
-  MonadState.wp_set MonadStateOf.wp_set StateT.wp_set
-  MonadState.wp_modify MonadState.wp_modifyGet MonadStateOf.wp_modifyGet
+  MonadState.get_apply MonadStateOf.get_apply
+  MonadState.set_apply MonadStateOf.set_apply StateT.set_apply
+  MonadState.modifyGet_apply MonadStateOf.modifyGet_apply StateT.modifyGet_apply
+  MonadState.modify_apply
   -- lifting reader
-  MonadReader.wp_read MonadReaderOf.wp_readThe MonadReaderOf.wp_read
-  MonadWithReader.wp_withReader MonadWithReaderOf.wp_withTheReader MonadWithReaderOf.wp_withTheReader
+  MonadReader.read_apply MonadReaderOf.readThe_apply MonadReaderOf.read_apply
+  MonadWithReader.withReader_apply MonadWithReaderOf.withTheReader_apply MonadWithReaderOf.withReader_apply
   -- lifting except (none yet; requires a bunch of lemmas per ReaderT, StateT, ExceptT, etc.)
 
 macro "xwp" : tactic =>
-  `(tactic| ((try xstart); wp_simp +contextual))
+  `(tactic| ((try unfold triple); wp_simp +contextual))
 
 --syntax "xwp" notFollowedBy("|") (ppSpace colGt term:max)* : tactic
 --
@@ -160,12 +152,19 @@ def xbind_tac (goal : MVarId) (wp : Expr) : TacticM Expr := withMainContext do
 
 syntax "xbind_no_dsimp" : tactic
 
+
 elab "xbind_no_dsimp" : tactic => withMainContext do
-  let (rw_goal, _user_goal, wp) ← focus_on_le_wp (← getMainGoal)
-  let _wp ← xbind_tac rw_goal wp
+  evalTactic (← `(tactic|
+    (try conv in wp (Bind.bind _ _) => apply bind_bind;
+     conv in PredTrans.apply (Bind.bind _ _) _ => apply PredTrans.bind_apply)))
+--   let (rw_goal, _user_goal, wp) ← focus_on_le_wp (← getMainGoal)
+--   let _wp ← xbind_tac rw_goal wp
   return
 
-macro "xbind" : tactic => `(tactic| (xbind_no_dsimp; (try dsimp)))
+macro "xbind" : tactic => `(tactic|
+    with_reducible (try conv => arg 1; apply bind_bind;
+                    conv in PredTrans.apply (Bind.bind _ _) _ => apply PredTrans.bind_apply))
+-- macro "xbind" : tactic => `(tactic| (xbind_no_dsimp; (try dsimp)))
 
 def xapp_no_xbind (goal : MVarId) (spec : Option (TSyntax `term)) : TacticM Unit := withMainContext do
   let main_tag ← goal.getTag
