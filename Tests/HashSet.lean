@@ -153,15 +153,12 @@ def MPL.disjointUnion (ss : Array (HashSet α)) : HashSet α × Bool := Idd.run 
     b := b && (U.inter t).isEmpty
   return (U, b)
 
-theorem Idd.by_wp3 {α} {x : α} {prog : Idd α} (h : x = Idd.run prog) (P : α → Prop) :
-  (wp prog).apply (PostCond.total P) → P x := h ▸ id
-
 theorem MPL.disjointUnion_characterization (ss : Array (HashSet α)) :
     (∀ a, a ∈ (disjointUnion ss).fst.toFinset ↔ ∃ s ∈ ss.toList, a ∈ s.toFinset)
     ∧ ((disjointUnion ss).snd →
       ∀ (i j : Fin ss.size), i ≠ j → ss[i].toFinset ∩ ss[j].toFinset = ∅) := by
   generalize h : disjointUnion ss = x
-  apply Idd.by_wp3 h.symm
+  apply Idd.by_wp h
   xwp
   xapp (Specs.forIn_list ?inv ?step)
   case inv => exact PostCond.total fun ((acc : MProd (HashSet α) Bool), ss) =>

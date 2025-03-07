@@ -51,7 +51,7 @@ theorem mkFreshInt_spec [Monad m] [WP m sh] [LawfulMonad m] [WPMonad m sh] :
 @[wp_simp]
 theorem wp_mkFreshInt [Monad m] [WP m sh] [LawfulMonad m] [WPMonad m sh] :
   wp⟦(mkFreshInt : StateT (Nat × Nat) m Nat)⟧.apply Q = fun s => Q.1 s.1 (s.1 + 1, s.2) := by
-    unfold mkFreshInt; xwp; rfl
+    unfold mkFreshInt; xwp
 
 theorem test_ex :
   ⦃fun s => s = 4⦄
@@ -107,7 +107,8 @@ noncomputable def greedySpanner {n:ℕ }(G : FinSimpleGraph n) (t :ℕ ): FinSim
 
 lemma correctnessOfGreedySpanner {n:ℕ }(G : FinSimpleGraph n)(t :ℕ ) (u v : Fin n) :
   (greedySpanner G t).dist u v ≤ 2*t-1 := by
-    apply Idd.by_wp (fun r => SimpleGraph.dist r u v ≤ 2*t-1)
+    generalize h : greedySpanner G t = x
+    apply Idd.by_wp h
     xwp
     xapp (Specs.foldlM_list (PostCond.total fun (f_H, xs) => ∀ i j, f_H i j → 2*t-1 < _root_.dist f_H s(i,j)) ?hstep)
     case hstep =>
@@ -157,7 +158,8 @@ theorem fib_spec_rec (h : n > 1) : fib_spec n = fib_spec (n-2) + fib_spec (n-1) 
   simp
 
 theorem fib_correct {n} : fib_impl n = fib_spec n := by
-  apply Idd.by_wp (· = fib_spec n)
+  generalize h : fib_impl n = x
+  apply Idd.by_wp h
   xwp
   if h : n = 0 then simp[h,fib_spec] else ?_
   simp[h]
