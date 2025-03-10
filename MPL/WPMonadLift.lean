@@ -2,23 +2,6 @@ import MPL.WPMonad
 
 namespace MPL
 
--- TODO: Upstream
-class LawfulMonadLift (m : semiOutParam (Type → Type)) (n : Type → Type) [Monad m] [Monad n] [MonadLift m n] where
-  monadLift_pure {α} (x : α) :
-    MonadLift.monadLift (pure (f:=m) x) = pure (f:=n) x
-  monadLift_bind {α β} (x : m α) (f : α → m β) :
-    MonadLift.monadLift (do let a ← x; f a) = do let a ← (MonadLift.monadLift x : n α); MonadLift.monadLift (f a)
-
-theorem LawfulMonadLift.monadLift_map {m n : Type → Type} [Monad m] [Monad n] [MonadLift m n] [LawfulMonad m] [LawfulMonad n] [LawfulMonadLift m n]
-    {α β} (f : α → β) (x : m α) :
-    MonadLift.monadLift (f <$> x) = f <$> (MonadLift.monadLift x : n α) := by
-    simp[liftM, MonadLift.monadLift, ←bind_pure_comp, monadLift_bind, monadLift_pure]
-
-theorem LawfulMonadLift.monadLift_seq {m n : Type → Type} [Monad m] [Monad n] [MonadLift m n] [LawfulMonad m] [LawfulMonad n] [LawfulMonadLift m n]
-    {α β} (f : m (α → β)) (x : m α) :
-    MonadLift.monadLift (f <*> x) = (MonadLift.monadLift f : n (α → β)) <*> (MonadLift.monadLift x : n α) := by
-    simp[liftM, MonadLift.monadLift, ←bind_map, monadLift_bind, monadLift_map]
-
 instance StateT.instLiftMonadMorphism [Monad m] [LawfulMonad m] : MonadMorphism m (StateT σ m) MonadLift.monadLift where
   pure_pure x := by ext; simp[liftM, MonadLift.monadLift, StateT.lift]
   bind_bind x f := by ext; simp[liftM, MonadLift.monadLift, StateT.lift]
