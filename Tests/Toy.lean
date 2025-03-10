@@ -14,7 +14,7 @@ theorem test_sum :
   ⦃⇓r | r < 30⦄ := by
   intro _
   xwp
-  xapp (Specs.forIn_list (PostCond.total fun (r, xs) => (∀ x, x ∈ xs.suff → x ≤ 5) ∧ r + xs.suff.length * 5 ≤ 25) ?step)
+  xapp (Specs.foldlM_list (PostCond.total fun (r, xs) => (∀ x, x ∈ xs.suff → x ≤ 5) ∧ r + xs.suff.length * 5 ≤ 25) ?step)
   case pre => sorry --sgrind -- (try simp); grind
   case step =>
     intro b pref x suff h
@@ -116,7 +116,7 @@ theorem test_loop_break :
     simp only [h, List.sum_cons]
     intro b' hinv
     split
-    · grind -- simp[hinv, h]
+    · simp_all
     · simp only [PredTrans.pure_apply]; sorry -- grind -- omega
   intro r s' ⟨h, hs'⟩
   simp[hs] at h
@@ -124,7 +124,8 @@ theorem test_loop_break :
   simp[hs] at h
   omega
 
-theorem get_spec [Monad m] [WP m ps] [WPMonad m ps] {Q : PostCond σ (.arg σ ps)}: ⦃fun s => Q.1 s s⦄ (get : StateT σ m σ) ⦃Q⦄ := by xwp
+theorem get_spec [Monad m] [WP m ps] [WPMonad m ps] {Q : PostCond σ (.arg σ ps)} :
+  ⦃fun s => Q.1 s s⦄ (get : StateT σ m σ) ⦃Q⦄ := by xwp
 
 theorem test_loop_early_return :
   ⦃fun s => s = 4⦄
@@ -238,7 +239,7 @@ theorem fib_correct {n} : fib_impl n = fib_spec n := by
   xwp
   if h : n = 0 then simp[h,fib_spec] else ?_
   simp[h]
-  xapp Specs.forIn_list ?inv ?step
+  xapp Specs.foldlM_list ?inv ?step
   case inv => exact PostCond.total fun (⟨a, b⟩, xs) => let i := n - xs.suff.length; xs.suff.length < n ∧ a = fib_spec (i-1) ∧ b = fib_spec i
   case pre => simp +arith +decide [Nat.succ_le_of_lt, Nat.zero_lt_of_ne_zero h, Nat.sub_sub_eq_min]
   case step =>

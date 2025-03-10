@@ -48,14 +48,10 @@ theorem ite_extrude_yield {c : Prop} [Decidable c] {x y : α} :
 attribute [wp_simp]
   refl
   -- Lawful monad normalization:
-  pure_bind bind_assoc bind_pure_comp bind_pure map_pure id_map' bind_map bind_map_left ExceptT.map_throw
-  -- MonadMorphism normalization:
---  pure_pure PredTrans.pure_apply
---  bind_bind PredTrans.bind_apply
---  map_map PredTrans.map_apply
---  seq_seq PredTrans.seq_apply
---  MonadMorphism.ite_ite PredTrans.ite_apply
---  MonadMorphism.dite_dite PredTrans.dite_apply
+  pure_bind bind_assoc bind_pure_comp bind_pure bind_map bind_map_left
+  -- More rules that don't appear to be needed:
+  -- map_pure id_map' ExceptT.map_throw
+  -- MonadMorphism and basic if/then/else:
   WP.pure_apply WP.bind_apply WP.map_apply WP.seq_apply
   WP.ite_apply WP.dite_apply
   -- MonadLift implementation
@@ -65,7 +61,6 @@ attribute [wp_simp]
   WP.popArg_wp WP.popExcept_wp WP.StateT_run_apply WP.ExceptT_run_apply
   WP.wp1_apply
   -- List.Zipper.begin_suff List.Zipper.tail_suff List.Zipper.end_suff -- Zipper stuff needed for invariants
-    -- List.Zipper.begin_suff List.Zipper.tail_suff List.Zipper.end_suff -- Zipper stuff needed for invariants
   Std.Range.forIn_eq_forIn_range' Std.Range.forIn'_eq_forIn'_range' Std.Range.size Nat.div_one  -- rewrite to forIn_list
   Array.forIn_eq_forIn_toList Array.forIn'_eq_forIn'_toList -- rewrite to forIn_list
   ite_extrude_yield List.forIn_yield_eq_foldlM -- rewrite to foldlM
@@ -87,84 +82,13 @@ attribute [wp_simp]
   -- lifting except (none yet; requires a bunch of lemmas per ReaderT, StateT, ExceptT, etc.)
 
 macro "xwp" : tactic =>
-  `(tactic| ((try unfold triple); wp_simp +contextual))
+  `(tactic| ((try unfold triple); wp_simp))
 
---syntax "xwp" notFollowedBy("|") (ppSpace colGt term:max)* : tactic
---
---macro_rules
---  | `(tactic| xwp) => `(tactic| (try xstart; try (simp +contextual))) -- contextual needed in test_3 below. TODO: try with grind
---  | `(tactic| xwp $x $xs*) => `(tactic| (try xstart; try (simp +contextual); intro $x $xs*))
+macro "xpure" : tactic =>
+  `(tactic| with_reducible (conv in PredTrans.apply (WP.wp (pure _)) _ => apply WP.pure_apply))
 
-lemma focus_helper {p q : Prop} : p → (p ≤ q) → q := fun hp hpq => hpq hp
-
-theorem bind_apply_2 {ps : PredShape} {α β : Type} (x : PredTrans ps α) (f : α → PredTrans ps β) (Q : PostCond β ps) :
-  (bind x f).apply Q = x.apply (fun a => (f a).apply Q, Q.2) := by rfl
-
-theorem imp_trans {p q r : Prop} : (p → q) → (q → r) → (p → r) := fun hpq hqr => hqr ∘ hpq
-
-def focus_on_le_wp (goal : MVarId) : TacticM (MVarId × MVarId × Expr) := withMainContext do
-  let tag ← goal.getTag
-  let goal ← goal.betaReduce
-  let tgt ← instantiateMVars (← goal.getDecl).type
-
-  if tgt.isAppOf ``PredTrans.apply then
-    -- goal is of the form (do ...).apply Q s₁ ... sₙ.
-    -- apply focus_helper, get new goals ?p, ?p ≤ (do ...).apply Q s₁ ... sₙ
-    let p::pq::gs ← liftMetaM <| goal.apply (mkConst ``focus_helper) | failure
-    p.setTag tag
-    pushGoals (pq::p::gs)
-    let wp := tgt.getArg! 2
-    return (pq, p, wp)
-
-  -- Next, we apply le_trans to get two new goals
-  --  · P s₁ ... sₙ ≤ ?H. This is going to be the new goal to be proved by the user.
-  --  · ?H ≤ (do ...).apply Q s₁ ... sₙ. This is the "focus" and is going to be proved by the caller, for example by performing some rewrite.
-  -- Additional complication: ≤ might already be simplified to →.
-  let (lem, pred_trans_app) ←
-    if tgt.isAppOf ``LE.le then pure (mkApp (mkConst ``le_trans [.zero]) (tgt.getArg! 0), tgt.getArg! 3)
-    else if let .forallE _ _ b _ := tgt then pure (mkApp (mkConst ``le_trans [.zero]) (mkSort .zero), b)
-    else throwError s!"xfocus: Not a valid target {tgt}"
-  let pred_trans_app := pred_trans_app.headBeta
-  unless pred_trans_app.isAppOf ``PredTrans.apply do
-    throwError s!"xfocus: Not a predicate transformer application {pred_trans_app}"
-  let wp := pred_trans_app.getArg! 2
-  match_expr wp with
-  | WP.wp _ _ _ _ _ => throwError s!"xfocus: Already focused on a wp⟦·⟧"
-  | _ =>
-  let g₁::g₂::gs ← liftMetaM <| goal.apply lem | failure
-  g₁.setTag tag -- this is the rewritten main goal; copy tag
-  pushGoals (g₂::g₁::gs)
-  return (g₂, g₁, wp)
-
-def xbind_tac (goal : MVarId) (wp : Expr) : TacticM Expr := withMainContext do
-  match_expr wp with
-  | Bind.bind _ _ _ _ _ _ =>
-    let g::gs ← goal.apply (mkConst ``le_of_eq [.zero]) | throwError "xbind: le_of_eq yielded no goals"
-    pushGoals (g::gs)
-    let tgt ← instantiateMVars (← g.getDecl).type
-    let res ← g.rewrite tgt (mkConst ``bind_apply_2)
-    unless res.mvarIds.isEmpty do throwError "rewrite produced subgoals"
-    let g ← g.replaceTargetEq res.eNew res.eqProof
-    g.refl
-    let_expr Eq _ _ r := (← instantiateMVars (← g.getDecl).type) | throwError "xbind: Refl but not an equality"
-    return r
-  | _ => throwError s!"xbind: Not a bind application {wp}"
-
-syntax "xbind_no_dsimp" : tactic
-
-
-elab "xbind_no_dsimp" : tactic => withMainContext do
-  evalTactic (← `(tactic|
-    (try conv in wp (Bind.bind _ _) => apply bind_bind;
-     conv in PredTrans.apply (Bind.bind _ _) _ => apply PredTrans.bind_apply)))
---   let (rw_goal, _user_goal, wp) ← focus_on_le_wp (← getMainGoal)
---   let _wp ← xbind_tac rw_goal wp
-  return
-
-macro "xbind" : tactic => `(tactic|
-    with_reducible (try conv => arg 1; apply bind_bind;
-                    conv in PredTrans.apply (Bind.bind _ _) _ => apply PredTrans.bind_apply))
--- macro "xbind" : tactic => `(tactic| (xbind_no_dsimp; (try dsimp)))
+macro "xbind" : tactic =>
+  `(tactic| with_reducible (conv in PredTrans.apply (WP.wp (_ >>= _)) _ => apply WP.bind_apply))
 
 def xapp_no_xbind (goal : MVarId) (spec : Option (TSyntax `term)) : TacticM Unit := withMainContext do
   let main_tag ← goal.getTag
@@ -172,21 +96,6 @@ def xapp_no_xbind (goal : MVarId) (spec : Option (TSyntax `term)) : TacticM Unit
   unless tgt.isAppOf ``PredTrans.apply do throwError s!"xapp: Not a PredTrans.apply application {tgt}"
   let wp := tgt.getArg! 2
   let_expr WP.wp m ps instWP α x := wp | throwError "xapp: Not a wp application {wp}"
---      let P ← liftMetaM <| mkFreshExprMVar (mkApp (mkConst ``PreCond) ps)
---      let Q ← liftMetaM <| mkFreshExprMVar (mkApp2 (mkConst ``PostCond) α ps)
---      let triple_ty ← mkAppM ``triple #[x, P, Q]
---      let spec_hole ← liftMetaM <| mkFreshExprMVar triple_ty (userName := `spec)
---      dbg_trace s!"triple_ty: {triple_ty}"
---      dbg_trace s!"spec_hole: {spec_hole}"
---      dbg_trace s!"spec_hole type: {← inferType spec_hole}"
---      let wp_apply_triple_app ← mkAppM ``wp_apply_triple #[spec_hole]
-  -- dbg_trace s!"goal: {tgt}"
---  try
---    let triple_goal::main_goal::gs ← goal.apply (mkApp2 (mkConst ``wp_apply_triple) m ps) | failure
---    main_goal.setTag main_tag -- this is going to be the main goal after applying the triple
---    pushGoals (main_goal::gs)
---    apply_spec triple_goal -- first try without generalizing the postcondition
---  catch _ =>
   let triple_goal::post_goal::pre_goal::gs ← goal.apply (mkApp2 (mkConst ``wp_apply_triple_conseq) m ps) | failure
   post_goal.setTag main_tag -- this is going to be the main goal after applying the triple
   pre_goal.setTag `pre
