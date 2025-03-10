@@ -71,13 +71,13 @@ attribute [wp_simp]
   ReaderT.withReader_apply
   ExceptT.throw_apply
   -- lifting state
-  MonadState.get_apply MonadStateOf.get_apply
-  MonadState.set_apply MonadStateOf.set_apply StateT.set_apply
-  MonadState.modifyGet_apply MonadStateOf.modifyGet_apply StateT.modifyGet_apply
-  MonadState.modify_apply
+  MonadStateOf.get_apply MonadStateOf.getThe_apply MonadState.get_apply
+  MonadStateOf.set_apply MonadState.set_apply
+  MonadStateOf.modifyGet_apply MonadStateOf.modifyGetThe_apply MonadState.modifyGet_apply
+  MonadStateOf.modify_apply MonadStateOf.modifyThe_apply
   -- lifting reader
-  MonadReader.read_apply MonadReaderOf.readThe_apply MonadReaderOf.read_apply
-  MonadWithReader.withReader_apply MonadWithReaderOf.withTheReader_apply MonadWithReaderOf.withReader_apply
+  MonadReaderOf.read_apply MonadReaderOf.readThe_apply MonadReader.read_apply
+  MonadWithReaderOf.withReader_apply MonadWithReaderOf.withTheReader_apply MonadWithReader.withReader_apply
   -- lifting except (none yet; requires a bunch of lemmas per ReaderT, StateT, ExceptT, etc.)
 
 macro "xwp" : tactic =>
