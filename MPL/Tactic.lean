@@ -47,10 +47,8 @@ theorem ite_extrude_yield {c : Prop} [Decidable c] {x y : α} :
 
 attribute [wp_simp]
   refl
-  -- Lawful monad normalization:
-  pure_bind bind_assoc bind_pure_comp bind_pure bind_map bind_map_left
-  -- More rules that don't appear to be needed:
-  -- map_pure id_map' ExceptT.map_throw
+  -- Lawful monad normalization that we don't appear to be needing!
+  -- bind_pure_comp map_pure id_map' ExceptT.map_throw bind_map bind_map_left bind_pure pure_bind bind_assoc
   -- MonadMorphism and basic if/then/else:
   WP.pure_apply WP.bind_apply WP.map_apply WP.seq_apply
   WP.ite_apply WP.dite_apply
@@ -63,7 +61,8 @@ attribute [wp_simp]
   -- List.Zipper.begin_suff List.Zipper.tail_suff List.Zipper.end_suff -- Zipper stuff needed for invariants
   Std.Range.forIn_eq_forIn_range' Std.Range.forIn'_eq_forIn'_range' Std.Range.size Nat.div_one  -- rewrite to forIn_list
   Array.forIn_eq_forIn_toList Array.forIn'_eq_forIn'_toList -- rewrite to forIn_list
-  ite_extrude_yield List.forIn_yield_eq_foldlM -- rewrite to foldlM
+  -- ite_extrude_yield List.forIn_yield_eq_foldlM -- rewrite to foldlM. Needs some of the LawfulMonad normalization laws as well; benefit of doing this is unclear
+  -- ←List.forIn_yield_eq_foldlM syntax not supported (yet)?
   -- state, reader, except ..Of impls
   StateT.get_apply
   StateT.set_apply
