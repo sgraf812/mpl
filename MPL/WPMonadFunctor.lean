@@ -19,6 +19,12 @@ theorem MonadWithReaderOf.withTheReader_apply [MonadWithReaderOf ρ m] [WP m sh]
 theorem MonadWithReader.withReader_apply [MonadWithReaderOf ρ m] [WP m sh] (f : ρ → ρ) (x : m α) :
   wp⟦MonadWithReader.withReader f x⟧.apply Q = wp⟦MonadWithReaderOf.withReader f x⟧.apply Q := rfl
 
+-- Dependency analysis:
+-- * To express monadMap_apply, we need wp1
+-- * To reduce wp1 applications, we need WP.wp1_apply
+-- * WP.wp1_apply needs ParametricNT.wp_app
+-- * ReaderT.instWPMonadFunctor needs ParametricNT.wp_map_map
+
 open MonadFunctor renaming monadMap → mmap
 
 -- wp is a representation function. We get a Galois Connection
@@ -120,9 +126,6 @@ example [WP m psm] (f : ρ → ρ) {α} :
 class WPMonadFunctor (m : Type → Type) (n : Type → Type) [Monad m] [WP m psm] [WP n psn] [MonadFunctor m n] [MonadFunctor (PredTrans psm) (PredTrans psn)] where
   monadMap_apply (f : ∀{β}, m β → m β) [ParametricNT m psm f] {α} (x : n α) (Q : PostCond α psn) :
     wp⟦mmap (m:=m) f x⟧.apply Q = PredTrans.apply (mmap (m:=PredTrans psm) (wp1 (m:=m) f) wp⟦x⟧) Q
-  -- The following lemma is a consequence of parametricity as well, I think
-  monadMap_mono (f : ∀{β}, m β → m β) [ParametricNT m psm f] (x x' : n α) (h : wp⟦x⟧ ≤ wp⟦x'⟧) :
-    mmap (m:=PredTrans psm) (wp1 (m:=m) f) wp⟦x⟧ ≤ mmap (m:=PredTrans psm) (wp1 (m:=m) f) wp⟦x'⟧
 namespace WP
 export WPMonadFunctor (monadMap_apply)
 end WP
@@ -130,35 +133,16 @@ end WP
 instance StateT.instWPMonadFunctor [WP m ps] [Monad m] : WPMonadFunctor m (StateT σ m)  where
   monadMap_apply f x _ := by
     simp only [wp, MonadFunctor.monadMap, PredTrans.popArg_pushArg, WP.wp1_apply, implies_true]
-  monadMap_mono f _ x x' h := by
-    intro Q s
-    simp only [WP.popArg_wp, wp, PredTrans.pushArg_apply] at h
-    simp only [wp, MonadFunctor.monadMap, PredTrans.popArg_pushArg, WP.wp1_apply]
-    apply ParametricNT.wp_app (x s) (x' s)
-    intro Q
-    apply h (fun a s => Q.1 (a, s), Q.2)
 
 instance ReaderT.instWPMonadFunctor [WP m ps] [Monad m] [LawfulMonad m] [WPMonad m ps] : WPMonadFunctor m (ReaderT ρ m)  where
   monadMap_apply f base _ x := by
     simp only [wp, MonadFunctor.monadMap, PredTrans.popArg_pushArg, WP.wp1_apply, ←map_map, ParametricNT.wp_map_map, implies_true]
-  monadMap_mono f _ x x' h := by
-    intro Q s
-    simp only [wp, MonadFunctor.monadMap, PredTrans.popArg_pushArg, WP.wp1_apply, ←map_map, PredTrans.pushArg_apply]
-    apply ParametricNT.wp_app _ _
-    simp[map_map]
-    intro Q
-    apply h (fun a s => Q.1 (a, s), Q.2)
 
 instance ExceptT.instWPMonadFunctor [WP m ps] [Monad m] [LawfulMonad m] [WPMonad m ps] : WPMonadFunctor m (ExceptT ε m) where
   monadMap_apply f x := by
     simp only [wp, MonadFunctor.monadMap, PredTrans.popExcept_pushExcept, WP.wp1_apply, implies_true]
-  monadMap_mono f base x x' h := by
-    intro Q
-    simp only [wp, MonadFunctor.monadMap, PredTrans.popExcept_pushExcept, WP.wp1_apply, ←map_map, PredTrans.pushExcept_apply]
-    replace h : wp⟦x.run⟧ ≤ wp⟦x'.run⟧ := fun Q => by simp only [WP.ExceptT_run_apply]; exact (h (fun a => Q.1 (.ok a), fun e => Q.1 (.error e), Q.2))
-    apply base.wp_app _ _ h
 
--- Not presently needed: (? What would it be needed for?)
+-- Not presently needed. (? What would it be needed for?) If needed in the future, we need to resurrect monadMap_mono
 /-
 instance WPMonadFunctor.instParametricNT {m n : Type → Type} {psm psn : PredShape} (f : ∀{α}, m α → m α)
   [WP m psm] [WP n psn] [Monad m] [LawfulMonad m] [Monad n] [LawfulMonad n]
