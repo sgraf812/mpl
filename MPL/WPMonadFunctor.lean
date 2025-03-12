@@ -185,10 +185,15 @@ lemma ite_app {c:Prop} [Decidable c] (t e : α → β) (a : α) : (if c then t e
 #check WP.wp1_apply
 #check ReaderT.withReader_apply
 example :
-  wp (m:= StateT Nat (ReaderT Bool Id)) (withTheReader Bool not (do if (← read) then return 0 else return 1)) =
-  wp (m:= StateT Nat (ReaderT Bool Id)) (do if (← read) then return 1 else return 0) := by
+  wp (m:= ExceptT Nat (StateT Nat (ReaderT Bool Id))) (withTheReader Bool not (do if (← read) then return 0 else return 1)) =
+  wp (m:= ExceptT Nat (StateT Nat (ReaderT Bool Id))) (do if (← read) then return 1 else return 0) := by
     ext Q : 4
-    simp only [MonadWithReaderOf.withTheReader_apply, MonadWithReaderOf.withReader_apply, WP.monadMap_apply, PredTrans.monadMapArg_apply, WP.popArg_wp, WP.wp1_apply, ReaderT.withReader_apply, ReaderT.read_apply, MonadReader.read_apply, WP.bind_apply, WP.StateT_run_apply, MonadReaderOf.read_apply, PredTrans.monadLiftArg_apply,
+    simp only [MonadWithReaderOf.withTheReader_apply, MonadWithReaderOf.withReader_apply,
+      WP.monadMap_apply, PredTrans.monadMapArg_apply, PredTrans.monadMapExcept_apply,
+      WP.popArg_wp, WP.popExcept_wp, WP.wp1_apply,
+      ReaderT.withReader_apply, ReaderT.read_apply, MonadReader.read_apply, WP.bind_apply,
+      WP.StateT_run_apply, WP.ExceptT_run_apply, MonadReaderOf.read_apply,
+      PredTrans.monadLiftArg_apply, PredTrans.monadLiftExcept_apply,
       MonadMorphism.ite_ite, pure_pure, PredTrans.ite_apply, PredTrans.pure_apply, ite_app]
     simp
 

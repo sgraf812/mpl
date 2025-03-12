@@ -86,6 +86,10 @@ theorem WP.popArg_wp [WP m ps] (x : StateT σ m α) :
   wp⟦x⟧.popArg s = wp⟦x.run s⟧ := by simp[wp, StateT.run]
 
 @[simp]
+theorem WP.ReaderT_run_apply [WP m ps] (x : ReaderT ρ m α) :
+  wp⟦x.run r⟧.apply Q = wp⟦x⟧.apply (fun a _ => Q.1 a, Q.2) r := rfl
+
+@[simp]
 theorem WP.StateT_run_apply [WP m ps] (x : StateT σ m α) :
   wp⟦x.run s⟧.apply Q = wp⟦x⟧.apply (fun a s => Q.1 (a, s), Q.2) s := rfl
 

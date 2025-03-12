@@ -6,6 +6,7 @@ import MPL.Specs
 import MPL.WPMonad
 import MPL.WPMonadLift
 import MPL.WPMonadFunctor
+import MPL.WPMonadExceptOf
 import MPL.WPSimp
 import Mathlib
 
@@ -56,7 +57,7 @@ attribute [wp_simp]
   WP.monadLift_apply PredTrans.monadLiftArg_apply PredTrans.monadLiftExcept_apply
   -- MonadFunctor implementation
   WP.monadMap_apply PredTrans.monadMapArg_apply PredTrans.monadMapExcept_apply
-  WP.popArg_wp WP.popExcept_wp WP.StateT_run_apply WP.ExceptT_run_apply
+  WP.popArg_wp WP.popExcept_wp WP.ReaderT_run_apply WP.StateT_run_apply WP.ExceptT_run_apply
   WP.wp1_apply
   -- List.Zipper.begin_suff List.Zipper.tail_suff List.Zipper.end_suff -- Zipper stuff needed for invariants
   Std.Range.forIn_eq_forIn_range' Std.Range.forIn'_eq_forIn'_range' Std.Range.size Nat.div_one  -- rewrite to forIn_list
@@ -70,6 +71,7 @@ attribute [wp_simp]
   ReaderT.read_apply
   ReaderT.withReader_apply
   ExceptT.throw_apply
+  ExceptT.tryCatch_apply
   -- lifting state
   MonadStateOf.get_apply MonadStateOf.getThe_apply MonadState.get_apply
   MonadStateOf.set_apply MonadState.set_apply
@@ -79,6 +81,10 @@ attribute [wp_simp]
   MonadReaderOf.read_apply MonadReaderOf.readThe_apply MonadReader.read_apply
   MonadWithReaderOf.withReader_apply MonadWithReaderOf.withTheReader_apply MonadWithReader.withReader_apply
   -- lifting except (none yet; requires a bunch of lemmas per ReaderT, StateT, ExceptT, etc.)
+  MonadExcept.throw_apply MonadExcept.throwThe_apply
+  ReaderT.throw_apply StateT.throw_apply ExceptT.lift_throw_apply
+  MonadExcept.tryCatch_apply MonadExcept.tryCatchThe_apply
+  ReaderT.tryCatch_apply StateT.tryCatch_apply ExceptT.lift_tryCatch_apply
 
 macro "xwp" : tactic =>
   `(tactic| ((try unfold triple); wp_simp))

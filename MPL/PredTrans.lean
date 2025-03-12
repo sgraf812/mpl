@@ -325,12 +325,6 @@ instance : LawfulMonad (PredTrans ps) where
   seqRight_eq := sorry
   pure_seq := sorry
 
-def PredTrans.throw {ps : PredShape} {ε : Type} (e : ε) : PredTrans (.except ε ps) α :=
-  { apply := fun Q => Q.2.1 e, mono := by
-      intro Q₁ Q₂ h
-      simp only [apply]
-      exact h.2.1 e }
-
 def PredTrans.get {ps : PredShape} {σ : Type} : PredTrans (.arg σ ps) σ :=
   { apply := fun Q s => Q.1 s s, mono := by
       intro Q₁ Q₂ h
@@ -344,6 +338,20 @@ def PredTrans.set {ps : PredShape} {σ : Type} (s : σ) : PredTrans (.arg σ ps)
       simp only [apply]
       intro _
       exact h.1 ⟨⟩ s }
+
+def PredTrans.throw {ps : PredShape} {ε : Type} (e : ε) : PredTrans (.except ε ps) α :=
+  { apply := fun Q => Q.2.1 e, mono := by
+      intro Q₁ Q₂ h
+      simp only [apply]
+      exact h.2.1 e }
+
+def PredTrans.tryCatch {ps : PredShape} {ε : Type} (x : PredTrans (.except ε ps) α) (handle : ε → PredTrans (.except ε ps) α) : PredTrans (.except ε ps) α :=
+  { apply := fun Q => x.apply (Q.1, fun e => (handle e).apply Q, Q.2.2), mono := by
+      intro Q₁ Q₂ h
+      apply x.mono
+      use h.1, ?_, h.2.2
+      intro e
+      apply (handle e).mono _ _ h }
 
 @[simp]
 def PredTrans.modify {ps : PredShape} {σ : Type} (f : σ → σ) : PredTrans (.arg σ ps) PUnit := do
