@@ -4,6 +4,9 @@ import MPL.WPMonadFunctor
 
 namespace MPL
 
+universe u
+variable {m : Type → Type u} {ps : PredShape}
+
 theorem MonadExcept.throw_apply [MonadExceptOf ε m] [WP m ps] :
   wp⟦throw e : m α⟧.apply Q = wp⟦MonadExceptOf.throw e : m α⟧.apply Q := rfl
 

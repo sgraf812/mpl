@@ -3,6 +3,9 @@ import MPL.WPMonadLift
 
 namespace MPL
 
+universe u
+variable {m : Type → Type u} {ps : PredShape}
+
 protected theorem ReaderT.wp_withReader [WP m psm] :
   wp⟦MonadWithReaderOf.withReader f x : ReaderT ρ m α⟧ = PredTrans.withReader f wp⟦x⟧ := rfl
 
@@ -32,14 +35,14 @@ open MonadFunctor renaming monadMap → mmap
 --   γ(t) := { x | wp⟦x⟧ ≤ t }
 --   α(f)(t) := ⨆{ wp⟦f x⟧ | wp⟦x⟧ ≤ t }
 -- wp1⟦f⟧ is exactly α(f).
-noncomputable def wp1 {m : Type → Type} {ps : PredShape} [WP m ps] (f : ∀{α}, m α → m α) {α} : PredTrans ps α → PredTrans ps α := fun t =>
+noncomputable def wp1 {m : Type → Type u} {ps : PredShape} [WP m ps] (f : ∀{α}, m α → m α) {α} : PredTrans ps α → PredTrans ps α := fun t =>
   sSup { r | ∃ x, wp⟦x⟧ ≤ t ∧ r = wp⟦f x⟧ }
 
 -- The following type class expresses that any function of type
 -- (f : ∀{α}, m α → m α) is parametric; that is,
 -- (1) preserves relations such as `wp⟦·⟧ ≤ wp⟦·⟧`, and
 -- (2) is a natural transformation. (At least (2) is folklore.)
-class ParametricNT (m : Type → Type) (ps : outParam PredShape) [WP m ps] [Monad m] (f : ∀{α}, m α → m α) where
+class ParametricNT (m : Type → Type u) (ps : outParam PredShape) [WP m ps] [Monad m] (f : ∀{α}, m α → m α) where
   wp_app : ∀ {α} (x x' : m α), wp⟦x⟧ ≤ wp⟦x'⟧ → wp⟦f x⟧ ≤ wp⟦f x'⟧
   wp_map_map : ∀ {α} (g : α → β) (x : m α), f (g <$> x) = g <$> f x
 
@@ -95,7 +98,7 @@ instance ExceptT.instParametricNT [WP m ps] (f : ∀{β}, m β → m β) [Monad 
       _ = (do let a ← f x; pure (match a with | Except.ok a => (Except.ok (g a)) | Except.error e => (Except.error e))) := by simp only [ExceptT.run, ←bind_pure_comp]
       _ = (do let a ← f x; match a with | Except.ok a => pure (Except.ok (g a)) | Except.error e => pure (Except.error e)) := by congr; ext; split <;> rfl
 
-theorem WP.wp1_apply {m : Type → Type} {ps : PredShape} [WP m ps] (f : ∀{α}, m α → m α) [Monad m] [ParametricNT m ps f] (x : m α) :
+theorem WP.wp1_apply {m : Type → Type u} {ps : PredShape} [WP m ps] (f : ∀{α}, m α → m α) [Monad m] [ParametricNT m ps f] (x : m α) :
   wp1 (m:=m) f wp⟦x⟧ = wp⟦f x⟧ := by
     apply le_antisymm
     · apply sSup_le
@@ -123,7 +126,7 @@ example [WP m psm] (f : ρ → ρ) {α} :
     | .inl ⟨x, h⟩ => apply le_sSup; use x, h; sorry -- close enough?! but not really
     | .inr h => sorry -- no chance. The RHS is ⊥, but cannot show that t is bottom from h. Or can we?
 
-class WPMonadFunctor (m : Type → Type) (n : Type → Type) [Monad m] [WP m psm] [WP n psn] [MonadFunctor m n] [MonadFunctor (PredTrans psm) (PredTrans psn)] where
+class WPMonadFunctor (m : Type → Type u) (n : Type → Type v) [Monad m] [WP m psm] [WP n psn] [MonadFunctor m n] [MonadFunctor (PredTrans psm) (PredTrans psn)] where
   monadMap_apply (f : ∀{β}, m β → m β) [ParametricNT m psm f] {α} (x : n α) (Q : PostCond α psn) :
     wp⟦mmap (m:=m) f x⟧.apply Q = PredTrans.apply (mmap (m:=PredTrans psm) (wp1 (m:=m) f) wp⟦x⟧) Q
 namespace WP
@@ -187,7 +190,7 @@ lemma ite_app {c:Prop} [Decidable c] (t e : α → β) (a : α) : (if c then t e
 example :
   wp (m:= ExceptT Nat (StateT Nat (ReaderT Bool Id))) (withTheReader Bool not (do if (← read) then return 0 else return 1)) =
   wp (m:= ExceptT Nat (StateT Nat (ReaderT Bool Id))) (do if (← read) then return 1 else return 0) := by
-    ext Q : 4
+    ext Q : 2
     simp only [MonadWithReaderOf.withTheReader_apply, MonadWithReaderOf.withReader_apply,
       WP.monadMap_apply, PredTrans.monadMapArg_apply, PredTrans.monadMapExcept_apply,
       WP.popArg_wp, WP.popExcept_wp, WP.wp1_apply,

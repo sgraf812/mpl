@@ -2,6 +2,9 @@ import MPL.WPMonad
 
 namespace MPL
 
+universe u
+variable {m : Type → Type u} {ps : PredShape}
+
 -- TODO: Figure out whether the following instances are useful (I don't think they are.)
 /-
 instance StateT.instLiftMonadMorphism [Monad m] [LawfulMonad m] : MonadMorphism m (StateT σ m) MonadLift.monadLift where
@@ -25,7 +28,7 @@ instance PredTrans.instLiftMonadMorphismDropFail : MonadMorphism (PredTrans ps) 
   bind_bind x f := by ext Q; simp only [Bind.bind, bind, monadLiftExcept_apply]
 -/
 
-class WPMonadLift (m : semiOutParam (Type → Type)) (n : Type → Type) (psm : outParam PredShape) (psn : outParam PredShape)
+class WPMonadLift (m : semiOutParam (Type → Type u)) (n : Type → Type v) (psm : outParam PredShape) (psn : outParam PredShape)
   [WP m psm] [WP n psn] [MonadLift m n] [MonadLift (PredTrans psm) (PredTrans psn)] where
   monadLift_apply {x : m α} {Q : PostCond α psn} :
     wp⟦MonadLift.monadLift x : n α⟧.apply Q = PredTrans.apply (MonadLift.monadLift wp⟦x⟧) Q

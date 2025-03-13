@@ -12,7 +12,7 @@ theorem tail_of_cons_suffix : hd::tl <:+ l → tl <:+ l := by
 
 -- TODO: Replace l by α, remove property, define toList instead?
 @[ext]
-structure Zipper (l : List α) where
+structure Zipper {α : Type u} (l : List α) : Type u where
   rpref : List α
   suff : List α
   property : rpref.reverse ++ suff = l
@@ -65,8 +65,8 @@ theorem Zipper.atSuff_tail (l : List α) (h : hd::tl <:+ l): (Zipper.atSuff h).t
 
 end List
 
-theorem Specs.forIn_list {α β} ⦃m : Type → Type⦄
-  [Monad m] [LawfulMonad m] [WP m ps] [MonadMorphism m _ wp]
+theorem Specs.forIn_list {α : Type u} {β : Type} ⦃m : Type → Type v⦄ {ps : PredShape}
+  [Monad m] [LawfulMonad m] [WP m ps] [WPMonad m ps]
   {xs : List α} {init : β} {f : α → β → m (ForInStep β)}
   (inv : PostCond (β × List.Zipper xs) ps)
   (step : ∀ b rpref x suff (h : xs = rpref.reverse ++ x :: suff),
@@ -97,8 +97,8 @@ theorem Specs.forIn_list {α β} ⦃m : Type → Type⦄
 
 -- using the postcondition as a constant invariant:
 @[spec]
-theorem Specs.forIn_list_const_inv {α β : Type} ⦃m : Type → Type⦄
-  [Monad m] [LawfulMonad m] [WP m ps] [MonadMorphism m _ wp]
+theorem Specs.forIn_list_const_inv {α : Type u} {β : Type} ⦃m : Type → Type v⦄ {ps : PredShape}
+  [Monad m] [LawfulMonad m] [WP m ps] [WPMonad m ps]
   {xs : List α} {init : β} {f : α → β → m (ForInStep β)}
   {inv : PostCond β ps}
   (step : ∀ hd b,
@@ -108,8 +108,8 @@ theorem Specs.forIn_list_const_inv {α β : Type} ⦃m : Type → Type⦄
   ⦃inv.1 init⦄ forIn xs init f ⦃inv⦄ :=
     Specs.forIn_list (fun p => inv.1 p.1, inv.2) (fun b _ hd _ _ => step hd b)
 
-theorem Specs.foldlM_list {α β} ⦃m : Type → Type⦄
-  [Monad m] [LawfulMonad m] [WP m ps] [MonadMorphism m _ wp]
+theorem Specs.foldlM_list {α : Type u} {β : Type} ⦃m : Type → Type v⦄ {ps : PredShape}
+  [Monad m] [LawfulMonad m] [WP m ps] [WPMonad m ps]
   {xs : List α} {init : β} {f : β → α → m β}
   (inv : PostCond (β × List.Zipper xs) ps)
   (step : ∀ b rpref x suff (h : xs = rpref.reverse ++ x :: suff),
@@ -126,8 +126,8 @@ theorem Specs.foldlM_list {α β} ⦃m : Type → Type⦄
 
 -- using the postcondition as a constant invariant:
 @[spec]
-theorem Specs.foldlM_list_const_inv {α β : Type} ⦃m : Type → Type⦄
-  [Monad m] [LawfulMonad m] [WP m ps] [MonadMorphism m _ wp]
+theorem Specs.foldlM_list_const_inv {α : Type u} {β : Type} ⦃m : Type → Type v⦄ {ps : PredShape}
+  [Monad m] [LawfulMonad m] [WP m ps] [WPMonad m ps]
   {xs : List α} {init : β} {f : β → α → m β}
   {inv : PostCond β ps}
   (step : ∀ hd b,

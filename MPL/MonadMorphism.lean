@@ -1,6 +1,6 @@
 namespace MPL
 
-class MonadMorphism (m : Type → Type) (n : Type → Type) [Monad m] [Monad n] (morph : ∀ {α}, m α → n α) where
+class MonadMorphism (m : Type → Type u) (n : Type → Type v) [Monad m] [Monad n] (morph : ∀ {α}, m α → n α) where
   pure_pure : ∀ {α} (a : α), morph (pure a) = pure a
   bind_bind : ∀ {α β} (x : m α) (f : α → m β), morph (do let a ← x; f a) = do let a ← morph x; morph (f a)
 

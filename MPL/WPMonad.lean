@@ -3,6 +3,9 @@ import MPL.MonadMorphism
 
 open MPL
 
+universe u
+variable {m : Type → Type u} {ps : PredShape}
+
 abbrev WPMonad m sh [Monad m] [WP m sh] := MonadMorphism m (PredTrans sh) wp
 
 theorem WP.pure_apply [WP m ps] [Monad m] [WPMonad m ps] (a : α) (Q : PostCond α ps) :

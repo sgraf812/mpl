@@ -22,7 +22,7 @@ def FailConds : PredShape → Type
 
 -- Translate a predicate shape to a multi-barreled postcondition
 @[reducible]
-def PostCond (α : Type) (s : PredShape) : Type :=
+def PostCond (α : Type u) (s : PredShape) : Type u :=
   (α → PreCond s) × FailConds s
 
 open PredShape in

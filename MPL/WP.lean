@@ -4,7 +4,7 @@ import MPL.PredTrans
 
 namespace MPL
 
-class WP (m : Type → Type) (ps : outParam PredShape) where
+class WP (m : Type → Type u) (ps : outParam PredShape) where
   wp {α} (x : m α) : PredTrans ps α
 
 open Lean.Parser.Term in
@@ -21,6 +21,8 @@ protected def unexpandWP : Unexpander
 --  | `($_ ($x : $ty)) => `(wp⟦$x : $ty⟧) -- TODO?!
   | _ => (throw () : UnexpandM _)
 
+variable {m : Type → Type u}
+
 @[simp]
 theorem WP.wp_dite {c : Prop} [Decidable c] {t : c → m α} {e : ¬ c → m α} [WP m ps] :
   wp⟦dite c t e⟧ = if h : c then wp⟦t h⟧ else wp⟦e h⟧ := by
@@ -35,6 +37,8 @@ export WP (wp wp_dite wp_ite)
 
 end MPL
 open MPL
+
+variable {m : Type → Type u}
 
 instance Id.instWP : WP Id .pure where
   wp x := PredTrans.pure x.run
