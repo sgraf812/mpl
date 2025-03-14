@@ -7,24 +7,63 @@ namespace MPL
 
 open Lean Parser Meta Elab Term Command
 
+def forInWithInvariant {m : Type → Type u₂} {α : Type v} [ForIn m (List α) α] {β : Type} [Monad m]
+  (xs : List α) (init : β) (f : α → β → m (ForInStep β)) {ps : PredShape} [WP m ps] (_inv : PostCond (β × List.Zipper xs) ps) : m β :=
+    pure () >>= fun _ => forIn xs init f
+
+@[spec]
+theorem Specs.forInWithInvariant_list {α : Type u} {β : Type} ⦃m : Type → Type v⦄ {ps : PredShape}
+  [Monad m] [LawfulMonad m] [WP m ps] [WPMonad m ps]
+  {xs : List α} {init : β} {f : α → β → m (ForInStep β)}
+  {inv : PostCond (β × List.Zipper xs) ps}
+  (step : ∀ b rpref x suff (h : xs = rpref.reverse ++ x :: suff),
+      ⦃inv.1 (b, ⟨rpref, x::suff, by simp[h]⟩)⦄
+      f x b
+      ⦃(fun r => match r with
+                 | .yield b' => inv.1 (b', ⟨x::rpref, suff, by simp[h]⟩)
+                 | .done b' => inv.1 (b', ⟨xs.reverse, [], by simp⟩), inv.2)⦄) :
+  ⦃inv.1 (init, ⟨[], xs, by simp⟩)⦄ forInWithInvariant xs init f inv ⦃(fun b => inv.1 (b, ⟨xs.reverse, [], by simp⟩), inv.2)⦄ := by
+  simp only [forInWithInvariant, pure_bind]
+  exact Specs.forIn_list inv step
+
 syntax "assert " withPosition(basicFun) : doElem
 syntax "invariant " withPosition(basicFun) : doElem
 
-def requiresHelper {α : Type} {m : Type → Type u} {ps : PredShape} [Monad m] [WP m ps] (_p : PreCond ps) (x : m α) : m α :=
+abbrev requiresGadget {α : Type} {m : Type → Type u} {ps : PredShape} [WP m ps] (_p : PreCond ps) (x : m α) : m α :=
   x
 
-def ensuresHelper {α : Type} {m : Type → Type u} {ps : PredShape} [Monad m] [WP m ps] (_p : α → PreCond ps) (x : m α): m α :=
+abbrev ensuresGadget {α : Type} {m : Type → Type u} {ps : PredShape} [WP m ps] (_p : α → PreCond ps) (x : m α): m α :=
   x
 
-def assertHelper {m : Type → Type u} {ps : PredShape} [Monad m] [WP m ps] (_p : PreCond ps) : m Unit :=
+@[wp_simp]
+theorem requiresGadget_apply [WP m sh] (x : m α) :
+  wp⟦requiresGadget P x⟧.apply Q = wp⟦x⟧.apply Q := rfl
+
+@[wp_simp]
+theorem ensuresGadget_apply [WP m sh] (x : m α) :
+  wp⟦ensuresGadget P x⟧.apply Q = wp⟦x⟧.apply Q := rfl
+
+def assertGadget {m : Type → Type u} {ps : PredShape} [Monad m] [WP m ps] (_p : PreCond ps) : m Unit :=
   pure ()
 
-def invariantHelper {m : Type → Type u} {ps : PredShape} [Monad m] [WP m ps] (_inv : PostCond (β × List.Zipper xs) ps) : m Unit :=
+def invariantGadget {m : Type → Type u} {ps : PredShape} [Monad m] [WP m ps] (_inv : PostCond (β × List.Zipper xs) ps) : m Unit :=
   pure ()
+
+@[wp_simp]
+theorem assertGadget_apply [Monad m] [WP m sh] : -- (h : PreCond.pure True ≤ P) :
+  wp⟦assertGadget P : m Unit⟧.apply Q = wp⟦pure () : m Unit⟧.apply Q := rfl
+
+@[wp_simp]
+theorem invariantGadget_apply  {m : Type → Type u₂} {α : Type v} [ForIn m (List α) α] {β : Type} [Monad m] [LawfulMonad m]
+  (xs : List α) (init : β) (f : α → β → m (ForInStep β)) {ps : PredShape} [WP m ps] [WPMonad m ps] (inv : PostCond (β × List.Zipper xs) ps) (Q : PostCond β ps) :
+  wp⟦invariantGadget inv : m Unit⟧.apply (fun _ => wp⟦forIn xs init f⟧.apply Q, Q.2) = wp⟦forInWithInvariant xs init f inv⟧.apply Q := by
+    calc
+      _ = wp⟦invariantGadget inv >>= fun _ => forIn xs init f⟧.apply Q := by simp
+      _ = wp⟦forInWithInvariant xs init f inv⟧.apply Q := rfl
 
 macro_rules
-  | `(doElem| assert $xs* => $p) => `(doElem| assertHelper (fun $xs* => $p))
-  | `(doElem| invariant $xs* => $p) => `(doElem| invariantHelper (fun $xs* => $p))
+  | `(doElem| assert $xs* => $p) => `(doElem| assertGadget (fun $xs* => $p))
+  | `(doElem| invariant $xs* => $p) => `(doElem| invariantGadget (fun $xs* => $p))
 
 -- syntax (name := spec)
 --   ("requires " withPosition(basicFun))?
@@ -54,26 +93,9 @@ private def skipUntilWs : Parser := skipUntil Char.isWhitespace
 private def skipUntilWsOrDelim : Parser := skipUntil fun c =>
   c.isWhitespace || c == '(' || c == ')' || c == ':' || c == '{' || c == '}' || c == '|'
 
-def forInWithInvariant {m : Type → Type u₂} {α : Type v} [ForIn m (List α) α] {β : Type} [Monad m]
-  (xs : List α) (init : β) (f : α → β → m (ForInStep β)) {ps : PredShape} [WP m ps] (_inv : PostCond (β × List.Zipper xs) ps) : m β :=
-    forIn xs init f
-
-@[spec]
-theorem Specs.forInWithInvariant_list {α : Type u} {β : Type} ⦃m : Type → Type v⦄ {ps : PredShape}
-  [Monad m] [LawfulMonad m] [WP m ps] [WPMonad m ps]
-  {xs : List α} {init : β} {f : α → β → m (ForInStep β)}
-  {inv : PostCond (β × List.Zipper xs) ps}
-  (step : ∀ b rpref x suff (h : xs = rpref.reverse ++ x :: suff),
-      ⦃inv.1 (b, ⟨rpref, x::suff, by simp[h]⟩)⦄
-      f x b
-      ⦃(fun r => match r with
-                 | .yield b' => inv.1 (b', ⟨x::rpref, suff, by simp[h]⟩)
-                 | .done b' => inv.1 (b', ⟨xs.reverse, [], by simp⟩), inv.2)⦄) :
-  ⦃inv.1 (init, ⟨[], xs, by simp⟩)⦄ forInWithInvariant xs init f inv ⦃(fun b => inv.1 (b, ⟨xs.reverse, [], by simp⟩), inv.2)⦄ :=
-  Specs.forIn_list inv step
-
 macro "CHONK" : tactic =>
-  `(tactic| (intros; intro h; xwp; all_goals simp_all))
+  `(tactic| ((try intros); xstart; intro h; xwp; try (all_goals simp_all)))
+--  `(tactic| sorry)
 
 def newdefinition     := leading_parser
   -- "def " >> recover declId skipUntilWsOrDelim >> ppIndent optDeclSig >> declVal >> optDefDeriving
@@ -109,12 +131,13 @@ partial def elab_newdecl : CommandElab := fun stx => do
     | _,  none => decl[2]
     | false, some bndrs => decl[2].setArg 0 (decl[2][0].setArgs (decl[2][0].getArgs ++ bndrs))
     | true, some bndrs => panic "die also"  -- TODO
+  let numProgBinders : Nat := if decl[2].isMissing then 65536 else decl[2][0].getNumArgs
   unless decl[4].getKind == ``declValSimple do throwUnsupportedSyntax
   let req : TSyntax ``basicFun := ⟨requires?[1]⟩
   let ens : TSyntax ``basicFun := ⟨ensures_[1]⟩
   -- decl[4][1] is the term/do block
-  let refinedDecl41 ← `(requiresHelper (fun $req:basicFun) (ensuresHelper (fun $ens:basicFun) $(⟨decl[4][1]⟩)))
-  -- let refinedDecl41 ← `(ensuresHelper (fun _ _ => PreCond.pure True) ($(⟨decl[4][1]⟩)))
+  let refinedDecl41 ← `(requiresGadget (fun $req:basicFun) (ensuresGadget (fun $ens:basicFun) $(⟨decl[4][1]⟩)))
+  -- let refinedDecl41 ← `(ensuresGadget (fun _ _ => PreCond.pure True) ($(⟨decl[4][1]⟩)))
   -- dbg_trace refinedDecl41
   let olddecl := Syntax.node5 stxinfo ``Parser.Command.definition decl[0] refinedDecl1 optDeclSig (decl[4].setArg 1 refinedDecl41) decl[5]
   let oldstx := Syntax.node2 declinfo ``Parser.Command.declaration stx[0] olddecl
@@ -122,61 +145,116 @@ partial def elab_newdecl : CommandElab := fun stx => do
   elabDeclaration oldstx
   let ns ← getCurrNamespace
   let declId := ns ++ declId
-  let .some (.defnInfo defn) := (← getEnv).find? (declId ++ Name.mkSimple "refined") | throwUnsupportedSyntax
+  let refinedDeclId := declId ++ Name.mkSimple "refined"
+  let .some (.defnInfo defn) := (← getEnv).find? refinedDeclId | throwUnsupportedSyntax
 --  log defn.name
 --  dbg_trace defn.value
 --  log defn.name
   runTermElabM fun vars => do
-  let rec spec_ty (prog : Expr) : (ty : Expr) → TermElabM Expr
+  let rec spec_ty (call : Expr) (body : Expr) (progBinders : Nat) : (ty : Expr) → TermElabM (Expr × Expr)
     | .forallE x ty body_ty info => withLocalDecl x info ty fun a => do
-      let spec ← spec_ty (mkApp prog a) (body_ty.instantiate1 a)
-      return ← mkForallFVars #[a] spec
+      -- dbg_trace x
+      -- dbg_trace progBinders
+      let (refined_spec, erased_value) ← spec_ty (mkApp call a) (mkApp body a).headBeta (progBinders - 1) (body_ty.instantiate1 a)
+      if progBinders = 0 then
+        return (← mkForallFVars #[a] refined_spec, erased_value)
+      else
+        return (← mkForallFVars #[a] refined_spec, ← mkLambdaFVars #[a] erased_value)
     | ty => do
-    let .app m α := ty | throwUnsupportedSyntax
-    let ps ← mkFreshExprMVar (mkConst ``PredShape) (userName := `ps)
-    let u ← mkFreshLevelMVar
-    let wp ← synthInstance (mkApp2 (mkConst ``MPL.WP [u]) m ps)
+    let mut body := body
+--    dbg_trace body
+    let P ←
+      if requires?.isMissing then pure none
+      else do
+        let_expr requiresGadget _α _m _ps _WP P body' := body | throwError "no requiresGadget"
+        body := body'
+        pure (some P)
+    let_expr ensuresGadget α m ps wp Q body := body | throwError "no ensuresGadget"
+    let some u := Level.dec (← getLevel (mkApp m α)) | throwError "invalid level (0?)"
+    dbg_trace u
+    let Q := mkApp3 (mkConst ``PostCond.total [.zero]) α ps Q
+    let P := P.getD (mkApp2 (mkConst ``PreCond.pure) ps (mkConst ``True))
+    -- dbg_trace P
+    -- dbg_trace Q
+    -- dbg_trace body
+    -- unfold assertGadget and invariantGadget applications
+    let pure_unit ← elabTerm (← `(pure ())) (some (mkApp m (mkConst ``Unit)))
+    body := body.replace fun e => match_expr e with
+      | assertGadget m _ _ _ _ => some pure_unit
+      | invariantGadget m _ _ _ _ _ _ _ => some pure_unit
+      | _ => none
+    -- dbg_trace body
     -- spec := leading_parser
     --  "forall " (Term.binderIdent <|> bracketedBinder)+ ("requires" basicFun)? "ensures" basicFun ("signals" basicFun)*
     -- let `($xs => $e) := spec[0]
     -- dbg_trace spec[2][1]
-    dbg_trace prog
---    let P ←
---      if spec[0].isMissing then pure (mkApp2 (mkConst ``PreCond.pure) ps (mkConst ``True))
---      else elabTerm (← `(fun $xs* => $e)) (mkApp (mkConst ``PreCond) ps)
---    let xs : TSyntaxArray ``funBinder := TSyntaxArray.mk spec[3][0].getArgs
---    let optType := spec[3][1]
---    let e : TSyntax `term := ⟨spec[3][3]⟩
---    let Q ← elabTerm (← `((fun $xs* => $e, FailConds.false))) (mkApp2 (mkConst ``PostCond [u]) α ps)
-    let triple_ty := mkApp7 (mkConst ``triple [u]) m ps wp α prog sorry sorry
---    let triple_ty ← mkForallFVars fvars triple_ty
-    return triple_ty
-  let spec ← instantiateMVars (← spec_ty (mkConst defn.name (defn.levelParams.map .param)) defn.type)
---  let spec ← instantiateMVars (← spec_ty (← mkConstWithFreshMVarLevels defn.name) defn.type)
-  let val := (← Term.elabTerm (← `(by unfold $(TSyntax.mk (mkIdent declId)); CHONK)) (.some spec) (catchExPostpone := false))
+    -- dbg_trace call
+    let refined_triple_ty := mkApp7 (mkConst ``triple [u]) m ps wp α call P Q
+    return (refined_triple_ty, body)
+  let (refined_spec, erased_value) ← spec_ty (mkConst defn.name (defn.levelParams.map .param)) defn.value numProgBinders defn.type
+  let erased_value ← instantiateMVars erased_value
+  let erased_ty ← inferType erased_value
+  -- dbg_trace erased_value
+  -- dbg_trace erased_ty
+  --log erased_value
+  addDecl (.defnDecl { defn with
+    name := declId
+    type := erased_ty
+    -- value := ← Term.elabTermEnsuringType (← `(by sorry)) refined_spec
+    value := erased_value
+  })
+  let .some (.defnInfo defn) := (← getEnv).find? declId | throwUnsupportedSyntax
+  -- dbg_trace defn.name
   synthesizeSyntheticMVarsNoPostponing
+  let refined_spec ← instantiateMVars refined_spec
+  let rec erase_spec (erased_call : Expr) (progBinders : Nat) : Expr → TermElabM Expr
+    | .forallE x ty refined_spec info => withLocalDecl x info ty fun a => do
+--      dbg_trace x
+--      dbg_trace progBinders
+      let erased_spec ← erase_spec (if progBinders = 0 then erased_call else mkApp erased_call a) (progBinders - 1) (refined_spec.instantiate1 a)
+      return (← mkForallFVars #[a] erased_spec)
+    | mkApp3 trpl _refined_call P Q => do
+      -- dbg_trace _refined_call
+      return (mkApp3 trpl erased_call P Q)
+    | _ => throwError "no triple"
+  --log refined_spec
+  let erased_spec ← erase_spec (mkConst defn.name) numProgBinders refined_spec
+  dbg_trace erased_spec
+  let levelParams := collectLevelParams {} erased_spec |>.params
+  dbg_trace levelParams
+
+--  let refined_spec ← instantiateMVars (← spec_ty (← mkConstWithFreshMVarLevels defn.name) defn.type)
+  let val := (← Term.elabTerm (← `(by unfold $(TSyntax.mk (mkIdent refinedDeclId)); CHONK)) (.some refined_spec) (catchExPostpone := false))
+  synthesizeSyntheticMVarsNoPostponing
+  let erased_spec ← instantiateMVars erased_spec
   let val ← instantiateMVars val
-  -- dbg_trace spec.hasLevelMVar
-  -- dbg_trace val.hasLevelMVar
+--  dbg_trace refined_spec.hasLevelMVar
+--  dbg_trace refined_spec.hasMVar
+--  dbg_trace erased_spec.hasLevelMVar
+--  dbg_trace erased_spec.hasMVar
+--  dbg_trace val.hasLevelMVar
+--  dbg_trace val.hasMVar
   addDecl (.thmDecl {
     name := declId ++ Name.mkSimple "spec"
-    levelParams := defn.toConstantVal.levelParams
-    type := spec
-    -- value := ← Term.elabTermEnsuringType (← `(by sorry)) spec
+    levelParams := defn.levelParams
+    type := erased_spec
+    -- value := ← Term.elabTermEnsuringType (← `(by sorry)) refined_spec
     value := val
   })
 
 def mkFreshInt {m : Type → Type} [Monad m] : StateT (Nat × Nat) m Nat
-  forall {sh} [WP m sh] [LawfulMonad m] [WPMonad m sh] n o
+  forall {ps} [WP m ps] [LawfulMonad m] [WPMonad m ps] n o
   requires s => PreCond.pure (s.1 = n ∧ s.2 = o)
   ensures r s => PreCond.pure (r = n ∧ s.1 = n + 1 ∧ s.2 = o)
 := do
   let n ← Prod.fst <$> get
-  -- assert PreCond.pure (n = 13)
+  assert _ => PreCond.pure (o = 13)
   modify (fun s => (s.1 + 1, s.2))
   pure n
 
 #print mkFreshInt.spec
+
+example [WP m ps] [Monad m] [LawfulMonad m] [WPMonad m ps] : mkFreshInt (m:=m) = mkFreshInt.refined (m:=m) n o := rfl
 
 --set_option trace.Elab.definition true in
 def blah1 (n: Nat) : StateM Nat Bool
