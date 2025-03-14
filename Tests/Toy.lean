@@ -236,11 +236,7 @@ def fib_spec : Nat → Nat
 | 1 => 1
 | n+2 => fib_spec n + fib_spec (n+1)
 
-theorem fib_spec_rec (h : n > 1) : fib_spec n = fib_spec (n-2) + fib_spec (n-1) := by
-  rw (occs := .pos [1]) [fib_spec.eq_def]
-  split
-  repeat omega
-  simp
+theorem fib_spec_rec : fib_spec (n + 2) = fib_spec n + fib_spec (n+1) := rfl
 
 theorem fib_correct {n} : fib_impl n = fib_spec n := by
   generalize h : fib_impl n = x
@@ -249,17 +245,14 @@ theorem fib_correct {n} : fib_impl n = fib_spec n := by
   if h : n = 0 then simp[h,fib_spec] else ?_
   simp[h]
   xapp Specs.forIn_list ?inv ?step
-  case inv => exact PostCond.total fun (⟨a, b⟩, xs) => let i := n - xs.suff.length; xs.suff.length < n ∧ a = fib_spec (i-1) ∧ b = fib_spec i
+  case inv => exact PostCond.total fun (⟨a, b⟩, xs) => a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)
   case pre => simp +arith +decide [Nat.succ_le_of_lt, Nat.zero_lt_of_ne_zero h, Nat.sub_sub_eq_min]
   case step =>
-    intro ⟨a, b⟩ _pref x suff _h ⟨htl, ha, hb⟩
+    intro ⟨a, b⟩ _pref x suff _h ⟨ha, hb⟩
     xwp
-    use Nat.lt_of_succ_lt htl
-    simp_arith[Nat.succ_le_of_lt, Nat.zero_lt_of_ne_zero h, Nat.sub_sub_eq_min, Nat.sub_sub, Nat.lt_of_succ_lt, ha, hb] at *
-    refine (fib_spec_rec ?_).symm
-    simp_arith[Nat.le_sub_of_add_le' htl]
-  intro y
-  simp
+    simp_all[fib_spec_rec]
+  intro y ⟨_, hb⟩
+  simp [Nat.sub_one_add_one h, hb]
 
 end fib
 
