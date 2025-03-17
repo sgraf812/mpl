@@ -98,8 +98,10 @@ example :
     xwp
 
 example :
-  wp (m:= ReaderT Char (StateT Bool (ExceptT Nat Id))) (do try { set true; throw 42 } catch _ => set false; get) =
-  wp (m:= ReaderT Char (StateT Bool (ExceptT Nat Id))) (do set false; get) := by
+  wp (m:= ReaderT Char (StateT Bool (ExceptT Nat Id)))
+     (do try { set true; throw 42 } catch _ => set false; get) =
+  wp (m:= ReaderT Char (StateT Bool (ExceptT Nat Id)))
+     (do set false; get) := by
     ext Q : 2
     xwp
 
@@ -278,7 +280,7 @@ theorem addRandomEvens_spec (n k) : ⦃True⦄ (addRandomEvens n k) ⦃⇓r | r 
   unfold addRandomEvens -- TODO: integrate into xwp or xstart, make it an option
   xwp
   intro h
-  xapp -- Specs.foldlM_list_const_inv -- is the one that is registered
+  xapp -- Specs.forIn_list_const_inv -- is the one that is registered
   intro hd b hinv
   xwp
   xapp IO.rand_spec

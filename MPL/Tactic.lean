@@ -121,7 +121,7 @@ def xapp_no_xbind (goal : MVarId) (spec : Option (TSyntax `term)) : TacticM Unit
       if specs.size > 1 then
         throwError s!"multiple specs found for {x}: {specs}"
       else
-        let gs ← triple_goal.apply (mkConst specs[0]!)
+        let gs ← triple_goal.apply (← mkConstWithFreshMVarLevels specs[0]!)
         pushGoals gs
         pruneSolvedGoals
     else
