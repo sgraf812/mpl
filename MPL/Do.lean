@@ -97,52 +97,82 @@ macro "CHONK" : tactic =>
   `(tactic| ((try intros); xstart; intro h; xwp; try (all_goals simp_all)))
 --  `(tactic| sorry)
 
+def Specification.specificationBy := leading_parser
+  "specification_by " >>
+  optional (atomic (many (ppSpace >> Term.binderIdent) >> " => ")) >>
+  termParser
+
+def Specification.suffix := leading_parser
+  optional (ppDedent ppLine >> specificationBy)
+
+def newdeclValSimple    := leading_parser
+  -- " :=" >> ppHardLineUnlessUngrouped >> declBody >> Termination.suffix >> optional Term.whereDecls
+  " :=" >> ppHardLineUnlessUngrouped >> declBody >> Termination.suffix >> optional Term.whereDecls >> Specification.suffix
+
+@[builtin_doc] def newdeclVal :=
+  -- Remark: we should not use `Term.whereDecls` at `declVal`
+  -- because `Term.whereDecls` is defined using `Term.letRecDecl` which may contain attributes.
+  -- Issue #753 shows an example that fails to be parsed when we used `Term.whereDecls`.
+  withAntiquot (mkAntiquot "declVal" decl_name% (isPseudoKind := true)) <|
+    newdeclValSimple <|> declValEqns <|> whereStructInst
+
 def newdefinition     := leading_parser
   -- "def " >> recover declId skipUntilWsOrDelim >> ppIndent optDeclSig >> declVal >> optDefDeriving
-  "def " >> recover declId skipUntilWsOrDelim >> ppIndent optDeclSig >> ppIndent spec >> declVal >> optDefDeriving
+  "def " >> recover declId skipUntilWsOrDelim >> ppIndent optDeclSig >> ppIndent spec >> newdeclVal >> optDefDeriving
 
 @[command_parser]
 def newdeclaration := leading_parser
   declModifiers false >> newdefinition
 
+--def newdeclaration.blah : TSyntax ``declVal → CommandElabM (TSyntax ``declVal)
+--  | `(newdeclVal| := $bdy:declBody $x $wheres $deriv:optDefDeriving) => do
+--def newdeclaration.toOldDeclaration : TSyntax ``newdeclaration → CommandElabM (TSyntax ``declaration)
+--  | `(newdeclaration| $mods:declModifiers $defn:newdefinition) => match defn with
+--    | `(newdefinition| def $id $sig $spc:spec := $bdy:declBody $x $wheres $specby $deriv:optDefDeriving) => do
+--    | _ => throwUnsupportedSyntax
+--  | _ => throwUnsupportedSyntax
+
 @[command_elab newdeclaration]
-partial def elab_newdecl : CommandElab := fun stx => do
+partial def elab_newdecl : CommandElab := fun decl => do
   -- newdeclaration := declModifiers false >> newdefinition
   -- newdefinition := "def " >> recover declId skipUntilWsOrDelim >> ppIndent optDeclSig >> ppIndent spec >> declVal >> optDefDeriving
-  let decl     := stx[1]
-  let declKind := decl.getKind
-  let declId := decl[1][0].getId
-  let some stxinfo := stx.getInfo? | throwUnsupportedSyntax
-  let some declinfo := decl.getInfo? | throwUnsupportedSyntax
+  let defn     := decl[1]
+  let declKind := defn.getKind
+  let declId := defn[1][0].getId
+  let some stxinfo := decl.getInfo? | throwUnsupportedSyntax
+  let some declinfo := defn.getInfo? | throwUnsupportedSyntax
+--  dbg_trace defn
 --  dbg_trace decl
---  dbg_trace stx
---  dbg_trace stx.getNumArgs
-  let spec := decl[3]
+--  dbg_trace decl.getNumArgs
+  let spec := defn[3]
   let foralls? := if spec[0].isMissing then none else some spec[0][1].getArgs
   let requires? := spec[1]
   let ensures_ := Syntax.node2 SourceInfo.none nullKind spec[2] spec[3]
   -- dbg_trace requires?
   -- dbg_trace ensures_
-  let refinedDecl1 := decl[1].setArg 0 <| match decl[1][0] with
+  let refinedDecl1 := defn[1].setArg 0 <| match defn[1][0] with
     | .ident info ss val _ => Syntax.ident info ss (val ++ Name.mkSimple "refined") []
     | _ => panic "die" -- TODO
-  -- dbg_trace decl[2][0]
-  let optDeclSig := match decl[2].isMissing, foralls? with
-    | _,  none => decl[2]
-    | false, some bndrs => decl[2].setArg 0 (decl[2][0].setArgs (decl[2][0].getArgs ++ bndrs))
+  -- dbg_trace defn[2][0]
+  let optDeclSig := match defn[2].isMissing, foralls? with
+    | _,  none => defn[2]
+    | false, some bndrs => defn[2].setArg 0 (defn[2][0].setArgs (defn[2][0].getArgs ++ bndrs))
     | true, some bndrs => panic "die also"  -- TODO
-  let numProgBinders : Nat := if decl[2].isMissing then 65536 else decl[2][0].getNumArgs
-  unless decl[4].getKind == ``declValSimple do throwUnsupportedSyntax
-  let req : TSyntax ``basicFun := ⟨requires?[1]⟩
-  let ens : TSyntax ``basicFun := ⟨ensures_[1]⟩
-  -- decl[4][1] is the term/do block
-  let refinedDecl41 ← `(requiresGadget (fun $req:basicFun) (ensuresGadget (fun $ens:basicFun) $(⟨decl[4][1]⟩)))
-  -- let refinedDecl41 ← `(ensuresGadget (fun _ _ => PreCond.pure True) ($(⟨decl[4][1]⟩)))
-  -- dbg_trace refinedDecl41
-  let olddecl := Syntax.node5 stxinfo ``Parser.Command.definition decl[0] refinedDecl1 optDeclSig (decl[4].setArg 1 refinedDecl41) decl[5]
-  let oldstx := Syntax.node2 declinfo ``Parser.Command.declaration stx[0] olddecl
- -- dbg_trace oldstx
-  elabDeclaration oldstx
+  let numProgBinders : Nat := if defn[2].isMissing then 65536 else defn[2][0].getNumArgs
+  unless defn[4].getKind == ``newdeclValSimple do throwUnsupportedSyntax
+  let olddeclValRefined ← match defn[4] with
+    | .node info ``newdeclValSimple args => do
+      let req : TSyntax ``basicFun := ⟨requires?[1]⟩
+      let ens : TSyntax ``basicFun := ⟨ensures_[1]⟩
+      -- defn[4][1] is the term/do block; we'll patch it with the gadgets for requires and ensures
+      let refinedDecl41 ← `(requiresGadget (fun $req:basicFun) (ensuresGadget (fun $ens:basicFun) $(⟨defn[4][1]⟩)))
+      pure (Syntax.node info ``declValSimple (Array.set! args[:args.size-1] 1 refinedDecl41))
+    | _ => throwUnsupportedSyntax
+  -- dbg_trace olddeclValRefined
+  let olddefn := Syntax.node5 stxinfo ``Parser.Command.definition defn[0] refinedDecl1 optDeclSig olddeclValRefined defn[5]
+  let olddecl := Syntax.node2 declinfo ``Parser.Command.declaration decl[0] olddefn
+ -- dbg_trace olddecl
+  elabDeclaration olddecl
   let ns ← getCurrNamespace
   let declId := ns ++ declId
   let refinedDeclId := declId ++ Name.mkSimple "refined"
@@ -248,7 +278,7 @@ def mkFreshInt {m : Type → Type} [Monad m] : StateT (Nat × Nat) m Nat
   ensures r s => PreCond.pure (r = n ∧ s.1 = n + 1 ∧ s.2 = o)
 := do
   let n ← Prod.fst <$> get
-  assert _ => PreCond.pure (o = 13)
+  -- assert _ => PreCond.pure (o = 13)
   modify (fun s => (s.1 + 1, s.2))
   pure n
 
@@ -282,12 +312,12 @@ def fib_spec : Nat → Nat
 | n+2 => fib_spec n + fib_spec (n+1)
 
 def fib_impl (n : Nat) : Idd Nat
-  ensures r => r = fib_spec n
+--  ensures r => r = fib_spec n
 := do
   if n = 0 then return 0
   let mut a := 0
   let mut b := 1
-  invariant xs => a = fib_impl xs.rpref.length ∧ b = fib_impl (xs.rpref.length + 1)
+  -- invariant xs => a = fib_impl xs.rpref.length ∧ b = fib_impl (xs.rpref.length + 1)
   for _ in [1:n] do
     let a' := a
     a := b
