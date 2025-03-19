@@ -82,6 +82,35 @@ theorem test_ex :
   simp only [List.sum_nil, add_zero]
   sorry -- sgrind
 
+theorem test_ex2 :
+  ⦃fun s => s = 4⦄
+  do
+    let mut x := 0
+    let s ← get
+    for i in [1:s] do { x := x + i; if x > 4 then throw x } -- NB: throw x. impossible to prove stuff about? No, could strengthen loop invariant to assert more info about x and assume that in fail cond
+    (set 1 : ExceptT Nat (StateT Nat Idd) PUnit)
+    return x
+  ⦃(fun r s => False,
+    fun e s => e > 4 ∧ s = 4,
+    ())⦄ := by
+  xstart
+  intro s hs
+  xwp
+  -- xbind -- optional
+  xapp (Specs.forIn_list (fun (r, xs) s => r ≤ 4 ∧ s = 4 ∧ r + xs.suff.sum > 4, fun e s => e > 4 ∧ s = 4, ()) ?step)
+  case pre => simp only [hs]; conv in (List.sum _) => { whnf }; simp
+  case step =>
+    intro b pref x suff h
+    xstart
+    xwp
+    simp only [h, List.sum_cons]
+    intro b' hinv
+    split
+    · simp[hinv]; assumption
+    · simp only [PredTrans.pure_apply]; sorry -- grind -- omega
+  simp only [List.sum_nil, add_zero]
+  sorry -- sgrind
+
 -- theorem forIn_break_throw : forIn xs ⟨none, init⟩ f = (forIn xs init (fun x s => do match (← f x s) with | .yield )).
 
 example :
