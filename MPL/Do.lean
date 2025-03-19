@@ -7,12 +7,12 @@ namespace MPL
 
 open Lean Parser Meta Elab Term Command
 
-def forInWithInvariant {m : Type → Type u₂} {α : Type v} [ForIn m (List α) α] {β : Type} [Monad m]
+def forInWithInvariant {m : Type → Type u₂} {α : Type} {β : Type} [Monad m]
   (xs : List α) (init : β) (f : α → β → m (ForInStep β)) {ps : PredShape} [WP m ps] (_inv : PostCond (β × List.Zipper xs) ps) : m β :=
     pure () >>= fun _ => forIn xs init f
 
 @[spec]
-theorem Specs.forInWithInvariant_list {α : Type u} {β : Type} ⦃m : Type → Type v⦄ {ps : PredShape}
+theorem Specs.forInWithInvariant_list {α : Type} {β : Type} ⦃m : Type → Type v⦄ {ps : PredShape}
   [Monad m] [LawfulMonad m] [WP m ps] [WPMonad m ps]
   {xs : List α} {init : β} {f : α → β → m (ForInStep β)}
   {inv : PostCond (β × List.Zipper xs) ps}
@@ -26,8 +26,29 @@ theorem Specs.forInWithInvariant_list {α : Type u} {β : Type} ⦃m : Type → 
   simp only [forInWithInvariant, pure_bind]
   exact Specs.forIn_list inv step
 
-syntax "assert " withPosition(basicFun) : doElem
-syntax "invariant " withPosition(basicFun) : doElem
+-- Q: Why not also steal the following doElem in the syntax?
+-- A: What would we expand `assert ... x` to?
+--    It appears we would have to expand x ourselves.
+syntax "assert " withPosition(basicFun) ("by " withPosition(Tactic.tacticSeqIndentGt))? : doElem
+syntax "invariant " withPosition(basicFun) ("by " withPosition(Tactic.tacticSeqIndentGt))? : doElem
+-- Reasons for why assert and invariant should ultimately be elaborated as part of do-notation:
+-- 1. It would be far simpler to elaborate `invariant` with the correct binding of let-mut vars.
+-- 2. We could attach the syntax of `by ?prf` blocks as metadata to the elaborated construct (something like `forInWithInvariant`, resp. `assertGadget`).
+--    This metadata could then be elaborated by the `xapp` tactic or a specialized simproc for proving `wp⟦forInWithInvariant⟧.apply Q` and `wp⟦assertGadget⟧.apply Q`.
+--    Presently I do not know how to achieve this with a simple `invariant` macro.
+-- 3. We could then elaborate `invariant` together with the `doElem` that follows (or precedes).
+--    (Currently, we can only expand to another `doElem`, but not elab to an `Expr` and a `doElem`.)
+--    One benefit is that we get better type inference for the Zipper parameter, the `xs : List α` index of which is currently inferred separately to the call to `forIn`.
+--    (I don't think that the fact that `xs` is completely decoupled from the actual call to `forIn` loses expressivity, since the user can simply write `xs = xs' ∧ ...` in the invariant.)
+
+def ForIn.toList [ForIn Id ρ α] (xs : ρ) : List α := Id.run do
+  let mut acc : List α → List α := id
+  for x in xs do
+    acc := acc ∘ (x :: ·)
+  return acc []
+
+class LawfulForIn (m : Type → Type u) (ρ : Type u) (α : Type u) [Monad m] [ForIn m ρ α] [ForIn Id ρ α] where
+  forIn_forIn_toList (xs : ρ) b (f : α → β → m (ForInStep β)) : forIn xs b f = forIn (ForIn.toList xs) b f
 
 abbrev requiresGadget {α : Type} {m : Type → Type u} {ps : PredShape} [WP m ps] (_p : PreCond ps) (x : m α) : m α :=
   x
@@ -46,24 +67,29 @@ theorem ensuresGadget_apply [WP m sh] (x : m α) :
 def assertGadget {m : Type → Type u} {ps : PredShape} [Monad m] [WP m ps] (_p : PreCond ps) : m Unit :=
   pure ()
 
-def invariantGadget {m : Type → Type u} {ps : PredShape} [Monad m] [WP m ps] (_inv : PostCond (β × List.Zipper xs) ps) : m Unit :=
+-- This one will have the let mut vars as free occurrences
+def invariantGadget1.{u} {m : Type → Type u} {ps : PredShape} [Monad m] [WP m ps] (_inv : {α : Type} → {xs:List α} → List.Zipper xs → PreCond ps) : m Unit :=
+  pure ()
+
+-- This one will have the let mut vars as bound occurrences in β
+def invariantGadget2.{u,v} (β : Type v) {m : Type → Type u} {ps : PredShape} [Monad m] [WP m ps] (_inv : β → {α : Type} → {xs:List α} → List.Zipper xs → PreCond ps) : m Unit :=
   pure ()
 
 @[wp_simp]
-theorem assertGadget_apply [Monad m] [WP m sh] : -- (h : PreCond.pure True ≤ P) :
+theorem assertGadget_apply {m : Type → Type u} {ps : PredShape} [Monad m] [WP m ps] {P : PreCond ps} {Q : PostCond Unit ps} : -- (h : PreCond.pure True ≤ P) :
   wp⟦assertGadget P : m Unit⟧.apply Q = wp⟦pure () : m Unit⟧.apply Q := rfl
 
 @[wp_simp]
-theorem invariantGadget_apply  {m : Type → Type u₂} {α : Type v} [ForIn m (List α) α] {β : Type} [Monad m] [LawfulMonad m]
-  (xs : List α) (init : β) (f : α → β → m (ForInStep β)) {ps : PredShape} [WP m ps] [WPMonad m ps] (inv : PostCond (β × List.Zipper xs) ps) (Q : PostCond β ps) :
-  wp⟦invariantGadget inv : m Unit⟧.apply (fun _ => wp⟦forIn xs init f⟧.apply Q, Q.2) = wp⟦forInWithInvariant xs init f inv⟧.apply Q := by
+theorem invariantGadget_apply {m : Type → Type u₂} {ps : PredShape} {α : Type} {β : Type} [Monad m] [WP m ps] [WPMonad m ps]
+  (xs : List α) (init : β) (f : α → β → m (ForInStep β)) (inv : β → {α : Type} → {xs : List α} → List.Zipper xs → PreCond ps) (Q : PostCond β ps) :
+  wp⟦invariantGadget2 β inv : m Unit⟧.apply (no_index (fun _ => wp⟦forIn xs init f⟧.apply Q, Q.2)) = wp⟦forInWithInvariant xs init f (PostCond.total fun (β, xs) => (inv β xs))⟧.apply Q := by
     calc
-      _ = wp⟦invariantGadget inv >>= fun _ => forIn xs init f⟧.apply Q := by simp
-      _ = wp⟦forInWithInvariant xs init f inv⟧.apply Q := rfl
+      _ = wp⟦invariantGadget2 β inv >>= fun _ => forIn xs init f⟧.apply Q := by simp
+      _ = wp⟦forInWithInvariant xs init f (PostCond.total fun (β, xs) => (inv β xs))⟧.apply Q := rfl
 
 macro_rules
   | `(doElem| assert $xs* => $p) => `(doElem| assertGadget (fun $xs* => $p))
-  | `(doElem| invariant $xs* => $p) => `(doElem| invariantGadget (fun $xs* => $p))
+  | `(doElem| invariant $xs* => $p) => `(doElem| invariantGadget1 (fun $xs* => $p))
 
 -- syntax (name := spec)
 --   ("requires " withPosition(basicFun))?
@@ -93,32 +119,37 @@ private def skipUntilWs : Parser := skipUntil Char.isWhitespace
 private def skipUntilWsOrDelim : Parser := skipUntil fun c =>
   c.isWhitespace || c == '(' || c == ')' || c == ':' || c == '{' || c == '}' || c == '|'
 
-macro "CHONK" : tactic =>
-  `(tactic| ((try intros); xstart; intro h; xwp; try (all_goals simp_all)))
+syntax (name := CHONK) "CHONK" optional("[" Lean.Parser.Tactic.simpLemma,* "]") : tactic
+macro_rules
+  | `(tactic| CHONK) => `(tactic| (intros; first
+    | (intro; repeat intro) -- expand ≤ on → and PreConds, also turns triple goals into wp goals
+    | xapp
+    | xwp
+    | simp_all only [if_true_left, if_false_left, and_self, and_true, List.length_nil, List.length_cons, zero_add, ne_eq, not_false_eq_true, gt_iff_lt, Prod.mk_le_mk, le_refl
+        , reduceIte
+        , Nat.sub_one_add_one -- useful whenever we have `n-1+1` and have `n ≠ 0` as assumption
+      ]
+    | (simp_all[Nat.sub_one_add_one]; done)
+--    | grind
+    ))
+  | `(tactic| CHONK [$args,*]) => `(tactic| (intros; first
+    | (intro; repeat intro) -- expand ≤ on → and PreConds, also turns triple goals into wp goals
+    | xapp
+    | xwp
+    | simp_all only [if_true_left, if_false_left, and_self, and_true, List.length_nil, List.length_cons, zero_add, ne_eq, not_false_eq_true, gt_iff_lt, Prod.mk_le_mk, le_refl, $args,*
+        , reduceIte
+        , Nat.sub_one_add_one
+      ]
+    | (simp_all[$args,*, Nat.sub_one_add_one]; done)
+--    | grind
+    ))
+
+--  `(tactic| ((try intros); xstart; intro h; xwp; try (all_goals simp_all)))
 --  `(tactic| sorry)
-
-def Specification.specificationBy := leading_parser
-  "specification_by " >>
-  optional (atomic (many (ppSpace >> Term.binderIdent) >> " => ")) >>
-  termParser
-
-def Specification.suffix := leading_parser
-  optional (ppDedent ppLine >> specificationBy)
-
-def newdeclValSimple    := leading_parser
-  -- " :=" >> ppHardLineUnlessUngrouped >> declBody >> Termination.suffix >> optional Term.whereDecls
-  " :=" >> ppHardLineUnlessUngrouped >> declBody >> Termination.suffix >> optional Term.whereDecls >> Specification.suffix
-
-@[builtin_doc] def newdeclVal :=
-  -- Remark: we should not use `Term.whereDecls` at `declVal`
-  -- because `Term.whereDecls` is defined using `Term.letRecDecl` which may contain attributes.
-  -- Issue #753 shows an example that fails to be parsed when we used `Term.whereDecls`.
-  withAntiquot (mkAntiquot "declVal" decl_name% (isPseudoKind := true)) <|
-    newdeclValSimple <|> declValEqns <|> whereStructInst
 
 def newdefinition     := leading_parser
   -- "def " >> recover declId skipUntilWsOrDelim >> ppIndent optDeclSig >> declVal >> optDefDeriving
-  "def " >> recover declId skipUntilWsOrDelim >> ppIndent optDeclSig >> ppIndent spec >> newdeclVal >> optDefDeriving
+  "def " >> recover declId skipUntilWsOrDelim >> ppIndent optDeclSig >> ppIndent spec >> declVal >> optDefDeriving
 
 @[command_parser]
 def newdeclaration := leading_parser
@@ -132,6 +163,98 @@ def newdeclaration := leading_parser
 --    | _ => throwUnsupportedSyntax
 --  | _ => throwUnsupportedSyntax
 
+def patch_invariant (e : Expr) (args : Array Expr := Array.empty) (names : Array Name := Array.empty) : TermElabM Expr := match e with
+-- we collect patched args and match against those args in the const case:
+| .app f x => do let x ← patch_invariant x #[] names; patch_invariant f (args.push x) names
+| .const n ls =>  match n, args.size with
+  | ``Bind.bind, 6 => match_expr args[1]! with
+    | invariantGadget1 m ps monad wp inv => do
+      let u := args[1]!.getAppFn.constLevels!.head!
+--      dbg_trace "go"
+      let mut bvshift := 0
+      let mut body := args[0]!
+      while true do
+        if let .letE _ _ _ b _ := body then
+          body := b
+          bvshift := bvshift + 1
+        else break
+      let .lam _ _ b _ := body | throwError "bfoo";
+      body := b
+      bvshift := bvshift + 1
+      while true do
+        if let some init := (match_expr body with | ForIn.forIn _ _ _ _ _ _ xs init f => some init | _ => none) then
+          -- init contains the good stuff; a tuple of all the mut vars
+          body := init
+          break
+        else if let .letE _ _ _ b _ := body then
+          body := b
+          bvshift := bvshift + 1
+          continue
+        else if let some x := (match_expr body with | Bind.bind _ _ _ _ x _ => some x | _ => none) then
+          body := x
+          continue
+        else throwError "bfoo"
+      let mut prod := body
+      let prod_ty0 ← inferType prod -- This inferType is currently the only reason we need TermElabM. We can likely reconstruct the type from the match on MProd.mk below to make it pure...
+      let .succ v ← getLevel prod_ty0 | throwError "Cannot happen; Prop-sorted MProd"
+--      dbg_trace prod_ty0
+      let mut prod_ty := prod_ty0
+      let mut mut_vars := Array.empty
+      while true do
+        let_expr MProd.mk _ _ b xs := prod | break
+        let .bvar b := b | throwError "bfoo"
+        mut_vars := mut_vars.push (b - bvshift)
+        prod := xs
+      let .bvar b := prod | throwError "bfoo"
+      mut_vars := mut_vars.push (b - bvshift)
+--      dbg_trace mut_vars
+--      dbg_trace inv
+      let mut wrapper := fun e => mkLambda `x .default prod_ty e
+      for bvarId in mut_vars do
+        let name := names[names.size - bvarId - 1]!
+        if let some (bvar_ty, prod_ty') := match_expr prod_ty with | MProd bvar_ty prod_ty' => some (bvar_ty, prod_ty') | _ => none then
+          wrapper := fun e =>
+            wrapper <|
+            mkLet name bvar_ty (.proj ``MProd 0 (.bvar 0)) <|
+            mkLet `x prod_ty' (.proj ``MProd 1 (.bvar 1)) <|
+            e
+          prod_ty := prod_ty'
+        else
+          wrapper := fun e =>
+            wrapper <|
+            mkLet name prod_ty (.bvar 0) <|
+            e
+      let some max := mut_vars.max? | throwError "TODO: handle invariants without mut vars"
+      let mut subst : Array Expr := mkArray (max + 1) (.bvar 0)
+      for i in [0:subst.size] do
+        subst := subst.set! i (.bvar (i + mut_vars.size * 2))
+      -- up until now, subst is the identity substitution for the body of wrapper (which shifts by mut_vars.size * 2)
+      for i in [0:mut_vars.size] do
+        subst := subst.set! mut_vars[i]! (.bvar ((mut_vars.size - i - 1) * 2))
+--      dbg_trace subst
+      let inv := inv.instantiate subst
+      let inv := wrapper inv
+--      dbg_trace inv
+--      logInfo inv
+--      logInfo (mkAppRev (Expr.const n ls) (args.set! 1 (mkApp6 (mkConst ``invariantGadget2 [u,v]) prod_ty0 m ps monad wp inv)))
+      pure (mkAppRev (Expr.const n ls) (args.set! 1 (mkApp6 (mkConst ``invariantGadget2 [u,v]) prod_ty0 m ps monad wp inv)))
+    | _ => pure (mkAppRev (Expr.const n ls) args)
+  | _, _ => pure (mkAppRev (Expr.const n ls) args)
+-- the congruent cases:
+| .proj i n x => do return mkAppRev (.proj i n (← patch_invariant x #[] names)) args
+| .mdata d x => do return .mdata d (← patch_invariant x args names) -- NB: .mdata does not obstruct applicative contexts
+-- | .mdata d x => do return mkAppRev (.mdata d (← patch_invariant x #[] names)) args
+| .sort u => do return mkAppRev (.sort u) args
+| .lit l => do return mkAppRev (.lit l) args
+| .mvar mvarId => do return mkAppRev (.mvar mvarId) args
+| .fvar fvarId => do return mkAppRev (.fvar fvarId) args
+| .bvar bvarId => do return mkAppRev (.bvar bvarId) args
+-- the binder cases:
+| .lam x ty body bi => do return mkAppRev (.lam x ty (← patch_invariant body #[] (names.push x)) bi) args
+| .letE x ty val body b => do return mkAppRev (.letE x ty (← patch_invariant val #[] names) (← patch_invariant body #[] (names.push x)) b) args -- TODO: let could be an applicative context
+| .forallE x ty body bi => do return mkAppRev (.forallE x ty (← patch_invariant body #[] (names.push x)) bi) args
+
+
 @[command_elab newdeclaration]
 partial def elab_newdecl : CommandElab := fun decl => do
   -- newdeclaration := declModifiers false >> newdefinition
@@ -144,14 +267,13 @@ partial def elab_newdecl : CommandElab := fun decl => do
 --  dbg_trace defn
 --  dbg_trace decl
 --  dbg_trace decl.getNumArgs
+  -- Step 1: Massage the syntax into a refined helper definition that
+  --   * the def elaborator accepts, and that
+  --   * elaborates requires, ensures, signals, assert and invariants for us.
   let spec := defn[3]
   let foralls? := if spec[0].isMissing then none else some spec[0][1].getArgs
-  let requires? := spec[1]
-  let ensures_ := Syntax.node2 SourceInfo.none nullKind spec[2] spec[3]
-  -- dbg_trace requires?
-  -- dbg_trace ensures_
   let refinedDecl1 := defn[1].setArg 0 <| match defn[1][0] with
-    | .ident info ss val _ => Syntax.ident info ss (val ++ Name.mkSimple "refined") []
+    | .ident info ss val _ => Syntax.ident info ss (val ++ Name.mkSimple "refined1") []
     | _ => panic "die" -- TODO
   -- dbg_trace defn[2][0]
   let optDeclSig := match defn[2].isMissing, foralls? with
@@ -159,27 +281,45 @@ partial def elab_newdecl : CommandElab := fun decl => do
     | false, some bndrs => defn[2].setArg 0 (defn[2][0].setArgs (defn[2][0].getArgs ++ bndrs))
     | true, some bndrs => panic "die also"  -- TODO
   let numProgBinders : Nat := if defn[2].isMissing then 65536 else defn[2][0].getNumArgs
-  unless defn[4].getKind == ``newdeclValSimple do throwUnsupportedSyntax
   let olddeclValRefined ← match defn[4] with
-    | .node info ``newdeclValSimple args => do
-      let req : TSyntax ``basicFun := ⟨requires?[1]⟩
-      let ens : TSyntax ``basicFun := ⟨ensures_[1]⟩
+    | .node info ``declValSimple args => do
+      let req : TSyntax ``basicFun := ⟨spec[1][1]⟩ -- might be missing. we check below.
+      let ens : TSyntax ``basicFun := ⟨spec[3]⟩
       -- defn[4][1] is the term/do block; we'll patch it with the gadgets for requires and ensures
-      let refinedDecl41 ← `(requiresGadget (fun $req:basicFun) (ensuresGadget (fun $ens:basicFun) $(⟨defn[4][1]⟩)))
-      pure (Syntax.node info ``declValSimple (Array.set! args[:args.size-1] 1 refinedDecl41))
+      let body ←
+        if req.raw.isMissing
+        then `(requiresGadget (PreCond.pure True) (ensuresGadget (fun $ens:basicFun) $(⟨defn[4][1]⟩)))
+        else `(requiresGadget (fun $req:basicFun) (ensuresGadget (fun $ens:basicFun) $(⟨defn[4][1]⟩)))
+      pure (Syntax.node info ``declValSimple (Array.set! args 1 body))
     | _ => throwUnsupportedSyntax
   -- dbg_trace olddeclValRefined
   let olddefn := Syntax.node5 stxinfo ``Parser.Command.definition defn[0] refinedDecl1 optDeclSig olddeclValRefined defn[5]
   let olddecl := Syntax.node2 declinfo ``Parser.Command.declaration decl[0] olddefn
- -- dbg_trace olddecl
+--  dbg_trace olddecl
   elabDeclaration olddecl
   let ns ← getCurrNamespace
   let declId := ns ++ declId
-  let refinedDeclId := declId ++ Name.mkSimple "refined"
-  let .some (.defnInfo defn) := (← getEnv).find? refinedDeclId | throwUnsupportedSyntax
+  let refinedDeclId1 := declId ++ Name.mkSimple "refined1"
+  let refinedDeclId2 := declId ++ Name.mkSimple "refined2"
+  let .some (.defnInfo defn) := (← getEnv).find? refinedDeclId1 | throwUnsupportedSyntax
 --  log defn.name
 --  dbg_trace defn.value
 --  log defn.name
+  -- Step 2: Rewrite invariantGadget1 to invariantGadget2, thus closing over the let mut vars
+--  log defn.value
+  runTermElabM fun _ => do
+    let newval ← patch_invariant defn.value
+--    synthesizeSyntheticMVarsNoPostponing
+--    let newval ← instantiateMVars newval
+--    log newval
+    addDecl (.defnDecl { defn with
+      name := refinedDeclId2
+      value := newval
+    })
+  let .some (.defnInfo defn) := (← getEnv).find? refinedDeclId2 | throwUnsupportedSyntax
+--  dbg_trace defn.name
+--  dbg_trace defn.value
+
   runTermElabM fun vars => do
   let rec spec_ty (call : Expr) (body : Expr) (progBinders : Nat) : (ty : Expr) → TermElabM (Expr × Expr)
     | .forallE x ty body_ty info => withLocalDecl x info ty fun a => do
@@ -192,26 +332,22 @@ partial def elab_newdecl : CommandElab := fun decl => do
         return (← mkForallFVars #[a] refined_spec, ← mkLambdaFVars #[a] erased_value)
     | ty => do
     let mut body := body
---    dbg_trace body
-    let P ←
-      if requires?.isMissing then pure none
-      else do
-        let_expr requiresGadget _α _m _ps _WP P body' := body | throwError "no requiresGadget"
-        body := body'
-        pure (some P)
-    let_expr ensuresGadget α m ps wp Q body := body | throwError "no ensuresGadget"
+--    logInfo body
+    let_expr requiresGadget _α _m _ps _WP P body' := body | throwError "no requiresGadget"
+    body := body'
+    let_expr ensuresGadget α m ps wp Q body' := body | throwError "no ensuresGadget"
+    body := body'
     let some u := Level.dec (← getLevel (mkApp m α)) | throwError "invalid level (0?)"
-    dbg_trace u
-    let Q := mkApp3 (mkConst ``PostCond.total [.zero]) α ps Q
-    let P := P.getD (mkApp2 (mkConst ``PreCond.pure) ps (mkConst ``True))
+--    dbg_trace u
+    let Q := mkApp3 (mkConst ``PostCond.total) α ps Q
     -- dbg_trace P
     -- dbg_trace Q
     -- dbg_trace body
     -- unfold assertGadget and invariantGadget applications
     let pure_unit ← elabTerm (← `(pure ())) (some (mkApp m (mkConst ``Unit)))
     body := body.replace fun e => match_expr e with
-      | assertGadget m _ _ _ _ => some pure_unit
-      | invariantGadget m _ _ _ _ _ _ _ => some pure_unit
+      | assertGadget _ _ _ _ _ => some pure_unit
+      | invariantGadget2 _ _ _ _ _ _ _ _ => some pure_unit
       | _ => none
     -- dbg_trace body
     -- spec := leading_parser
@@ -254,7 +390,7 @@ partial def elab_newdecl : CommandElab := fun decl => do
   dbg_trace levelParams
 
 --  let refined_spec ← instantiateMVars (← spec_ty (← mkConstWithFreshMVarLevels defn.name) defn.type)
-  let val := (← Term.elabTerm (← `(by unfold $(TSyntax.mk (mkIdent refinedDeclId)); CHONK)) (.some refined_spec) (catchExPostpone := false))
+  let val := (← Term.elabTerm (← `(by unfold $(TSyntax.mk (mkIdent refinedDeclId2)); repeat CHONK)) (.some refined_spec) (catchExPostpone := false))
   synthesizeSyntheticMVarsNoPostponing
   let erased_spec ← instantiateMVars erased_spec
   let val ← instantiateMVars val
@@ -272,6 +408,83 @@ partial def elab_newdecl : CommandElab := fun decl => do
     value := val
   })
 
+@[reducible]
+def fib_spec : Nat → Nat
+| 0 => 0
+| 1 => 1
+| n+2 => fib_spec n + fib_spec (n+1)
+
+def fib_impl (n : Nat) : Idd Nat
+  ensures r => r = fib_spec n
+:= do
+  if n = 0 then return 0
+  let mut a := 0
+  let mut b := 1
+  invariant xs => a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)
+  for _ in [1:n] do
+    let a' := a
+    a := b
+    b := a' + b
+  return b
+
+#print fib_impl.spec
+
+theorem fib_triple : ⦃PreCond.pure True⦄ fib_impl n ⦃⇓ r | r = fib_spec n⦄ := by
+  unfold fib_impl
+--  repeat CHONK
+  intro h
+  xwp
+  if h : n = 0 then simp[h] else
+  simp[h]
+  xapp Specs.forIn_list ?inv ?step
+  case inv => exact PostCond.total fun (⟨a, b⟩, xs) => a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)
+  case pre => xwp; simp_all
+  case step => intros; xwp; simp_all
+  intro _ _
+  simp_all[Nat.sub_one_add_one]
+
+theorem fib_correct {n} : (fib_impl n).run = fib_spec n := by
+  generalize h : (fib_impl n).run = x
+  apply Idd.by_wp h
+  apply fib_triple True.intro
+
+theorem fib_correct2 {n} : (fib_impl n).run = fib_spec n := by
+  generalize h : (fib_impl n).run = x
+  apply Idd.by_wp h
+  unfold fib_impl
+  repeat CHONK
+--  xwp
+--  split
+--  next h => simp_all only
+--  next h =>
+--  simp[h]
+--  xapp Specs.forIn_list ?inv ?step
+--  case inv => exact PostCond.total fun (⟨a, b⟩, xs) => a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)
+--  case pre => simp +arith +decide [Nat.succ_le_of_lt, Nat.zero_lt_of_ne_zero h, Nat.sub_sub_eq_min]
+--  case step =>
+--    intro ⟨a, b⟩ _pref x suff _h ⟨ha, hb⟩
+--    xwp
+--    simp_all[fib_spec]
+--  intro y ⟨_, hb⟩
+--  simp [Nat.sub_one_add_one h, hb]
+
+def fib_impl_strange (n : Nat) : Idd Nat
+  ensures r => r = fib_spec n
+:= do
+  if n = 0 then return 0
+  let mut a := 0
+  let mut b := 1
+  let c := 13
+  let d := 14
+  let mut e := 4
+  invariant xs => a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1) ∧ c = 13 ∧ d = 14
+  for _ in [1:n] do
+    let a' := a
+    a := b
+    b := a' + b
+    e := 4
+  return b
+
 def mkFreshInt {m : Type → Type} [Monad m] : StateT (Nat × Nat) m Nat
   forall {ps} [WP m ps] [LawfulMonad m] [WPMonad m ps] n o
   requires s => PreCond.pure (s.1 = n ∧ s.2 = o)
@@ -283,8 +496,6 @@ def mkFreshInt {m : Type → Type} [Monad m] : StateT (Nat × Nat) m Nat
   pure n
 
 #print mkFreshInt.spec
-
-example [WP m ps] [Monad m] [LawfulMonad m] [WPMonad m ps] : mkFreshInt (m:=m) = mkFreshInt.refined (m:=m) n o := rfl
 
 --set_option trace.Elab.definition true in
 def blah1 (n: Nat) : StateM Nat Bool
@@ -305,41 +516,6 @@ def blah1 (n: Nat) : StateM Nat Bool
 --   · inv x (rpref, y::suff) → inv (x + i) (y::rpref,suff)
 --   · Q <return false>
 --   · Q <return (tmp % 2 == 0)>
-
-def fib_spec : Nat → Nat
-| 0 => 0
-| 1 => 1
-| n+2 => fib_spec n + fib_spec (n+1)
-
-def fib_impl (n : Nat) : Idd Nat
---  ensures r => r = fib_spec n
-:= do
-  if n = 0 then return 0
-  let mut a := 0
-  let mut b := 1
-  -- invariant xs => a = fib_impl xs.rpref.length ∧ b = fib_impl (xs.rpref.length + 1)
-  for _ in [1:n] do
-    let a' := a
-    a := b
-    b := a' + b
-  return b
-
-theorem fib_correct {n} : (fib_impl n).run = fib_spec n := by
-  generalize h : (fib_impl n).run = x
-  apply Idd.by_wp h
-  unfold fib_impl
-  xwp
-  if h : n = 0 then simp[h,fib_spec] else ?_
-  simp[h]
-  xapp Specs.forIn_list ?inv ?step
-  case inv => exact PostCond.total fun (⟨a, b⟩, xs) => a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)
-  case pre => simp +arith +decide [Nat.succ_le_of_lt, Nat.zero_lt_of_ne_zero h, Nat.sub_sub_eq_min]
-  case step =>
-    intro ⟨a, b⟩ _pref x suff _h ⟨ha, hb⟩
-    xwp
-    simp_all[fib_spec]
-  intro y ⟨_, hb⟩
-  simp [Nat.sub_one_add_one h, hb]
 
 
 def foo := 1

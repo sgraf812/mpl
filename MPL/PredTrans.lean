@@ -22,7 +22,7 @@ def FailConds : PredShape → Type
 
 -- Translate a predicate shape to a multi-barreled postcondition
 @[reducible]
-def PostCond (α : Type u) (s : PredShape) : Type u :=
+def PostCond (α : Type) (s : PredShape) : Type :=
   (α → PreCond s) × FailConds s
 
 open PredShape in
@@ -79,6 +79,8 @@ noncomputable instance PreCond.instPreorder {ps : PredShape} : Preorder (PreCond
 noncomputable instance PreCond.instLE {ps : PredShape} : LE (PreCond ps) := inferInstance
 noncomputable instance PreCond.instTop {ps : PredShape} : Top (PreCond ps) := inferInstance
 noncomputable instance PreCond.instBot {ps : PredShape} : Bot (PreCond ps) := inferInstance
+
+theorem PreCond.le_ext {ps} {p q : α → PreCond ps} : p ≤ q ↔ ∀ a, p a ≤ q a := ⟨fun h => h, fun h => h⟩
 
 @[simp]
 theorem PreCond.le_pure_pure {ps} {p q : Prop} : @PreCond.pure ps p ≤ @PreCond.pure ps q ↔ p ≤ q := by
