@@ -85,9 +85,7 @@ instance Except.instWP : WP (Except ε) (.except ε .pure) := inferInstanceAs (W
 theorem WP.popArg_StateT_wp [WP m ps] (x : StateT σ m α) :
   wp⟦x⟧.popArg s = wp⟦x.run s⟧ := by simp[wp, StateT.run]
 
-@[simp]
-theorem WP.popArg_ReaderT_wp [WP m ps] (x : ReaderT ρ m α) :
-  wp⟦x⟧.popArg s = (·, s) <$> wp⟦x.run s⟧ := by simp[wp, ReaderT.run]
+-- WP.popArg_ReaderT_wp needs WPMonad therefore is defined in WPMonad.lean
 
 @[simp]
 theorem WP.popExcept_ExceptT_wp [WP m ps] (x : ExceptT ε m α) :

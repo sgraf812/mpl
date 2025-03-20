@@ -24,6 +24,10 @@ theorem WP.seq_apply [WP m ps] [Monad m] [WPMonad m ps] [LawfulMonad m] (f : m (
   wp⟦f <*> x⟧.apply Q = wp⟦f⟧.apply (fun f => wp⟦x⟧.apply (fun a => Q.1 (f a), Q.2), Q.2) := by
     simp only [seq_seq, PredTrans.seq_apply]
 
+@[simp]
+theorem WP.popArg_ReaderT_wp [WP m ps] [Monad m][WPMonad m ps] [LawfulMonad m] (x : ReaderT ρ m α) :
+  wp⟦x⟧.popArg s = wp⟦(·, s) <$> x.run s⟧ := by simp[wp, ReaderT.run]
+
 instance Idd.instWPMonad : WPMonad Idd .pure where
   pure_pure a := by simp only [wp, PredTrans.pure, Pure.pure, Idd.pure]
   bind_bind x f := by simp only [wp, PredTrans.pure, Bind.bind, Idd.bind, PredTrans.bind]
