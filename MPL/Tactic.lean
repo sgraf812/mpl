@@ -60,7 +60,7 @@ attribute [wp_simp]
   MonadLiftT.monadLift_trans_apply MonadLiftT.monadLift_refl_apply
   -- MonadFunctor implementation
   WP.monadMap_apply PredTrans.monadMapArg_apply PredTrans.monadMapExcept_apply
-  WP.popArg_wp WP.popExcept_wp WP.ReaderT_run_apply WP.StateT_run_apply WP.ExceptT_run_apply
+  WP.popArg_StateT_wp WP.popArg_ReaderT_wp WP.popExcept_ExceptT_wp WP.ReaderT_run_apply WP.StateT_run_apply WP.ExceptT_run_apply
   WP.wp1_apply
   -- List.Zipper.begin_suff List.Zipper.tail_suff List.Zipper.end_suff -- Zipper stuff needed for invariants
   Std.Range.forIn_eq_forIn_range' Std.Range.forIn'_eq_forIn'_range' Std.Range.size Nat.div_one  -- rewrite to forIn_list

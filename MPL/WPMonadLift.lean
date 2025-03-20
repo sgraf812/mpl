@@ -5,8 +5,9 @@ namespace MPL
 universe u
 variable {m : Type → Type u} {ps : PredShape}
 
--- The following instances are useful to push monadLift into a do block when the concrete transformer stack is not known.
--- Example: `mkFreshInt_lift_spec`
+-- The following instance is useful when we have for example `monadLift (modify f : m α)` and `modify f`
+-- is defined in terms of more primitive definitions in `m` (`get`, `set`, ...).
+-- Example: `MonadStateOf.mkFreshInt_apply`
 instance StateT.instLiftMonadMorphism [Monad m] [LawfulMonad m] : MonadMorphism m (StateT σ m) MonadLift.monadLift where
   pure_pure x := by ext; simp[liftM, MonadLift.monadLift, StateT.lift]
   bind_bind x f := by ext; simp[liftM, MonadLift.monadLift, StateT.lift]
@@ -50,6 +51,7 @@ theorem WP.monadLift_seq_apply [WP m psm] [WP n psn] [Monad m] [Monad n] [Lawful
   wp⟦MonadLift.monadLift (m:=m) (f <*> x) : n β⟧.apply Q = wp⟦MonadLift.monadLift (m:=m) f <*> MonadLift.monadLift (m:=m) x : n β⟧.apply Q := by
     simp[seq_seq]
 
+-- TODO: Reconsider whether we want this as a type class. It seems better to only apply monadLift_apply when we can also reduce the monadLift in PredTrans.
 class WPMonadLift (m : semiOutParam (Type → Type u)) (n : Type → Type v) (psm : outParam PredShape) (psn : outParam PredShape)
   [WP m psm] [WP n psn] [MonadLift m n] [MonadLift (PredTrans psm) (PredTrans psn)] where
   monadLift_apply {x : m α} {Q : PostCond α psn} :

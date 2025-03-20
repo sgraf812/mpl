@@ -82,12 +82,16 @@ instance Reader.instWP : WP (ReaderM ρ) (.arg ρ .pure) := inferInstanceAs (WP 
 instance Except.instWP : WP (Except ε) (.except ε .pure) := inferInstanceAs (WP (ExceptT ε Id) (.except ε .pure))
 
 @[simp]
-theorem WP.popExcept_wp [WP m ps] (x : ExceptT ε m α) :
-  wp⟦x⟧.popExcept = wp⟦x.run⟧ := by simp[wp, ExceptT.run]
+theorem WP.popArg_StateT_wp [WP m ps] (x : StateT σ m α) :
+  wp⟦x⟧.popArg s = wp⟦x.run s⟧ := by simp[wp, StateT.run]
 
 @[simp]
-theorem WP.popArg_wp [WP m ps] (x : StateT σ m α) :
-  wp⟦x⟧.popArg s = wp⟦x.run s⟧ := by simp[wp, StateT.run]
+theorem WP.popArg_ReaderT_wp [WP m ps] (x : ReaderT ρ m α) :
+  wp⟦x⟧.popArg s = (·, s) <$> wp⟦x.run s⟧ := by simp[wp, ReaderT.run]
+
+@[simp]
+theorem WP.popExcept_ExceptT_wp [WP m ps] (x : ExceptT ε m α) :
+  wp⟦x⟧.popExcept = wp⟦x.run⟧ := by simp[wp, ExceptT.run]
 
 @[simp]
 theorem WP.ReaderT_run_apply [WP m ps] (x : ReaderT ρ m α) :

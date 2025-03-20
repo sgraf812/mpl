@@ -79,7 +79,7 @@ example :
   wp (m:= ReaderT Char (StateT Bool (ExceptT Nat Id))) (do set true; throw 42; get) := by
     ext Q : 2
     simp only [
-      WP.popArg_wp, WP.popExcept_wp, WP.wp1_apply,
+      WP.popExcept_ExceptT_wp, WP.wp1_apply,
       WP.bind_apply, WP.StateT_run_apply, WP.ExceptT_run_apply,
       PredTrans.monadLiftArg_apply, PredTrans.monadLiftExcept_apply,
       WP.ite_apply, WP.pure_apply, PredTrans.ite_apply, PredTrans.pure_apply,
@@ -93,7 +93,7 @@ example :
   wp (m:= ReaderT Char (StateT Bool (ExceptT Nat Id))) (do set false; get) := by
     ext Q : 2
     simp only [
-      WP.popArg_wp, WP.popExcept_wp, WP.wp1_apply,
+      WP.popExcept_ExceptT_wp, WP.wp1_apply,
       WP.bind_apply, WP.ReaderT_run_apply, WP.StateT_run_apply, WP.ExceptT_run_apply,
       PredTrans.monadLiftArg_apply, PredTrans.monadLiftExcept_apply,
       WP.ite_apply, WP.pure_apply, PredTrans.ite_apply, PredTrans.pure_apply,
