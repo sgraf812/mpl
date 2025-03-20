@@ -5,8 +5,8 @@ namespace MPL
 universe u
 variable {m : Type → Type u} {ps : PredShape}
 
--- TODO: Figure out whether the following instances are useful (I don't think they are.)
-/-
+-- The following instances are useful to push monadLift into a do block when the concrete transformer stack is not known.
+-- Example: `mkFreshInt_lift_spec`
 instance StateT.instLiftMonadMorphism [Monad m] [LawfulMonad m] : MonadMorphism m (StateT σ m) MonadLift.monadLift where
   pure_pure x := by ext; simp[liftM, MonadLift.monadLift, StateT.lift]
   bind_bind x f := by ext; simp[liftM, MonadLift.monadLift, StateT.lift]
@@ -19,6 +19,8 @@ instance ExceptT.instLiftMonadMorphism [Monad m] [LawfulMonad m] : MonadMorphism
   pure_pure x := by ext; simp[liftM, MonadLift.monadLift, ExceptT.lift]
   bind_bind x f := by ext; simp[liftM, MonadLift.monadLift, ExceptT.lift, ExceptT.mk, bind, ExceptT.bind, ExceptT.bindCont]
 
+-- TODO: Figure out whether the following instances are useful (I don't think they are.)
+/-
 instance PredTrans.instLiftMonadMorphismArg : MonadMorphism (PredTrans ps) (PredTrans (.arg σ ps)) MonadLift.monadLift where
   pure_pure x := by ext; simp only [monadLiftArg_apply, pure_apply]
   bind_bind x f := by ext Q σ; simp only [Bind.bind, bind, monadLiftArg_apply]
@@ -27,6 +29,26 @@ instance PredTrans.instLiftMonadMorphismDropFail : MonadMorphism (PredTrans ps) 
   pure_pure x := by ext; simp only [monadLiftExcept_apply, pure_apply]
   bind_bind x f := by ext Q; simp only [Bind.bind, bind, monadLiftExcept_apply]
 -/
+
+theorem WP.monadLift_pure_apply [WP m psm] [WP n psn] [Monad m] [Monad n] [MonadLift m n] [MonadMorphism m n MonadLift.monadLift]
+  (a : α) (Q : PostCond α psn) :
+  wp⟦MonadLift.monadLift (m:=m) (pure a) : n α⟧.apply Q = wp⟦pure a : n α⟧.apply Q := by
+    simp only [pure_pure]
+
+theorem WP.monadLift_bind_apply [WP m psm] [WP n psn] [Monad m] [Monad n] [MonadLift m n] [MonadMorphism m n MonadLift.monadLift]
+  (x : m α) (f : α → m β) (Q : PostCond β psn) :
+  wp⟦MonadLift.monadLift (m:=m) (x >>= f) : n β⟧.apply Q = wp⟦MonadLift.monadLift (m:=m) x >>= fun a => MonadLift.monadLift (m:=m) (f a) : n β⟧.apply Q := by
+    simp only [bind_bind]
+
+theorem WP.monadLift_map_apply [WP m psm] [WP n psn] [Monad m] [Monad n] [LawfulMonad m] [LawfulMonad n] [MonadLift m n] [MonadMorphism m n MonadLift.monadLift]
+  (f : α → β) (x : m α) (Q : PostCond β psn) :
+  wp⟦MonadLift.monadLift (m:=m) (f <$> x) : n β⟧.apply Q = wp⟦f <$> MonadLift.monadLift (m:=m) x : n β⟧.apply Q := by
+    simp[map_map]
+
+theorem WP.monadLift_seq_apply [WP m psm] [WP n psn] [Monad m] [Monad n] [LawfulMonad m] [LawfulMonad n] [MonadLift m n] [MonadMorphism m n MonadLift.monadLift]
+  (f : m (α → β)) (x : m α) (Q : PostCond β psn) :
+  wp⟦MonadLift.monadLift (m:=m) (f <*> x) : n β⟧.apply Q = wp⟦MonadLift.monadLift (m:=m) f <*> MonadLift.monadLift (m:=m) x : n β⟧.apply Q := by
+    simp[seq_seq]
 
 class WPMonadLift (m : semiOutParam (Type → Type u)) (n : Type → Type v) (psm : outParam PredShape) (psn : outParam PredShape)
   [WP m psm] [WP n psn] [MonadLift m n] [MonadLift (PredTrans psm) (PredTrans psn)] where
@@ -52,6 +74,14 @@ instance ExceptT.instWPMonadLift [Monad m] [WP m psm] [LawfulMonad m] [WPMonad m
 end MPL
 open MPL
 
+theorem MonadLiftT.monadLift_trans_apply [WP o ps] [MonadLift n o] [MonadLiftT m n] :
+  wp⟦MonadLiftT.monadLift x : o α⟧.apply Q = wp⟦MonadLift.monadLift (m:=n) (MonadLiftT.monadLift (m:=m) x) : o α⟧.apply Q := by
+    simp only [MonadLiftT.monadLift]
+
+theorem MonadLiftT.monadLift_refl_apply [WP m ps] :
+  wp⟦MonadLiftT.monadLift x : m α⟧.apply Q = wp⟦x : m α⟧.apply Q := by
+    simp only [MonadLiftT.monadLift]
+
 protected theorem ReaderT.wp_read [Monad m] [WP m psm] [WPMonad m psm] :
   wp⟦MonadReaderOf.read : ReaderT ρ m ρ⟧ = PredTrans.get := by
     ext; simp only [wp, MonadReaderOf.read, ReaderT.read, pure_pure, pure, PredTrans.pure,
@@ -63,7 +93,7 @@ theorem ReaderT.read_apply [Monad m] [WP m psm] [WPMonad m psm] :
 
 theorem MonadReaderOf.read_apply [MonadReaderOf ρ m] [WP m msh] [WP n nsh] [MonadLift m n] [MonadLift (PredTrans msh) (PredTrans nsh)] [wp : WPMonadLift m n msh nsh] :
   wp⟦MonadReaderOf.read : n ρ⟧.apply Q = (MonadLift.monadLift (n:=PredTrans nsh) wp⟦MonadReader.read : m ρ⟧).apply Q := by
-    simp only [read, liftM, monadLift, WP.monadLift_apply] -- TODO: Fix lifting MonadReaderOf instance
+    simp only [read, liftM, monadLift, WP.monadLift_apply]
 
 theorem MonadReaderOf.readThe_apply [MonadReaderOf ρ m] [WP m sh] :
   wp⟦readThe ρ : m ρ⟧.apply Q = wp⟦MonadReaderOf.read : m ρ⟧.apply Q := by

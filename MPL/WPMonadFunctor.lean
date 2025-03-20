@@ -172,12 +172,6 @@ instance MonadWithReaderOf.instParametricNTWithReader {m n : Type → Type} (f :
     apply (WPMonadFunctor.instParametricNT (MonadWithReaderOf.withReader f)).wp_map_map
 -/
 
-example (x : ReaderT Bool Id Nat) :
-  wp (withTheReader Bool f x : ReaderT Bool Id Nat) = pure 0 := by
-    ext : 3
-    simp only [ReaderT.withReader_apply, MonadWithReaderOf.withReader_apply, MonadWithReaderOf.withTheReader_apply]
-    sorry
-
 lemma ite_app {c:Prop} [Decidable c] (t e : α → β) (a : α) : (if c then t else e) a = if c then t a else e a := by
   split <;> rfl
 

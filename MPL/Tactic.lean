@@ -54,7 +54,10 @@ attribute [wp_simp]
   WP.pure_apply WP.bind_apply WP.map_apply WP.seq_apply
   WP.ite_apply WP.dite_apply
   -- MonadLift implementation
+  WP.monadLift_pure_apply WP.monadLift_bind_apply WP.monadLift_map_apply WP.monadLift_seq_apply
   WP.monadLift_apply PredTrans.monadLiftArg_apply PredTrans.monadLiftExcept_apply
+  -- MonadLiftT implementation
+  MonadLiftT.monadLift_trans_apply MonadLiftT.monadLift_refl_apply
   -- MonadFunctor implementation
   WP.monadMap_apply PredTrans.monadMapArg_apply PredTrans.monadMapExcept_apply
   WP.popArg_wp WP.popExcept_wp WP.ReaderT_run_apply WP.StateT_run_apply WP.ExceptT_run_apply
