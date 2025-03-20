@@ -101,6 +101,7 @@ macro "xbind" : tactic =>
 def xapp_no_xbind (goal : MVarId) (spec : Option (TSyntax `term)) : TacticM Unit := withMainContext do
   let main_tag ← goal.getTag
   let tgt ← instantiateMVars (← goal.getDecl).type
+  let tgt := tgt.consumeMData -- had the error below trigger in Lean4Lean for some reason
   unless tgt.isAppOf ``PredTrans.apply do throwError s!"xapp: Not a PredTrans.apply application {tgt}"
   let wp := tgt.getArg! 2
   let_expr WP.wp m ps instWP α x := wp | throwError "xapp: Not a wp application {wp}"
