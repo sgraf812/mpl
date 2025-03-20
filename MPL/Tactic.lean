@@ -15,12 +15,15 @@ namespace MPL
 open Lean Meta Elab Tactic
 
 theorem wp_apply_triple_conseq {m : Type → Type} {ps : PredShape} [WP m ps] {α} {x : m α} {P : PreCond ps} {Q Q' : PostCond α ps}
+  (h : ⦃P⦄ x ⦃Q⦄) (hpost : wp⟦x⟧.apply Q ≤ wp⟦x⟧.apply Q') :
+  P ≤ wp⟦x⟧.apply Q' := le_trans h hpost
+
+theorem wp_apply_triple_conseq_mono {m : Type → Type} {ps : PredShape} [WP m ps] {α} {x : m α} {P : PreCond ps} {Q Q' : PostCond α ps}
   (h : ⦃P⦄ x ⦃Q⦄) (hpost : Q ≤ Q') :
-  P ≤ wp⟦x⟧.apply Q' := le_trans h (wp⟦x⟧.mono _ _ hpost)
+  P ≤ wp⟦x⟧.apply Q' := wp_apply_triple_conseq h (wp⟦x⟧.mono _ _ hpost)
 
 macro "xstart" : tactic => `(tactic| unfold triple)
 
-@[simp]
 theorem ite_extrude_yield {c : Prop} [Decidable c] {x y : α} :
   (if c then pure (.yield x) else pure (.yield y)) = ForInStep.yield <$> if c then pure x else pure (f := Idd) y := by
   split <;> simp
@@ -98,14 +101,14 @@ macro "xpure" : tactic =>
 macro "xbind" : tactic =>
   `(tactic| with_reducible (conv in PredTrans.apply (WP.wp (_ >>= _)) _ => apply WP.bind_apply))
 
-def xapp_no_xbind (goal : MVarId) (spec : Option (TSyntax `term)) : TacticM Unit := withMainContext do
+def xapp_n_no_xbind (goal : MVarId) (spec : Option (TSyntax `term)) (thm : Name) : TacticM Unit := withMainContext do
   let main_tag ← goal.getTag
   let tgt ← instantiateMVars (← goal.getDecl).type
   let tgt := tgt.consumeMData -- had the error below trigger in Lean4Lean for some reason
   unless tgt.isAppOf ``PredTrans.apply do throwError s!"xapp: Not a PredTrans.apply application {tgt}"
   let wp := tgt.getArg! 2
   let_expr WP.wp m ps instWP α x := wp | throwError "xapp: Not a wp application {wp}"
-  let triple_goal::post_goal::pre_goal::gs ← goal.apply (mkApp2 (mkConst ``wp_apply_triple_conseq) m ps) | failure
+  let triple_goal::post_goal::pre_goal::gs ← goal.apply (mkApp2 (mkConst thm) m ps) | failure
   post_goal.setTag main_tag -- this is going to be the main goal after applying the triple
   pre_goal.setTag `pre
   pushGoals (pre_goal::post_goal::gs)
@@ -135,7 +138,7 @@ def xapp_no_xbind (goal : MVarId) (spec : Option (TSyntax `term)) : TacticM Unit
 syntax "xapp_no_xbind" (ppSpace colGt term)? : tactic
 
 elab "xapp_no_xbind" spec:optional(term) : tactic => withMainContext do
-  xapp_no_xbind (← getMainGoal) spec
+  xapp_n_no_xbind (← getMainGoal) spec ``wp_apply_triple_conseq_mono
 
 syntax "xapp_no_simp" (ppSpace colGt term)? : tactic
 
@@ -146,6 +149,19 @@ macro_rules
   | `(tactic| xapp_no_simp $spec) => `(tactic| ((try xbind); xapp_no_xbind $spec))
   | `(tactic| xapp)               => `(tactic| xapp_no_simp <;> try simp +contextual only [gt_iff_lt, Prod.mk_le_mk, le_refl, and_true])
   | `(tactic| xapp $spec)         => `(tactic| xapp_no_simp $spec <;> try simp +contextual only [gt_iff_lt, Prod.mk_le_mk, le_refl, and_true])
+
+elab "xapp2_no_xbind" spec:optional(term) : tactic => withMainContext do
+  xapp_n_no_xbind (← getMainGoal) spec ``wp_apply_triple_conseq
+
+syntax "xapp2_no_simp" (ppSpace colGt term)? : tactic
+
+-- or: xspec
+syntax "xapp2" (ppSpace colGt term)? : tactic
+macro_rules
+  | `(tactic| xapp2_no_simp)       => `(tactic| ((try xbind); xapp2_no_xbind))
+  | `(tactic| xapp2_no_simp $spec) => `(tactic| ((try xbind); xapp2_no_xbind $spec))
+  | `(tactic| xapp2)               => `(tactic| xapp2_no_simp <;> try simp +contextual only [gt_iff_lt, Prod.mk_le_mk, le_refl, and_true])
+  | `(tactic| xapp2 $spec)         => `(tactic| xapp2_no_simp $spec <;> try simp +contextual only [gt_iff_lt, Prod.mk_le_mk, le_refl, and_true])
 
 macro "sgrind" : tactic => `(tactic| ((try simp +contextual); grind))
 
