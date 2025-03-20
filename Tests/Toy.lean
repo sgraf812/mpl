@@ -265,7 +265,7 @@ end UserStory1
 
 section fib
 
-def fib_impl (n : Nat) := Idd.run do
+def fib_impl (n : Nat) : Idd Nat := do
   if n = 0 then return 0
   let mut a := 0
   let mut b := 1
@@ -275,28 +275,29 @@ def fib_impl (n : Nat) := Idd.run do
     b := a' + b
   return b
 
+@[reducible]
 def fib_spec : Nat → Nat
 | 0 => 0
 | 1 => 1
 | n+2 => fib_spec n + fib_spec (n+1)
 
-theorem fib_spec_rec : fib_spec (n + 2) = fib_spec n + fib_spec (n+1) := rfl
-
-theorem fib_correct {n} : fib_impl n = fib_spec n := by
-  generalize h : fib_impl n = x
-  apply Idd.by_wp h
+theorem fib_triple : ⦃PreCond.pure True⦄ fib_impl n ⦃⇓ r | r = fib_spec n⦄ := by
+  unfold fib_impl
+  intro h
   xwp
-  if h : n = 0 then simp[h,fib_spec] else ?_
+  if h : n = 0 then simp[h] else
   simp[h]
   xapp Specs.forIn_list ?inv ?step
   case inv => exact PostCond.total fun (⟨a, b⟩, xs) => a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)
-  case pre => simp +arith +decide [Nat.succ_le_of_lt, Nat.zero_lt_of_ne_zero h, Nat.sub_sub_eq_min]
-  case step =>
-    intro ⟨a, b⟩ _pref x suff _h ⟨ha, hb⟩
-    xwp
-    simp_all[fib_spec_rec]
-  intro y ⟨_, hb⟩
-  simp [Nat.sub_one_add_one h, hb]
+  case pre => xwp; simp_all
+  case step => intros; xwp; simp_all
+  intro _ _
+  simp_all[Nat.sub_one_add_one]
+
+theorem fib_correct {n} : (fib_impl n).run = fib_spec n := by
+  generalize h : (fib_impl n).run = x
+  apply Idd.by_wp h
+  apply fib_triple True.intro
 
 end fib
 

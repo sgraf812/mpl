@@ -119,34 +119,6 @@ private def skipUntilWs : Parser := skipUntil Char.isWhitespace
 private def skipUntilWsOrDelim : Parser := skipUntil fun c =>
   c.isWhitespace || c == '(' || c == ')' || c == ':' || c == '{' || c == '}' || c == '|'
 
-syntax (name := CHONK) "CHONK" optional("[" Lean.Parser.Tactic.simpLemma,* "]") : tactic
-macro_rules
-  | `(tactic| CHONK) => `(tactic| (intros; first
-    | (intro; repeat intro) -- expand ≤ on → and PreConds, also turns triple goals into wp goals
-    | xapp
-    | xwp
-    | simp_all only [if_true_left, if_false_left, and_self, and_true, List.length_nil, List.length_cons, zero_add, ne_eq, not_false_eq_true, gt_iff_lt, Prod.mk_le_mk, le_refl
-        , reduceIte
-        , Nat.sub_one_add_one -- useful whenever we have `n-1+1` and have `n ≠ 0` as assumption
-      ]
-    | (simp_all[Nat.sub_one_add_one]; done)
---    | grind
-    ))
-  | `(tactic| CHONK [$args,*]) => `(tactic| (intros; first
-    | (intro; repeat intro) -- expand ≤ on → and PreConds, also turns triple goals into wp goals
-    | xapp
-    | xwp
-    | simp_all only [if_true_left, if_false_left, and_self, and_true, List.length_nil, List.length_cons, zero_add, ne_eq, not_false_eq_true, gt_iff_lt, Prod.mk_le_mk, le_refl, $args,*
-        , reduceIte
-        , Nat.sub_one_add_one
-      ]
-    | (simp_all[$args,*, Nat.sub_one_add_one]; done)
---    | grind
-    ))
-
---  `(tactic| ((try intros); xstart; intro h; xwp; try (all_goals simp_all)))
---  `(tactic| sorry)
-
 def newdefinition     := leading_parser
   -- "def " >> recover declId skipUntilWsOrDelim >> ppIndent optDeclSig >> declVal >> optDefDeriving
   "def " >> recover declId skipUntilWsOrDelim >> ppIndent optDeclSig >> ppIndent spec >> declVal >> optDefDeriving
