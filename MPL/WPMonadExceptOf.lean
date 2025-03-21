@@ -23,14 +23,10 @@ theorem ExceptT.throw_apply [Monad m] [WP m ps] [MonadMorphism m (PredTrans ps) 
     simp only [ExceptT.wp_throw, PredTrans.throw_apply]
 
 theorem ReaderT.throw_apply [WP m sh] [Monad m] [WPMonad m sh] [MonadExceptOf ε m] :
-  wp⟦MonadExceptOf.throw (ε:=ε) e : ReaderT ρ m α⟧.apply Q = PredTrans.apply (MonadLift.monadLift (wp⟦MonadExceptOf.throw (ε:=ε) e : m α⟧)) Q := by
-    simp only [MonadExceptOf.throw, liftM, monadLift, WPMonadLift.monadLift_apply,
-      PredTrans.monadLiftArg_apply, MonadExcept.throw_apply]
+  wp⟦MonadExceptOf.throw (ε:=ε) e : ReaderT ρ m α⟧.apply Q = wp⟦MonadLift.monadLift (MonadExceptOf.throw (ε:=ε) e : m α) : ReaderT ρ m α⟧.apply Q := rfl
 
 theorem StateT.throw_apply [WP m sh] [Monad m] [WPMonad m sh] [MonadExceptOf ε m] :
-  wp⟦MonadExceptOf.throw (ε:=ε) e : StateT ρ m α⟧.apply Q = PredTrans.apply (MonadLift.monadLift (wp⟦MonadExceptOf.throw (ε:=ε) e : m α⟧)) Q := by
-    simp only [MonadExceptOf.throw, liftM, monadLift, WPMonadLift.monadLift_apply,
-      PredTrans.monadLiftArg_apply, MonadExcept.throwThe_apply, Function.comp_apply, StateT.lift_apply]
+  wp⟦MonadExceptOf.throw (ε:=ε) e : StateT ρ m α⟧.apply Q = wp⟦MonadLift.monadLift (MonadExceptOf.throw (ε:=ε) e : m α) : StateT ρ m α⟧.apply Q := rfl
 
 -- TODO: make instMonadExceptOfExceptT use ExceptT.lift instead of ExceptT.mk it for a simpler proof
 theorem ExceptT.lift_throw_apply [WP m sh] [Monad m] [WPMonad m sh] [MonadExceptOf ε m] :
