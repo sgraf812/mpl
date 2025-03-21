@@ -184,10 +184,9 @@ example :
       WP.popArg_StateT_wp, WP.popExcept_ExceptT_wp, WP.wp1_apply,
       ReaderT.withReader_apply, ReaderT.read_apply, MonadReader.read_apply, WP.bind_apply,
       WP.StateT_run_apply, WP.ExceptT_run_apply, MonadReaderOf.read_apply,
+      StateT.monadLift_apply, ReaderT.monadLift_apply, ExceptT.monadLift_apply,
       PredTrans.monadLiftArg_apply, PredTrans.monadLiftExcept_apply,
       MonadMorphism.ite_ite, pure_pure, PredTrans.ite_apply, PredTrans.pure_apply, ite_app]
     simp
-
-
 
 end MPL

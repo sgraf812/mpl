@@ -58,7 +58,8 @@ attribute [wp_simp]
   WP.ite_apply WP.dite_apply
   -- MonadLift implementation
   WP.monadLift_pure_apply WP.monadLift_bind_apply WP.monadLift_map_apply WP.monadLift_seq_apply
-  WP.monadLift_apply PredTrans.monadLiftArg_apply PredTrans.monadLiftExcept_apply
+  StateT.monadLift_apply ReaderT.monadLift_apply ExceptT.monadLift_apply
+  PredTrans.monadLiftArg_apply PredTrans.monadLiftExcept_apply
   -- MonadLiftT implementation
   MonadLiftT.monadLift_trans_apply MonadLiftT.monadLift_refl_apply
   -- MonadFunctor implementation

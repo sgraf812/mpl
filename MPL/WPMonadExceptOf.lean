@@ -31,7 +31,7 @@ theorem StateT.throw_apply [WP m sh] [Monad m] [WPMonad m sh] [MonadExceptOf ε 
 -- TODO: make instMonadExceptOfExceptT use ExceptT.lift instead of ExceptT.mk it for a simpler proof
 theorem ExceptT.lift_throw_apply [WP m sh] [Monad m] [WPMonad m sh] [MonadExceptOf ε m] :
   wp⟦MonadExceptOf.throw (ε:=ε) e : ExceptT ε' m α⟧.apply Q = PredTrans.apply (MonadLift.monadLift (wp⟦MonadExceptOf.throw (ε:=ε) e : m α⟧)) Q := by
-    simp only [MonadExceptOf.throw, liftM, monadLift, WPMonadLift.monadLift_apply,
+    simp only [MonadExceptOf.throw, liftM, monadLift, ExceptT.monadLift_apply,
       PredTrans.monadLiftExcept_apply, throwThe, ExceptT.lift_apply, ExceptT.lift, wp, PredTrans.pushExcept_apply, ExceptT.mk]
     sorry -- need to refactor instMonadExceptOfExceptT or show this property with a type class
 
@@ -81,6 +81,7 @@ example :
       WP.ite_apply, WP.pure_apply, PredTrans.ite_apply, PredTrans.pure_apply,
       StateT.set_apply, MonadStateOf.set_apply,
       StateT.get_apply, MonadStateOf.get_apply, MonadState.get_apply,
+      StateT.monadLift_apply, ReaderT.monadLift_apply, ExceptT.monadLift_apply,
       MonadExcept.throw_apply,
       ExceptT.throw_apply, ReaderT.throw_apply, StateT.throw_apply, ExceptT.lift_throw_apply]
 
@@ -95,6 +96,7 @@ example :
       WP.ite_apply, WP.pure_apply, PredTrans.ite_apply, PredTrans.pure_apply,
       StateT.set_apply, MonadStateOf.set_apply,
       StateT.get_apply, MonadStateOf.get_apply, MonadState.get_apply,
+      StateT.monadLift_apply, ReaderT.monadLift_apply, ExceptT.monadLift_apply,
       MonadExcept.throw_apply,
       ExceptT.throw_apply, ReaderT.throw_apply, StateT.throw_apply, ExceptT.lift_throw_apply,
       MonadExcept.tryCatch_apply,
