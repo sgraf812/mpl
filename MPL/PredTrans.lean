@@ -59,6 +59,9 @@ def PreCond.pure : {ps : PredShape} → Prop → PreCond ps
   | .arg σ s => fun p (_s : σ) => @PreCond.pure s p
   | .except _ s => @PreCond.pure s
 
+instance : Inhabited (PreCond ps) where
+  default := PreCond.pure True
+
 @[simp]
 theorem PreCond.pure_except : @PreCond.pure (.except ε ps) p = (@PreCond.pure ps p : PreCond (.except ε ps)) := by
   rfl
@@ -125,6 +128,9 @@ def FailConds.const (p : Prop) : FailConds ps :=
 
 def FailConds.true : FailConds ps := FailConds.const True
 def FailConds.false : FailConds ps := FailConds.const False
+
+instance : Inhabited (FailConds ps) where
+  default := FailConds.true
 
 noncomputable instance FailConds.instLattice : {ps : PredShape} → CompleteLattice (FailConds ps)
   | .pure => ((inferInstance : CompleteLattice Unit) : CompleteLattice (FailConds .pure))
@@ -205,6 +211,9 @@ abbrev PostCond.total (p : α → PreCond ps) : PostCond α ps :=
 -- A postcondition expressing partial correctness
 abbrev PostCond.partial (p : α → PreCond ps) : PostCond α ps :=
   (p, FailConds.true)
+
+instance : Inhabited (PostCond α ps) where
+  default := PostCond.total (fun _ => default)
 
 @[simp]
 lemma PostCond.total_fst : (PostCond.total p).1 = p := by rfl
