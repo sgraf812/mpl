@@ -30,7 +30,7 @@ def mkFreshInt [Monad m] [MonadStateOf (Nat × Nat) m] : m Nat := do
   pure n
 
 @[spec]
-theorem mkFreshInt_spec [Monad m] [WP m sh] [LawfulMonad m] [WPMonad m sh] :
+theorem mkFreshInt_spec [Monad m] [LawfulMonad m] [WPMonad m sh] :
   ⦃fun s => PreCond.pure (s.1 = n ∧ s.2 = o)⦄
   (mkFreshInt : StateT (Nat × Nat) m Nat)
   ⦃⇓ r | fun s => PreCond.pure (r = n ∧ s.1 = n + 1 ∧ s.2 = o)⦄ := by
@@ -40,24 +40,24 @@ theorem mkFreshInt_spec [Monad m] [WP m sh] [LawfulMonad m] [WPMonad m sh] :
   simp
 
 @[wp_simp]
-theorem StateT.mkFreshInt_apply [Monad m] [WP m sh] [LawfulMonad m] [WPMonad m sh] :
+theorem StateT.mkFreshInt_apply [Monad m] [LawfulMonad m] [WPMonad m sh] :
   wp⟦(mkFreshInt : StateT (Nat × Nat) m Nat)⟧.apply Q = fun s => Q.1 s.1 (s.1 + 1, s.2) := by
     unfold mkFreshInt; xwp
 
 @[wp_simp]
-theorem MonadStateOf.mkFreshInt_apply [Monad m] [MonadStateOf (Nat × Nat) m] [Monad n] [WP m psm] [WP n psn] [LawfulMonad m] [LawfulMonad n] [WPMonad n psn] [MonadLift m n] [MonadMorphism m n MonadLift.monadLift] :
+theorem MonadStateOf.mkFreshInt_apply [Monad m] [MonadStateOf (Nat × Nat) m] [Monad n] [LawfulMonad m] [LawfulMonad n] [WP m psm] [WPMonad n psn] [MonadLift m n] [MonadMorphism m n MonadLift.monadLift] :
   wp⟦mkFreshInt : n Nat⟧.apply Q = wp⟦MonadLift.monadLift (m:=m) mkFreshInt : n Nat⟧.apply Q := by
     unfold mkFreshInt; xwp; rfl
 
 @[spec]
-theorem mkFreshInt_lift_spec [Monad m] [WP m sh] [LawfulMonad m] [WPMonad m sh] :
+theorem mkFreshInt_lift_spec [Monad m] [LawfulMonad m] [WPMonad m sh] :
   ⦃fun _ s => PreCond.pure (s.1 = n ∧ s.2 = o)⦄
   (mkFreshInt : ExceptT Char (ReaderT Bool (StateT (Nat × Nat) m)) Nat)
   ⦃⇓ r | fun _ s => PreCond.pure (r = n ∧ s.1 = n + 1 ∧ s.2 = o)⦄ := by
   xwp
   simp
 
-theorem mkFreshInt_spec_fail [Monad m] [WP m sh] [LawfulMonad m] [WPMonad m sh] :
+theorem mkFreshInt_spec_fail [Monad m] [LawfulMonad m] [WPMonad m sh] :
   ⦃fun s => PreCond.pure (s.1 = n ∧ s.2 = o)⦄
   (mkFreshInt : StateT (Nat × Nat) m Nat)
   ⦃⇓ r | fun s => PreCond.pure (r = n ∧ s.1 = n + 1 ∧ s.2 = o)⦄ := by
@@ -177,7 +177,7 @@ theorem test_loop_break :
   simp[hs] at h
   omega
 
-theorem get_spec [Monad m] [WP m ps] [WPMonad m ps] {Q : PostCond σ (.arg σ ps)} :
+theorem get_spec [Monad m] [WPMonad m ps] {Q : PostCond σ (.arg σ ps)} :
   ⦃fun s => Q.1 s s⦄ (get : StateT σ m σ) ⦃Q⦄ := by xwp
 
 theorem test_loop_early_return :

@@ -51,25 +51,26 @@ theorem WP.monadLift_seq_apply [WP m psm] [WP n psn] [Monad m] [Monad n] [Lawful
   wp⟦MonadLift.monadLift (m:=m) (f <*> x) : n β⟧.apply Q = wp⟦MonadLift.monadLift (m:=m) f <*> MonadLift.monadLift (m:=m) x : n β⟧.apply Q := by
     simp[seq_seq]
 
+-- WPMonadLift used to be a type class.
+-- However, it is not a good candidate for abstracting over it with `[WPMonadLift ...]` because monadLift_apply moves monadLift outside `wp⟦·⟧` and thus loses definability information
+-- compared to pushing monadLift inwards with `[MonadMorphism m n MonadLift.monadLift]` and `monadLift_bind_apply` (NB: does not lose definability information).
+-- It is simpler to forbid abstraction over `[WPMonadLift ...]` than to discourage it, hence encode `WPMonadLift` as a def.
 @[simp]
 abbrev WPMonadLift (m : Type → Type u) (n : Type → Type v) (psm psn : outParam PredShape)
   [WP m psm] [WP n psn] [MonadLift m n] [MonadLift (PredTrans psm) (PredTrans psn)] :=
     ∀  α (x : m α) Q, wp⟦MonadLift.monadLift x : n α⟧.apply Q = PredTrans.apply (MonadLift.monadLift wp⟦x⟧) Q
 
-end MPL
-open MPL
-
-theorem StateT.monadLift_apply [Monad m] [WP m psm] [WPMonad m psm] :
+theorem StateT.monadLift_apply [Monad m] [WPMonad m psm] :
   WPMonadLift m (StateT σ m) psm (.arg σ psm) := by
   intro _ _ _; simp only [wp, MonadLift.monadLift, StateT.lift,
     bind_bind, pure_pure, PredTrans.pushArg_apply]
 
-theorem ReaderT.monadLift_apply [Monad m] [WP m psm] [WPMonad m psm] :
+theorem ReaderT.monadLift_apply [Monad m] [WPMonad m psm] :
   WPMonadLift m (ReaderT ρ m) psm (.arg ρ psm) := by
   intro _ _ _; simp only [wp, MonadLift.monadLift, PredTrans.pushArg_apply,
     StateT.lift, bind_pure_comp]
 
-theorem ExceptT.monadLift_apply [Monad m] [LawfulMonad m] [WP m psm] [WPMonad m psm] :
+theorem ExceptT.monadLift_apply [Monad m] [WPMonad m psm] [LawfulMonad m] :
   WPMonadLift m (ExceptT ε m) psm (.except ε psm) := by
   intro _ _ _; simp only [wp, MonadLift.monadLift, ExceptT.lift, ExceptT.mk,
     map_map]
@@ -82,12 +83,12 @@ theorem MonadLiftT.monadLift_refl_apply [WP m ps] :
   wp⟦MonadLiftT.monadLift x : m α⟧.apply Q = wp⟦x : m α⟧.apply Q := by
     simp only [MonadLiftT.monadLift]
 
-protected theorem ReaderT.wp_read [Monad m] [WP m psm] [WPMonad m psm] :
+protected theorem ReaderT.wp_read [Monad m] [WPMonad m psm] :
   wp⟦MonadReaderOf.read : ReaderT ρ m ρ⟧ = PredTrans.get := by
     ext; simp only [wp, MonadReaderOf.read, ReaderT.read, pure_pure, pure, PredTrans.pure,
       PredTrans.pushArg_apply, PredTrans.map_apply, PredTrans.get]
 
-theorem ReaderT.read_apply [Monad m] [WP m psm] [WPMonad m psm] :
+theorem ReaderT.read_apply [Monad m] [WPMonad m psm] :
   wp⟦MonadReaderOf.read : ReaderT ρ m ρ⟧.apply Q = fun r => Q.1 r r  := by
     simp only [ReaderT.wp_read, PredTrans.get_apply]
 
@@ -102,12 +103,12 @@ theorem MonadReader.read_apply [MonadReaderOf ρ m] [WP m sh] :
   wp⟦MonadReader.read : m ρ⟧.apply Q = wp⟦MonadReaderOf.read : m ρ⟧.apply Q := by
     simp only [read, MonadReaderOf.readThe_apply]
 
-protected theorem StateT.wp_get [WP m psm] [Monad m] [WPMonad m psm] :
+protected theorem StateT.wp_get [Monad m] [WPMonad m psm] :
   wp⟦MonadStateOf.get : StateT σ m σ⟧ = PredTrans.get := by
     ext; simp only [wp, MonadStateOf.get, StateT.get, pure_pure, pure, PredTrans.pure,
       PredTrans.pushArg_apply, PredTrans.get]
 
-theorem StateT.get_apply [WP m psm] [Monad m] [WPMonad m psm] :
+theorem StateT.get_apply [Monad m] [WPMonad m psm] :
   wp⟦MonadStateOf.get : StateT σ m σ⟧.apply Q = fun s => Q.1 s s := by
     simp only [StateT.wp_get, PredTrans.get_apply]
 

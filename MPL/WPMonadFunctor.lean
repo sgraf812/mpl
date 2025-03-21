@@ -126,51 +126,19 @@ example [WP m psm] (f : ρ → ρ) {α} :
     | .inl ⟨x, h⟩ => apply le_sSup; use x, h; sorry -- close enough?! but not really
     | .inr h => sorry -- no chance. The RHS is ⊥, but cannot show that t is bottom from h. Or can we?
 
-class WPMonadFunctor (m : Type → Type u) (n : Type → Type v) [Monad m] [WP m psm] [WP n psn] [MonadFunctor m n] [MonadFunctor (PredTrans psm) (PredTrans psn)] where
-  monadMap_apply (f : ∀{β}, m β → m β) [ParametricNT m psm f] {α} (x : n α) (Q : PostCond α psn) :
+@[simp]
+abbrev WPMonadFunctor (m : Type → Type u) (n : Type → Type v) [Monad m] [WP m psm] [WP n psn] [MonadFunctor m n] [MonadFunctor (PredTrans psm) (PredTrans psn)] :=
+  ∀ (f : ∀{β}, m β → m β) [ParametricNT m psm f] {α} (x : n α) (Q : PostCond α psn),
     wp⟦mmap (m:=m) f x⟧.apply Q = PredTrans.apply (mmap (m:=PredTrans psm) (wp1 (m:=m) f) wp⟦x⟧) Q
-namespace WP
-export WPMonadFunctor (monadMap_apply)
-end WP
 
-instance StateT.instWPMonadFunctor [WP m ps] [Monad m] : WPMonadFunctor m (StateT σ m)  where
-  monadMap_apply f x _ := by
-    simp only [wp, MonadFunctor.monadMap, PredTrans.popArg_pushArg, WP.wp1_apply, implies_true]
+theorem StateT.monadMap_apply [WP m ps] [Monad m] : WPMonadFunctor m (StateT σ m) := fun _ _ _ => by
+  simp only [wp, MonadFunctor.monadMap, PredTrans.popArg_pushArg, WP.wp1_apply, implies_true]
 
-instance ReaderT.instWPMonadFunctor [WP m ps] [Monad m] [LawfulMonad m] [WPMonad m ps] : WPMonadFunctor m (ReaderT ρ m)  where
-  monadMap_apply f base _ x := by
-    simp only [wp, MonadFunctor.monadMap, PredTrans.popArg_pushArg, WP.wp1_apply, ←map_map, ParametricNT.wp_map_map, implies_true]
+theorem ReaderT.monadMap_apply [Monad m] [WPMonad m ps] [LawfulMonad m] : WPMonadFunctor m (ReaderT ρ m) := fun _ _ _ => by
+  simp only [wp, MonadFunctor.monadMap, PredTrans.popArg_pushArg, WP.wp1_apply, ←map_map, ParametricNT.wp_map_map, implies_true]
 
-instance ExceptT.instWPMonadFunctor [WP m ps] [Monad m] [LawfulMonad m] [WPMonad m ps] : WPMonadFunctor m (ExceptT ε m) where
-  monadMap_apply f x := by
+theorem ExceptT.monadMap_apply [Monad m] [WPMonad m ps] [LawfulMonad m] : WPMonadFunctor m (ExceptT ε m) := fun _ _ _ => by
     simp only [wp, MonadFunctor.monadMap, PredTrans.popExcept_pushExcept, WP.wp1_apply, implies_true]
-
--- Not presently needed. (? What would it be needed for?) If needed in the future, we need to resurrect monadMap_mono
-/-
-instance WPMonadFunctor.instParametricNT {m n : Type → Type} {psm psn : PredShape} (f : ∀{α}, m α → m α)
-  [WP m psm] [WP n psn] [Monad m] [LawfulMonad m] [Monad n] [LawfulMonad n]
-  [MonadFunctor m n] [MonadFunctor (PredTrans psm) (PredTrans psn)] [WPMonadFunctor m n]
-  [ParametricNT m psm f] [MonadMorphism n n (mmap (m:=m) f)]
-  : ParametricNT n psn (mmap (m:=m) f) where
-  wp_app x x' h := by
-    intro Q
-    simp only [WPMonadFunctor.monadMap_apply]
-    apply WPMonadFunctor.monadMap_mono _ _ _ h
-  wp_map_map g x := by apply map_map
-
-instance MonadWithReaderOf.instParametricNTWithReader {m n : Type → Type} (f : ρ → ρ)
-  [MonadWithReaderOf ρ m] {psm psn : PredShape} [WP m psm] [WP n psn]
-  [Monad m] [LawfulMonad m] [Monad n] [LawfulMonad n] [MonadFunctor m n] [MonadFunctor (PredTrans psm) (PredTrans psn)] [WPMonadFunctor m n]
-  [ParametricNT m psm (MonadWithReaderOf.withReader f)] [MonadMorphism n n (mmap (m:=m) (MonadWithReaderOf.withReader f))]
-  : ParametricNT n psn (MonadWithReaderOf.withReader f) where
-  wp_app x x' h := by
-    intro Q
-    simp only [MonadWithReaderOf.withReader, monadMap, WPMonadFunctor.monadMap_apply]
-    apply WPMonadFunctor.monadMap_mono _ _ _ h
-  wp_map_map g x := by
-    simp only [MonadWithReaderOf.withReader, monadMap, ParametricNT.wp_map_map]
-    apply (WPMonadFunctor.instParametricNT (MonadWithReaderOf.withReader f)).wp_map_map
--/
 
 lemma ite_app {c:Prop} [Decidable c] (t e : α → β) (a : α) : (if c then t else e) a = if c then t a else e a := by
   split <;> rfl
@@ -180,7 +148,7 @@ example :
   wp (m:= ExceptT Nat (StateT Nat (ReaderT Bool Id))) (do if (← read) then return 1 else return 0) := by
     ext Q : 2
     simp only [MonadWithReaderOf.withTheReader_apply, MonadWithReaderOf.withReader_apply,
-      WP.monadMap_apply, PredTrans.monadMapArg_apply, PredTrans.monadMapExcept_apply,
+      StateT.monadMap_apply, ReaderT.monadMap_apply, ExceptT.monadMap_apply, PredTrans.monadMapArg_apply, PredTrans.monadMapExcept_apply,
       WP.popArg_StateT_wp, WP.popExcept_ExceptT_wp, WP.wp1_apply,
       ReaderT.withReader_apply, ReaderT.read_apply, MonadReader.read_apply, WP.bind_apply,
       WP.StateT_run_apply, WP.ExceptT_run_apply, MonadReaderOf.read_apply,

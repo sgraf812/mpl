@@ -66,7 +66,7 @@ theorem Zipper.atSuff_tail (l : List α) (h : hd::tl <:+ l): (Zipper.atSuff h).t
 end List
 
 theorem Specs.forIn_list {α : Type} {β : Type} ⦃m : Type → Type v⦄ {ps : PredShape}
-  [Monad m] [LawfulMonad m] [WP m ps] [WPMonad m ps]
+  [Monad m] [LawfulMonad m] [WPMonad m ps]
   {xs : List α} {init : β} {f : α → β → m (ForInStep β)}
   (inv : PostCond (β × List.Zipper xs) ps)
   (step : ∀ b rpref x suff (h : xs = rpref.reverse ++ x :: suff),
@@ -98,7 +98,7 @@ theorem Specs.forIn_list {α : Type} {β : Type} ⦃m : Type → Type v⦄ {ps :
 -- using the postcondition as a constant invariant:
 @[spec]
 theorem Specs.forIn_list_const_inv {α : Type} {β : Type} ⦃m : Type → Type v⦄ {ps : PredShape}
-  [Monad m] [LawfulMonad m] [WP m ps] [WPMonad m ps]
+  [Monad m] [LawfulMonad m] [WPMonad m ps]
   {xs : List α} {init : β} {f : α → β → m (ForInStep β)}
   {inv : PostCond β ps}
   (step : ∀ hd b,
@@ -109,7 +109,7 @@ theorem Specs.forIn_list_const_inv {α : Type} {β : Type} ⦃m : Type → Type 
     Specs.forIn_list (fun p => inv.1 p.1, inv.2) (fun b _ hd _ _ => step hd b)
 
 theorem Specs.foldlM_list {α : Type} {β : Type} ⦃m : Type → Type v⦄ {ps : PredShape}
-  [Monad m] [LawfulMonad m] [WP m ps] [WPMonad m ps]
+  [Monad m] [LawfulMonad m] [WPMonad m ps]
   {xs : List α} {init : β} {f : β → α → m β}
   (inv : PostCond (β × List.Zipper xs) ps)
   (step : ∀ b rpref x suff (h : xs = rpref.reverse ++ x :: suff),
@@ -127,7 +127,7 @@ theorem Specs.foldlM_list {α : Type} {β : Type} ⦃m : Type → Type v⦄ {ps 
 -- using the postcondition as a constant invariant:
 @[spec]
 theorem Specs.foldlM_list_const_inv {α : Type} {β : Type} ⦃m : Type → Type v⦄ {ps : PredShape}
-  [Monad m] [LawfulMonad m] [WP m ps] [WPMonad m ps]
+  [Monad m] [LawfulMonad m] [WPMonad m ps]
   {xs : List α} {init : β} {f : β → α → m β}
   {inv : PostCond β ps}
   (step : ∀ hd b,

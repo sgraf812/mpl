@@ -13,7 +13,7 @@ def forInWithInvariant {m : Type → Type u₂} {α : Type} {β : Type} [Monad m
 
 @[spec]
 theorem Specs.forInWithInvariant_list {α : Type} {β : Type} ⦃m : Type → Type v⦄ {ps : PredShape}
-  [Monad m] [LawfulMonad m] [WP m ps] [WPMonad m ps]
+  [Monad m] [LawfulMonad m] [WPMonad m ps]
   {xs : List α} {init : β} {f : α → β → m (ForInStep β)}
   {inv : PostCond (β × List.Zipper xs) ps}
   (step : ∀ b rpref x suff (h : xs = rpref.reverse ++ x :: suff),
@@ -80,7 +80,7 @@ theorem assertGadget_apply {m : Type → Type u} {ps : PredShape} [Monad m] [WP 
   wp⟦assertGadget P : m Unit⟧.apply Q = wp⟦pure () : m Unit⟧.apply Q := rfl
 
 @[wp_simp]
-theorem invariantGadget_apply {m : Type → Type u₂} {ps : PredShape} {α : Type} {β : Type} [Monad m] [WP m ps] [WPMonad m ps]
+theorem invariantGadget_apply {m : Type → Type u₂} {ps : PredShape} {α : Type} {β : Type} [Monad m] [WPMonad m ps]
   (xs : List α) (init : β) (f : α → β → m (ForInStep β)) (inv : β → {α : Type} → {xs : List α} → List.Zipper xs → PreCond ps) (Q : PostCond β ps) :
   wp⟦invariantGadget2 β inv : m Unit⟧.apply (no_index (fun _ => wp⟦forIn xs init f⟧.apply Q, Q.2)) = wp⟦forInWithInvariant xs init f (PostCond.total fun (β, xs) => (inv β xs))⟧.apply Q := by
     calc
@@ -458,7 +458,7 @@ def fib_impl_strange (n : Nat) : Idd Nat
   return b
 
 def mkFreshInt {m : Type → Type} [Monad m] : StateT (Nat × Nat) m Nat
-  forall {ps} [WP m ps] [LawfulMonad m] [WPMonad m ps] n o
+  forall {ps} [LawfulMonad m] [WPMonad m ps] n o
   requires s => PreCond.pure (s.1 = n ∧ s.2 = o)
   ensures r s => PreCond.pure (r = n ∧ s.1 = n + 1 ∧ s.2 = o)
 := do
