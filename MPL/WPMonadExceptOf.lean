@@ -74,30 +74,18 @@ example :
   wp (m:= ReaderT Char (StateT Bool (ExceptT Nat Id))) (do set true; throw 42; set false; get) =
   wp (m:= ReaderT Char (StateT Bool (ExceptT Nat Id))) (do set true; throw 42; get) := by
     ext Q : 2
-    simp only [
-      WP.popExcept_ExceptT_wp, WP.wp1_apply,
-      WP.bind_apply, WP.StateT_run_apply, WP.ExceptT_run_apply,
-      PredTrans.monadLiftArg_apply, PredTrans.monadLiftExcept_apply,
-      WP.ite_apply, WP.pure_apply, PredTrans.ite_apply, PredTrans.pure_apply,
-      StateT.set_apply, MonadStateOf.set_apply,
-      StateT.get_apply, MonadStateOf.get_apply, MonadState.get_apply,
-      StateT.monadLift_apply, ReaderT.monadLift_apply, ExceptT.monadLift_apply,
-      MonadExcept.throw_apply,
-      ExceptT.throw_apply, ReaderT.throw_apply, StateT.throw_apply, ExceptT.lift_throw_apply]
+    simp only [WP.bind_apply, MonadState.get_apply, MonadStateOf.get_apply, ReaderT.monadLift_apply,
+      PredTrans.monadLiftArg_apply, StateT.get_apply, MonadStateOf.set_apply, StateT.set_apply,
+      MonadExcept.throw_apply, ReaderT.throw_apply, StateT.throw_apply, StateT.monadLift_apply,
+      ExceptT.throw_apply]
 
 example :
   wp (m:= ReaderT Char (StateT Bool (ExceptT Nat Id))) (do try { set true; throw 42 } catch _ => set false; get) =
   wp (m:= ReaderT Char (StateT Bool (ExceptT Nat Id))) (do set false; get) := by
     ext Q : 2
-    simp only [
-      WP.popExcept_ExceptT_wp, WP.wp1_apply,
-      WP.bind_apply, WP.ReaderT_run_apply, WP.StateT_run_apply, WP.ExceptT_run_apply,
-      PredTrans.monadLiftArg_apply, PredTrans.monadLiftExcept_apply,
-      WP.ite_apply, WP.pure_apply, PredTrans.ite_apply, PredTrans.pure_apply,
-      StateT.set_apply, MonadStateOf.set_apply,
-      StateT.get_apply, MonadStateOf.get_apply, MonadState.get_apply,
-      StateT.monadLift_apply, ReaderT.monadLift_apply, ExceptT.monadLift_apply,
-      MonadExcept.throw_apply,
-      ExceptT.throw_apply, ReaderT.throw_apply, StateT.throw_apply, ExceptT.lift_throw_apply,
-      MonadExcept.tryCatch_apply,
-      ExceptT.tryCatch_apply, ReaderT.tryCatch_apply, StateT.tryCatch_apply, ExceptT.lift_tryCatch_apply]
+    simp only [MonadExcept.tryCatch_apply, ReaderT.tryCatch_apply, StateT.tryCatch_apply,
+      ExceptT.tryCatch_apply, WP.StateT_run_apply, WP.ReaderT_run_apply, WP.bind_apply,
+      MonadState.get_apply, MonadStateOf.get_apply, ReaderT.monadLift_apply,
+      PredTrans.monadLiftArg_apply, StateT.get_apply, MonadStateOf.set_apply, StateT.set_apply,
+      MonadExcept.throw_apply, ReaderT.throw_apply, StateT.throw_apply, StateT.monadLift_apply,
+      ExceptT.throw_apply]

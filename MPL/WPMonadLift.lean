@@ -5,9 +5,10 @@ namespace MPL
 universe u
 variable {m : Type → Type u} {ps : PredShape}
 
--- The following instance is useful when we have for example `monadLift (modify f : m α)` and `modify f`
--- is defined in terms of more primitive definitions in `m` (`get`, `set`, ...).
+-- The following instance is useful when we have want to derive `modify f = monadLift (modify f)` and `modify f`
+-- is defined in terms of multiple primitive definitions in `m` (`get`, `set`, ...), rather than just one call to `modifyGet`.
 -- Example: `MonadStateOf.mkFreshInt_apply`
+-- The alternative would be to have one lemma for concrete transformer stack at which `mkFreshInt_apply` is used that simply unfolds the definition.
 instance StateT.instLiftMonadMorphism [Monad m] [LawfulMonad m] : MonadMorphism m (StateT σ m) MonadLift.monadLift where
   pure_pure x := by ext; simp[liftM, MonadLift.monadLift, StateT.lift]
   bind_bind x f := by ext; simp[liftM, MonadLift.monadLift, StateT.lift]
@@ -19,37 +20,6 @@ instance ReaderT.instLiftMonadMorphism [Monad m] [LawfulMonad m] : MonadMorphism
 instance ExceptT.instLiftMonadMorphism [Monad m] [LawfulMonad m] : MonadMorphism m (ExceptT ε m) MonadLift.monadLift where
   pure_pure x := by ext; simp[liftM, MonadLift.monadLift, ExceptT.lift]
   bind_bind x f := by ext; simp[liftM, MonadLift.monadLift, ExceptT.lift, ExceptT.mk, bind, ExceptT.bind, ExceptT.bindCont]
-
--- TODO: Figure out whether the following instances are useful (I don't think they are.)
-/-
-instance PredTrans.instLiftMonadMorphismArg : MonadMorphism (PredTrans ps) (PredTrans (.arg σ ps)) MonadLift.monadLift where
-  pure_pure x := by ext; simp only [monadLiftArg_apply, pure_apply]
-  bind_bind x f := by ext Q σ; simp only [Bind.bind, bind, monadLiftArg_apply]
-
-instance PredTrans.instLiftMonadMorphismDropFail : MonadMorphism (PredTrans ps) (PredTrans (.except ε ps)) MonadLift.monadLift where
-  pure_pure x := by ext; simp only [monadLiftExcept_apply, pure_apply]
-  bind_bind x f := by ext Q; simp only [Bind.bind, bind, monadLiftExcept_apply]
--/
-
-theorem WP.monadLift_pure_apply [WP m psm] [WP n psn] [Monad m] [Monad n] [MonadLift m n] [MonadMorphism m n MonadLift.monadLift]
-  (a : α) (Q : PostCond α psn) :
-  wp⟦MonadLift.monadLift (m:=m) (pure a) : n α⟧.apply Q = wp⟦pure a : n α⟧.apply Q := by
-    simp only [pure_pure]
-
-theorem WP.monadLift_bind_apply [WP m psm] [WP n psn] [Monad m] [Monad n] [MonadLift m n] [MonadMorphism m n MonadLift.monadLift]
-  (x : m α) (f : α → m β) (Q : PostCond β psn) :
-  wp⟦MonadLift.monadLift (m:=m) (x >>= f) : n β⟧.apply Q = wp⟦MonadLift.monadLift (m:=m) x >>= fun a => MonadLift.monadLift (m:=m) (f a) : n β⟧.apply Q := by
-    simp only [bind_bind]
-
-theorem WP.monadLift_map_apply [WP m psm] [WP n psn] [Monad m] [Monad n] [LawfulMonad m] [LawfulMonad n] [MonadLift m n] [MonadMorphism m n MonadLift.monadLift]
-  (f : α → β) (x : m α) (Q : PostCond β psn) :
-  wp⟦MonadLift.monadLift (m:=m) (f <$> x) : n β⟧.apply Q = wp⟦f <$> MonadLift.monadLift (m:=m) x : n β⟧.apply Q := by
-    simp[map_map]
-
-theorem WP.monadLift_seq_apply [WP m psm] [WP n psn] [Monad m] [Monad n] [LawfulMonad m] [LawfulMonad n] [MonadLift m n] [MonadMorphism m n MonadLift.monadLift]
-  (f : m (α → β)) (x : m α) (Q : PostCond β psn) :
-  wp⟦MonadLift.monadLift (m:=m) (f <*> x) : n β⟧.apply Q = wp⟦MonadLift.monadLift (m:=m) f <*> MonadLift.monadLift (m:=m) x : n β⟧.apply Q := by
-    simp[seq_seq]
 
 -- WPMonadLift used to be a type class.
 -- However, it is not a good candidate for abstracting over it with `[WPMonadLift ...]` because monadLift_apply moves monadLift outside `wp⟦·⟧` and thus loses definability information

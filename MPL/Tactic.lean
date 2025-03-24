@@ -56,6 +56,8 @@ attribute [wp_simp]
   -- MonadMorphism and basic if/then/else:
   WP.pure_apply WP.bind_apply WP.map_apply WP.seq_apply
   WP.ite_apply WP.dite_apply
+  WP.morph_pure_apply WP.morph_bind_apply WP.morph_map_apply WP.morph_seq_apply
+  WP.morph_ite_apply WP.morph_dite_apply
   -- MonadLift implementation
   WP.monadLift_pure_apply WP.monadLift_bind_apply WP.monadLift_map_apply WP.monadLift_seq_apply
   StateT.monadLift_apply ReaderT.monadLift_apply ExceptT.monadLift_apply
@@ -66,7 +68,6 @@ attribute [wp_simp]
   StateT.monadMap_apply ReaderT.monadMap_apply ExceptT.monadMap_apply
   PredTrans.monadMapArg_apply PredTrans.monadMapExcept_apply
   WP.popArg_StateT_wp WP.popArg_ReaderT_wp WP.popExcept_ExceptT_wp WP.ReaderT_run_apply WP.StateT_run_apply WP.ExceptT_run_apply
-  WP.wp1_apply
   -- List.Zipper.begin_suff List.Zipper.tail_suff List.Zipper.end_suff -- Zipper stuff needed for invariants
   Std.Range.forIn_eq_forIn_range' Std.Range.forIn'_eq_forIn'_range' Std.Range.size Nat.div_one  -- rewrite to forIn_list
   Array.forIn_eq_forIn_toList Array.forIn'_eq_forIn'_toList -- rewrite to forIn_list

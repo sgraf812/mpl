@@ -505,6 +505,17 @@ instance PredTrans.instMonadMorphismPopArg : MonadMorphism (PredTrans (.arg σ p
 --     ext Q r
 --     simp[withReader, key]
 
+-- TODO: Figure out whether the following instances are useful (I don't think they are.)
+/-
+instance PredTrans.instLiftMonadMorphismArg : MonadMorphism (PredTrans ps) (PredTrans (.arg σ ps)) MonadLift.monadLift where
+  pure_pure x := by ext; simp only [monadLiftArg_apply, pure_apply]
+  bind_bind x f := by ext Q σ; simp only [Bind.bind, bind, monadLiftArg_apply]
+
+instance PredTrans.instLiftMonadMorphismDropFail : MonadMorphism (PredTrans ps) (PredTrans (.except ε ps)) MonadLift.monadLift where
+  pure_pure x := by ext; simp only [monadLiftExcept_apply, pure_apply]
+  bind_bind x f := by ext Q; simp only [Bind.bind, bind, monadLiftExcept_apply]
+-/
+
 @[simp]
 theorem PredTrans.pushArg_popArg : pushArg (popArg x) = x := rfl
 

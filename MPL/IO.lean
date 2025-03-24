@@ -11,6 +11,9 @@ axiom IO.wp_bind {α β ε} (x : EIO ε α) (f : α → EIO ε β) :
 noncomputable instance IO.instWP : WP (EIO ε) (.except ε .pure) where
   wp := IO.wp
 
+axiom IO.instLawfulMonad {ε} : LawfulMonad (EIO ε)
+local instance : LawfulMonad (EIO ε) := IO.instLawfulMonad
+
 noncomputable instance IO.instWPMonad : WPMonad (EIO ε) (.except ε .pure) where
   pure_pure := IO.wp_pure
   bind_bind := IO.wp_bind
