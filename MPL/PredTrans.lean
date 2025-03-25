@@ -250,12 +250,15 @@ structure PredTrans (ps : PredShape) (α : Type) : Type where
 
 --infix:100 " ⇐ " => PredTrans.apply
 
+def PredTrans.const {ps : PredShape} {α : Type} (p : PreCond ps) : PredTrans ps α :=
+  ⟨fun _ => p, fun _ _ _ => le_rfl⟩
+
 def PredTrans.le {ps : PredShape} {α : Type} (x y : PredTrans ps α) : Prop :=
   y.apply ≤ x.apply -- the weaker the precondition, the smaller the PredTrans
-noncomputable def PredTrans.top {ps : PredShape} {α : Type} : PredTrans ps α :=
-  PredTrans.mk ⊥ sorry
-noncomputable def PredTrans.bot {ps : PredShape} {α : Type} : PredTrans ps α :=
-  PredTrans.mk ⊤ sorry
+def PredTrans.top {ps : PredShape} {α : Type} : PredTrans ps α :=
+  PredTrans.const (PreCond.pure False)
+def PredTrans.bot {ps : PredShape} {α : Type} : PredTrans ps α :=
+  PredTrans.const (PreCond.pure True)
 noncomputable def PredTrans.sup {ps : PredShape} {α : Type} : PredTrans ps α → PredTrans ps α → PredTrans ps α :=
   fun x y => PredTrans.mk (x.apply ⊔ y.apply) sorry
 noncomputable def PredTrans.inf {ps : PredShape} {α : Type} : PredTrans ps α → PredTrans ps α → PredTrans ps α :=

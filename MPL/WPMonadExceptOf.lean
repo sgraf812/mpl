@@ -13,12 +13,21 @@ theorem MonadExcept.throw_apply [MonadExceptOf ε m] [WP m ps] :
 theorem MonadExcept.throwThe_apply [MonadExceptOf ε m] [WP m ps] :
   wp⟦throwThe ε e : m α⟧.apply Q = wp⟦MonadExceptOf.throw e : m α⟧.apply Q := rfl
 
-protected theorem ExceptT.wp_throw [Monad m] [WP m ps] [MonadMorphism m (PredTrans ps) wp] :
+-- TODO: remove the redundant Except instances!
+protected theorem Except.wp_throw :
+  wp⟦MonadExceptOf.throw e : Except ε α⟧ = PredTrans.throw e := by
+    ext; simp only [wp, MonadExceptOf.throw, PredTrans.pushExcept_apply, PredTrans.throw]; sorry
+
+theorem Except.throw_apply [Monad m] [WPMonad m ps] :
+  wp⟦MonadExceptOf.throw e : Except ε α⟧.apply Q = Q.2.1 e := by
+    simp only [Except.wp_throw, PredTrans.throw_apply]
+
+protected theorem ExceptT.wp_throw [Monad m] [WPMonad m ps] :
   wp⟦MonadExceptOf.throw e : ExceptT ε m α⟧ = PredTrans.throw e := by
     ext; simp only [wp, throw, throwThe, MonadExceptOf.throw, ExceptT.mk, pure_pure, pure, PredTrans.pure,
       PredTrans.pushExcept_apply, PredTrans.throw]
 
-theorem ExceptT.throw_apply [Monad m] [WP m ps] [MonadMorphism m (PredTrans ps) wp] :
+theorem ExceptT.throw_apply [Monad m] [WPMonad m ps] :
   wp⟦MonadExceptOf.throw e : ExceptT ε m α⟧.apply Q = Q.2.1 e := by
     simp only [ExceptT.wp_throw, PredTrans.throw_apply]
 
@@ -41,7 +50,7 @@ theorem MonadExcept.tryCatch_apply [MonadExceptOf ε m] [WP m ps] :
 theorem MonadExcept.tryCatchThe_apply [MonadExceptOf ε m] [WP m ps] :
   wp⟦tryCatchThe ε x h : m α⟧.apply Q = wp⟦MonadExceptOf.tryCatch x h : m α⟧.apply Q := rfl
 
-protected theorem ExceptT.wp_tryCatch [Monad m] [WP m ps] [MonadMorphism m (PredTrans ps) wp] :
+protected theorem ExceptT.wp_tryCatch [Monad m] [WPMonad m ps] :
   wp⟦MonadExceptOf.tryCatch x h : ExceptT ε m α⟧ = PredTrans.tryCatch wp⟦x⟧ (fun e => wp⟦h e⟧) := by
     ext
     simp only [wp, MonadExceptOf.tryCatch, ExceptT.tryCatch, ExceptT.mk, bind_bind,
@@ -50,7 +59,7 @@ protected theorem ExceptT.wp_tryCatch [Monad m] [WP m ps] [MonadMorphism m (Pred
     ext x
     split <;> simp
 
-theorem ExceptT.tryCatch_apply [Monad m] [WP m ps] [MonadMorphism m (PredTrans ps) wp] :
+theorem ExceptT.tryCatch_apply [Monad m] [WPMonad m ps] :
   wp⟦MonadExceptOf.tryCatch x h : ExceptT ε m α⟧.apply Q = wp⟦x⟧.apply (Q.1, fun e => wp⟦h e⟧.apply Q, Q.2.2) := by
     simp only [ExceptT.wp_tryCatch, PredTrans.tryCatch]
 

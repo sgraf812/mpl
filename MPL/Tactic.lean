@@ -59,20 +59,18 @@ attribute [wp_simp]
   WP.morph_pure_apply WP.morph_bind_apply WP.morph_map_apply WP.morph_seq_apply
   WP.morph_ite_apply WP.morph_dite_apply
   -- MonadLift implementation
-  WP.monadLift_pure_apply WP.monadLift_bind_apply WP.monadLift_map_apply WP.monadLift_seq_apply
   StateT.monadLift_apply ReaderT.monadLift_apply ExceptT.monadLift_apply
-  PredTrans.monadLiftArg_apply PredTrans.monadLiftExcept_apply
+--  PredTrans.monadLiftArg_apply PredTrans.monadLiftExcept_apply
   -- MonadLiftT implementation
   MonadLiftT.monadLift_trans_apply MonadLiftT.monadLift_refl_apply
   -- MonadFunctor implementation
   StateT.monadMap_apply ReaderT.monadMap_apply ExceptT.monadMap_apply
-  PredTrans.monadMapArg_apply PredTrans.monadMapExcept_apply
-  WP.popArg_StateT_wp WP.popArg_ReaderT_wp WP.popExcept_ExceptT_wp WP.ReaderT_run_apply WP.StateT_run_apply WP.ExceptT_run_apply
+--  PredTrans.monadMapArg_apply PredTrans.monadMapExcept_apply
+--  WP.popArg_StateT_wp WP.popArg_ReaderT_wp WP.popExcept_ExceptT_wp
+  WP.ReaderT_run_apply WP.StateT_run_apply WP.ExceptT_run_apply
   -- List.Zipper.begin_suff List.Zipper.tail_suff List.Zipper.end_suff -- Zipper stuff needed for invariants
   Std.Range.forIn_eq_forIn_range' Std.Range.forIn'_eq_forIn'_range' Std.Range.size Nat.div_one  -- rewrite to forIn_list
   Array.forIn_eq_forIn_toList Array.forIn'_eq_forIn'_toList -- rewrite to forIn_list
-  -- ite_extrude_yield List.forIn_yield_eq_foldlM -- rewrite to foldlM. Needs some of the LawfulMonad normalization laws as well; benefit of doing this is unclear
-  -- ←List.forIn_yield_eq_foldlM syntax not supported (yet)?
   -- state, reader, except ..Of impls
   StateT.get_apply
   StateT.set_apply
@@ -168,7 +166,7 @@ macro_rules
 
 macro "sgrind" : tactic => `(tactic| ((try simp +contextual); grind))
 
-theorem test_ex :
+example :
   ⦃fun s => s = 4⦄
   do
     let mut x := 0
@@ -197,29 +195,24 @@ theorem test_ex :
   simp only [List.sum_nil, add_zero]
   sorry -- grind -- needs 4.17 lemmas
 
-syntax (name := CHONK) "CHONK" optional("[" Lean.Parser.Tactic.simpLemma,* "]") : tactic
+syntax "CHONK_trivial" : tactic
+macro_rules | `(tactic| CHONK_trivial) => `(tactic| trivial)
+
+syntax (name := CHONK) "CHONK" optional("[" Lean.Parser.Tactic.simpLemma,+ "]") : tactic
 macro_rules
-  | `(tactic| CHONK) => `(tactic| (intros; first
-    | (intro; repeat intro) -- expand ≤ on → and PreConds, also turns triple goals into wp goals
-    | xapp
-    | xwp
-    | simp_all only [if_true_left, if_false_left, and_self, and_true, List.length_nil, List.length_cons, zero_add, ne_eq, not_false_eq_true, gt_iff_lt, Prod.mk_le_mk, le_refl
-        , reduceIte
-        , Nat.sub_one_add_one -- useful whenever we have `n-1+1` and have `n ≠ 0` as assumption
-      ]
-    | (simp_all[Nat.sub_one_add_one]; done)
---    | grind
-    ))
+  | `(tactic| CHONK) => `(tactic| CHONK[if_true_left]) -- if_true_left is redundant, but empty list did not work for some reason.
   | `(tactic| CHONK [$args,*]) => `(tactic| (intros; first
     | (intro; repeat intro) -- expand ≤ on → and PreConds, also turns triple goals into wp goals
+    | assumption
+    | CHONK_trivial
     | xapp
     | xwp
-    | simp_all only [if_true_left, if_false_left, and_self, and_true, List.length_nil, List.length_cons, zero_add, ne_eq, not_false_eq_true, gt_iff_lt, Prod.mk_le_mk, le_refl, $args,*
+    | simp_all only [$args,*, if_true_left, if_false_left, and_self, and_true, List.length_nil, List.length_cons, zero_add, ne_eq, not_false_eq_true, gt_iff_lt, Prod.mk_le_mk, le_refl
         , reduceIte
         , Nat.sub_one_add_one
       ]
     | (simp_all[$args,*, Nat.sub_one_add_one]; done)
---    | grind
+    | grind
     ))
 
 --  `(tactic| ((try intros); xstart; intro h; xwp; try (all_goals simp_all)))

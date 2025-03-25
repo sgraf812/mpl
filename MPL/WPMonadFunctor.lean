@@ -8,7 +8,9 @@ variable {m : Type → Type u} {ps : PredShape}
 
 open MonadFunctor renaming monadMap → mmap
 
--- The following 3 instances exist for similar reasons as for instLiftMonadMorphism instances
+-- The following 3 instances exist for similar reasons as for instLiftMonadMorphism instances.
+-- However, so far I was unable to find an example where they are useful.
+-- Given the [MonadMorphism m m f] constraint, it is unlikely they actually are useful.
 instance StateT.instMapMonadMorphism [Monad m] [MonadMorphism m m f] :
   MonadMorphism (StateT σ m) (StateT σ m) (mmap (m:=m) f) where
   pure_pure := by simp +unfoldPartialApp only [mmap, pure, StateT.pure, pure_pure, implies_true]
@@ -29,22 +31,11 @@ instance ExceptT.instMapMonadMorphism [Monad m] [MonadMorphism m m f] :
     ext
     split <;> simp only [pure_pure]
 
-protected theorem ReaderT.wp_withReader [WP m psm] :
-  wp⟦MonadWithReaderOf.withReader f x : ReaderT ρ m α⟧ = PredTrans.withReader f wp⟦x⟧ := rfl
-
-theorem ReaderT.withReader_apply [WP m psm] :
-  wp⟦MonadWithReaderOf.withReader f x : ReaderT ρ m α⟧.apply Q = fun r => wp⟦x⟧.apply (fun a _ => Q.1 a r, Q.2) (f r) := by
-    simp only [ReaderT.wp_withReader, PredTrans.withReader_apply]
-
-theorem MonadWithReaderOf.withReader_apply [MonadWithReaderOf ρ m] [WP m msh] [WP n nsh] [MonadFunctor m n] [MonadFunctor (PredTrans msh) (PredTrans nsh)] (f : ρ → ρ) (x : n α) :
-  wp⟦MonadWithReaderOf.withReader f x⟧.apply Q = wp⟦mmap (m:=m) (MonadWithReaderOf.withReader f) x⟧.apply Q := rfl
-
-theorem MonadWithReaderOf.withTheReader_apply [MonadWithReaderOf ρ m] [WP m sh] (f : ρ → ρ) (x : m α) :
-  wp⟦withTheReader ρ f x⟧.apply Q = wp⟦MonadWithReaderOf.withReader f x⟧.apply Q := rfl
-
-theorem MonadWithReader.withReader_apply [MonadWithReaderOf ρ m] [WP m sh] (f : ρ → ρ) (x : m α) :
-  wp⟦MonadWithReader.withReader f x⟧.apply Q = wp⟦MonadWithReaderOf.withReader f x⟧.apply Q := rfl
-
+-- The following 3 theorems are analogous to *.monadLift_apply.
+-- We used to have a more tricky definition by rewriting to special monadMap defns on PredTrans, involving
+--   wp1 : (∀ {α}, m α → m α) → PredTrans ps α → PredTrans ps α
+-- that enjoys quite a tricky definition (see 9d0e89ec).
+-- I found that relying on specialised lemmas is both much simpler and more reliable.
 theorem StateT.monadMap_apply (m : Type → Type u) [Monad m] [WP m psm]
   (f : ∀{β}, m β → m β) {α} (x : StateT σ m α) (Q : PostCond α (.arg σ psm)) :
     wp⟦mmap (m:=m) f x⟧.apply Q = fun s => wp⟦f (x.run s)⟧.apply (fun (a, s) => Q.1 a s, Q.2) := by
@@ -60,6 +51,22 @@ theorem ExceptT.monadMap_apply (m : Type → Type u) [Monad m] [WP m psm]
     wp⟦mmap (m:=m) f x⟧.apply Q = wp⟦f x.run⟧.apply (fun | .ok a => Q.1 a | .error e => Q.2.1 e, Q.2.2) := by
   simp only [wp, MonadFunctor.monadMap, PredTrans.pushExcept_apply, ExceptT.run]
   congr; ext; split <;> rfl
+
+protected theorem ReaderT.wp_withReader [WP m psm] :
+  wp⟦MonadWithReaderOf.withReader f x : ReaderT ρ m α⟧ = PredTrans.withReader f wp⟦x⟧ := rfl
+
+theorem ReaderT.withReader_apply [WP m psm] :
+  wp⟦MonadWithReaderOf.withReader f x : ReaderT ρ m α⟧.apply Q = fun r => wp⟦x⟧.apply (fun a _ => Q.1 a r, Q.2) (f r) := by
+    simp only [ReaderT.wp_withReader, PredTrans.withReader_apply]
+
+theorem MonadWithReaderOf.withReader_apply [MonadWithReaderOf ρ m] [WP m msh] [WP n nsh] [MonadFunctor m n] [MonadFunctor (PredTrans msh) (PredTrans nsh)] (f : ρ → ρ) (x : n α) :
+  wp⟦MonadWithReaderOf.withReader f x⟧.apply Q = wp⟦mmap (m:=m) (MonadWithReaderOf.withReader f) x⟧.apply Q := rfl
+
+theorem MonadWithReaderOf.withTheReader_apply [MonadWithReaderOf ρ m] [WP m sh] (f : ρ → ρ) (x : m α) :
+  wp⟦withTheReader ρ f x⟧.apply Q = wp⟦MonadWithReaderOf.withReader f x⟧.apply Q := rfl
+
+theorem MonadWithReader.withReader_apply [MonadWithReaderOf ρ m] [WP m sh] (f : ρ → ρ) (x : m α) :
+  wp⟦MonadWithReader.withReader f x⟧.apply Q = wp⟦MonadWithReaderOf.withReader f x⟧.apply Q := rfl
 
 lemma ite_app {c:Prop} [Decidable c] (t e : α → β) (a : α) : (if c then t else e) a = if c then t a else e a := by
   split <;> rfl

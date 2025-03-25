@@ -2,6 +2,15 @@ import MPL.WPMonad
 
 open MPL
 
+structure Universe where
+  U : Type
+  El : U → Type
+
+def Elts (u : Universe) : Type := Σ x, u.El x
+
+abbrev Addr := Fin
+def Heap (u : Universe) n := Addr n → Elts u
+
 axiom IO.wp {α ε} (x : EIO ε α) : PredTrans (.except ε .pure) α
 axiom IO.wp_pure {α ε} (a : α) :
   IO.wp (pure (f := EIO ε) a) = PredTrans.pure a

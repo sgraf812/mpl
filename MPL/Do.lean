@@ -30,6 +30,7 @@ theorem Specs.forInWithInvariant_list {α : Type} {β : Type} ⦃m : Type → Ty
 -- A: What would we expand `assert ... x` to?
 --    It appears we would have to expand x ourselves.
 syntax "assert " withPosition(basicFun) ("by " withPosition(Tactic.tacticSeqIndentGt))? : doElem
+syntax "assert " withPosition(" => " term) ("by " withPosition(Tactic.tacticSeqIndentGt))? : doElem
 syntax "invariant " withPosition(basicFun) ("by " withPosition(Tactic.tacticSeqIndentGt))? : doElem
 -- Reasons for why assert and invariant should ultimately be elaborated as part of do-notation:
 -- 1. It would be far simpler to elaborate `invariant` with the correct binding of let-mut vars.
@@ -76,9 +77,17 @@ def invariantGadget2.{u,v} (β : Type v) {m : Type → Type u} {ps : PredShape} 
   pure ()
 
 @[wp_simp]
-theorem assertGadget_apply {m : Type → Type u} {ps : PredShape} [Monad m] [WP m ps] {P : PreCond ps} {Q : PostCond Unit ps} : -- (h : PreCond.pure True ≤ P) :
+theorem assertGadget_apply {m : Type → Type u} {ps : PredShape} [Monad m] [WP m ps] {P : PreCond ps} {Q : PostCond Unit ps} : -- (h : Q.1 () ≤ P) :
   wp⟦assertGadget P : m Unit⟧.apply Q = wp⟦pure () : m Unit⟧.apply Q := rfl
 
+/-
+@[spec]
+theorem assertGadget_spec {m : Type → Type u} {ps : PredShape} [Monad m] [WPMonad m ps] {P : PreCond ps} {Q : PostCond Unit ps} (h : Q.1 () ≤ P) :
+  ⦃Q.1 () ⊓ P⦄ (assertGadget P : m Unit) ⦃Q⦄ := by
+  unfold assertGadget
+  xwp
+  simp[h]
+-/
 @[wp_simp]
 theorem invariantGadget_apply {m : Type → Type u₂} {ps : PredShape} {α : Type} {β : Type} [Monad m] [WPMonad m ps]
   (xs : List α) (init : β) (f : α → β → m (ForInStep β)) (inv : β → {α : Type} → {xs : List α} → List.Zipper xs → PreCond ps) (Q : PostCond β ps) :
@@ -89,6 +98,7 @@ theorem invariantGadget_apply {m : Type → Type u₂} {ps : PredShape} {α : Ty
 
 macro_rules
   | `(doElem| assert $xs* => $p) => `(doElem| assertGadget (fun $xs* => $p))
+  | `(doElem| assert => $p) => `(doElem| assertGadget $p)
   | `(doElem| invariant $xs* => $p) => `(doElem| invariantGadget1 (fun $xs* => $p))
 
 -- syntax (name := spec)
@@ -99,7 +109,7 @@ macro_rules
 
 def spec : Parser := leading_parser
   optional ("forall " >> withPosition (many1 (ppSpace >> (Term.binderIdent <|> bracketedBinder))))
-  >> optional ("requires " >> withPosition basicFun)
+  >> optional ("requires " >> (withPosition basicFun <|> " => " >> termParser))
   >> "ensures " >> withPosition basicFun
   >> many ("signals " >> withPosition basicFun)
 --def optSpec : Parser := Lean.Parser.optional spec
@@ -255,13 +265,15 @@ partial def elab_newdecl : CommandElab := fun decl => do
   let numProgBinders : Nat := if defn[2].isMissing then 65536 else defn[2][0].getNumArgs
   let olddeclValRefined ← match defn[4] with
     | .node info ``declValSimple args => do
-      let req : TSyntax ``basicFun := ⟨spec[1][1]⟩ -- might be missing. we check below.
+      let req := spec[1] -- might be missing. we check below.
       let ens : TSyntax ``basicFun := ⟨spec[3]⟩
       -- defn[4][1] is the term/do block; we'll patch it with the gadgets for requires and ensures
       let body ←
-        if req.raw.isMissing
+        if req[1].isMissing
         then `(requiresGadget (PreCond.pure True) (ensuresGadget (fun $ens:basicFun) $(⟨defn[4][1]⟩)))
-        else `(requiresGadget (fun $req:basicFun) (ensuresGadget (fun $ens:basicFun) $(⟨defn[4][1]⟩)))
+        else if req[1].getKind = ``basicFun
+        then `(requiresGadget (fun $(⟨req[1]⟩):basicFun) (ensuresGadget (fun $ens:basicFun) $(⟨defn[4][1]⟩)))
+        else `(requiresGadget ($(⟨req[2]⟩):term) (ensuresGadget (fun $ens:basicFun) $(⟨defn[4][1]⟩)))
       pure (Syntax.node info ``declValSimple (Array.set! args 1 body))
     | _ => throwUnsupportedSyntax
   -- dbg_trace olddeclValRefined
@@ -319,7 +331,7 @@ partial def elab_newdecl : CommandElab := fun decl => do
     let pure_unit ← elabTerm (← `(pure ())) (some (mkApp m (mkConst ``Unit)))
     body := body.replace fun e => match_expr e with
       | assertGadget _ _ _ _ _ => some pure_unit
-      | invariantGadget2 _ _ _ _ _ _ _ _ => some pure_unit
+      | invariantGadget2 _ _ _ _ _ _ => some pure_unit
       | _ => none
     -- dbg_trace body
     -- spec := leading_parser
@@ -392,6 +404,7 @@ def fib_impl (n : Nat) : Idd Nat
   if n = 0 then return 0
   let mut a := 0
   let mut b := 1
+  assert => a = 0 ∧ b = 1
   invariant xs => a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)
   for _ in [1:n] do
     let a' := a
@@ -399,11 +412,8 @@ def fib_impl (n : Nat) : Idd Nat
     b := a' + b
   return b
 
-#print fib_impl.spec
-
 theorem fib_triple : ⦃PreCond.pure True⦄ fib_impl n ⦃⇓ r | r = fib_spec n⦄ := by
   unfold fib_impl
---  repeat CHONK
   intro h
   xwp
   if h : n = 0 then simp[h] else
@@ -419,26 +429,6 @@ theorem fib_correct {n} : (fib_impl n).run = fib_spec n := by
   generalize h : (fib_impl n).run = x
   apply Idd.by_wp h
   apply fib_triple True.intro
-
-theorem fib_correct2 {n} : (fib_impl n).run = fib_spec n := by
-  generalize h : (fib_impl n).run = x
-  apply Idd.by_wp h
-  unfold fib_impl
-  repeat CHONK
---  xwp
---  split
---  next h => simp_all only
---  next h =>
---  simp[h]
---  xapp Specs.forIn_list ?inv ?step
---  case inv => exact PostCond.total fun (⟨a, b⟩, xs) => a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)
---  case pre => simp +arith +decide [Nat.succ_le_of_lt, Nat.zero_lt_of_ne_zero h, Nat.sub_sub_eq_min]
---  case step =>
---    intro ⟨a, b⟩ _pref x suff _h ⟨ha, hb⟩
---    xwp
---    simp_all[fib_spec]
---  intro y ⟨_, hb⟩
---  simp [Nat.sub_one_add_one h, hb]
 
 def fib_impl_strange (n : Nat) : Idd Nat
   ensures r => r = fib_spec n
@@ -458,7 +448,7 @@ def fib_impl_strange (n : Nat) : Idd Nat
   return b
 
 def mkFreshInt {m : Type → Type} [Monad m] : StateT (Nat × Nat) m Nat
-  forall {ps} [LawfulMonad m] [WPMonad m ps] n o
+  forall {ps} [LawfulMonad m] [WPMonad m ps] (n o : Nat)
   requires s => PreCond.pure (s.1 = n ∧ s.2 = o)
   ensures r s => PreCond.pure (r = n ∧ s.1 = n + 1 ∧ s.2 = o)
 := do
@@ -466,8 +456,6 @@ def mkFreshInt {m : Type → Type} [Monad m] : StateT (Nat × Nat) m Nat
   -- assert _ => PreCond.pure (o = 13)
   modify (fun s => (s.1 + 1, s.2))
   pure n
-
-#print mkFreshInt.spec
 
 --set_option trace.Elab.definition true in
 def blah1 (n: Nat) : StateM Nat Bool

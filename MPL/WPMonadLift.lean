@@ -5,6 +5,31 @@ namespace MPL
 universe u
 variable {m : Type → Type u} {ps : PredShape}
 
+-- The next 3 instances are important to interpret away monadLift.
+-- Note that we manage to map from `wp⟦·⟧.apply Q` to `wp⟦·⟧.apply (... Q ...)`
+-- (modulo `fun s =>`) so that the next wp_simp rule immediately applies
+theorem StateT.monadLift_apply [Monad m] [WPMonad m ps] (x : m α) (Q : PostCond α (.arg σ ps)) :
+  wp⟦MonadLift.monadLift x : StateT σ m α⟧.apply Q = fun s => wp⟦x⟧.apply (fun a => Q.1 a s, Q.2) := by
+    simp only [wp, MonadLift.monadLift, StateT.lift, bind_pure_comp, map_map,
+      PredTrans.pushArg_apply, PredTrans.map_apply]
+
+theorem ReaderT.monadLift_apply [Monad m] [WPMonad m ps] (x : m α) (Q : PostCond α (.arg ρ ps)) :
+  wp⟦MonadLift.monadLift x : ReaderT ρ m α⟧.apply Q = fun s => wp⟦x⟧.apply (fun a => Q.1 a s, Q.2) := by
+    simp only [wp, MonadLift.monadLift, PredTrans.pushArg_apply, PredTrans.map_apply]
+
+theorem ExceptT.monadLift_apply [Monad m] [LawfulMonad m] [WPMonad m ps] (x : m α) (Q : PostCond α (.except ε ps)) :
+  wp⟦MonadLift.monadLift x : ExceptT ε m α⟧.apply Q = wp⟦x⟧.apply (fun a => Q.1 a, Q.2.2) := by
+    simp only [wp, MonadLift.monadLift, ExceptT.lift, ExceptT.mk, map_map,
+      PredTrans.pushExcept_apply, PredTrans.map_apply]
+
+theorem MonadLiftT.monadLift_trans_apply [WP o ps] [MonadLift n o] [MonadLiftT m n] :
+  wp⟦MonadLiftT.monadLift x : o α⟧.apply Q = wp⟦MonadLift.monadLift (m:=n) (MonadLiftT.monadLift (m:=m) x) : o α⟧.apply Q := by
+    simp only [MonadLiftT.monadLift]
+
+theorem MonadLiftT.monadLift_refl_apply [WP m ps] :
+  wp⟦MonadLiftT.monadLift x : m α⟧.apply Q = wp⟦x : m α⟧.apply Q := by
+    simp only [MonadLiftT.monadLift]
+
 -- The following instance is useful when we have want to derive `modify f = monadLift (modify f)` and `modify f`
 -- is defined in terms of multiple primitive definitions in `m` (`get`, `set`, ...), rather than just one call to `modifyGet`.
 -- Example: `MonadStateOf.mkFreshInt_apply`
@@ -21,37 +46,7 @@ instance ExceptT.instLiftMonadMorphism [Monad m] [LawfulMonad m] : MonadMorphism
   pure_pure x := by ext; simp[liftM, MonadLift.monadLift, ExceptT.lift]
   bind_bind x f := by ext; simp[liftM, MonadLift.monadLift, ExceptT.lift, ExceptT.mk, bind, ExceptT.bind, ExceptT.bindCont]
 
--- WPMonadLift used to be a type class.
--- However, it is not a good candidate for abstracting over it with `[WPMonadLift ...]` because monadLift_apply moves monadLift outside `wp⟦·⟧` and thus loses definability information
--- compared to pushing monadLift inwards with `[MonadMorphism m n MonadLift.monadLift]` and `monadLift_bind_apply` (NB: does not lose definability information).
--- It is simpler to forbid abstraction over `[WPMonadLift ...]` than to discourage it, hence encode `WPMonadLift` as a def.
-@[simp]
-abbrev WPMonadLift (m : Type → Type u) (n : Type → Type v) (psm psn : outParam PredShape)
-  [WP m psm] [WP n psn] [MonadLift m n] [MonadLift (PredTrans psm) (PredTrans psn)] :=
-    ∀  α (x : m α) Q, wp⟦MonadLift.monadLift x : n α⟧.apply Q = PredTrans.apply (MonadLift.monadLift wp⟦x⟧) Q
-
-theorem StateT.monadLift_apply [Monad m] [WPMonad m psm] :
-  WPMonadLift m (StateT σ m) psm (.arg σ psm) := by
-  intro _ _ _; simp only [wp, MonadLift.monadLift, StateT.lift,
-    bind_bind, pure_pure, PredTrans.pushArg_apply]
-
-theorem ReaderT.monadLift_apply [Monad m] [WPMonad m psm] :
-  WPMonadLift m (ReaderT ρ m) psm (.arg ρ psm) := by
-  intro _ _ _; simp only [wp, MonadLift.monadLift, PredTrans.pushArg_apply,
-    StateT.lift, bind_pure_comp]
-
-theorem ExceptT.monadLift_apply [Monad m] [WPMonad m psm] [LawfulMonad m] :
-  WPMonadLift m (ExceptT ε m) psm (.except ε psm) := by
-  intro _ _ _; simp only [wp, MonadLift.monadLift, ExceptT.lift, ExceptT.mk,
-    map_map]
-
-theorem MonadLiftT.monadLift_trans_apply [WP o ps] [MonadLift n o] [MonadLiftT m n] :
-  wp⟦MonadLiftT.monadLift x : o α⟧.apply Q = wp⟦MonadLift.monadLift (m:=n) (MonadLiftT.monadLift (m:=m) x) : o α⟧.apply Q := by
-    simp only [MonadLiftT.monadLift]
-
-theorem MonadLiftT.monadLift_refl_apply [WP m ps] :
-  wp⟦MonadLiftT.monadLift x : m α⟧.apply Q = wp⟦x : m α⟧.apply Q := by
-    simp only [MonadLiftT.monadLift]
+-- Now rewrites for the standard lib:
 
 protected theorem ReaderT.wp_read [Monad m] [WPMonad m psm] :
   wp⟦MonadReaderOf.read : ReaderT ρ m ρ⟧ = PredTrans.get := by

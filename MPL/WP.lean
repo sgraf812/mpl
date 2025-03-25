@@ -79,7 +79,8 @@ instance EStateM.instWP : WP (EStateM ε σ) (.except ε (.arg σ .pure)) where
 
 instance State.instWP : WP (StateM σ) (.arg σ .pure) := inferInstanceAs (WP (StateT σ Id) (.arg σ .pure))
 instance Reader.instWP : WP (ReaderM ρ) (.arg ρ .pure) := inferInstanceAs (WP (ReaderT ρ Id) (.arg ρ .pure))
-instance Except.instWP : WP (Except ε) (.except ε .pure) := inferInstanceAs (WP (ExceptT ε Id) (.except ε .pure))
+-- the instance below is actually harmful because WP.pure_apply does not trigger anymore. perhaps related to some stupid def eq mishap.
+-- instance Except.instWP : WP (Except ε) (.except ε .pure) := inferInstanceAs (WP (ExceptT ε Id) (.except ε .pure))
 
 @[simp]
 theorem WP.popArg_StateT_wp [WP m ps] (x : StateT σ m α) :
