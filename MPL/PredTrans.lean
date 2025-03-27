@@ -120,8 +120,8 @@ theorem PreCond.imp_pure_extract {ps} {P : Prop} {Q : PreCond ps}
   case arg σ s ih => intro s; apply ih (fun hp => h hp s)
   case except ε s ih => simp; apply ih h
 
-def FailConds.const (p : Prop) : FailConds ps :=
-  match ps with
+@[reducible]
+def FailConds.const {ps : PredShape} (p : Prop) : FailConds ps := match ps with
   | .pure => ()
   | .arg σ s => @FailConds.const s p
   | .except ε s => (fun _ε => PreCond.pure p, @FailConds.const s p)

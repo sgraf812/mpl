@@ -61,11 +61,6 @@ instance ReaderT.instWP [WP m ps] : WP (ReaderT ρ m) (.arg ρ ps) where
 instance ExceptT.instWP [WP m ps] : WP (ExceptT ε m) (.except ε ps) where
   wp x := PredTrans.pushExcept wp⟦x⟧
 
--- def EStateM.Result.toExceptState {ε σ α} (x : EStateM.Result ε σ α) : Except ε α × σ :=
---   match x with
---   | .ok a s => (.ok a, s)
---   | .error e s => (.error e, s)
-
 instance EStateM.instWP : WP (EStateM ε σ) (.except ε (.arg σ .pure)) where
   wp x := -- Could define as PredTrans.mkExcept (PredTrans.modifyGetM (fun s => pure (EStateM.Result.toExceptState (x s))))
     { apply := fun Q s => match x s with
@@ -77,20 +72,12 @@ instance EStateM.instWP : WP (EStateM ε σ) (.except ε (.arg σ .pure)) where
         cases (x s) <;> apply_rules [h.1,h.2.1]
     }
 
-instance State.instWP : WP (StateM σ) (.arg σ .pure) := inferInstanceAs (WP (StateT σ Id) (.arg σ .pure))
-instance Reader.instWP : WP (ReaderM ρ) (.arg ρ .pure) := inferInstanceAs (WP (ReaderT ρ Id) (.arg ρ .pure))
--- the instance below is actually harmful because WP.pure_apply does not trigger anymore. perhaps related to some stupid def eq mishap.
--- instance Except.instWP : WP (Except ε) (.except ε .pure) := inferInstanceAs (WP (ExceptT ε Id) (.except ε .pure))
-
-@[simp]
-theorem WP.popArg_StateT_wp [WP m ps] (x : StateT σ m α) :
-  wp⟦x⟧.popArg s = wp⟦x.run s⟧ := by simp[wp, StateT.run]
-
--- WP.popArg_ReaderT_wp needs WPMonad therefore is defined in WPMonad.lean
-
-@[simp]
-theorem WP.popExcept_ExceptT_wp [WP m ps] (x : ExceptT ε m α) :
-  wp⟦x⟧.popExcept = wp⟦x.run⟧ := by simp[wp, ExceptT.run]
+instance State.instWP : WP (StateM σ) (.arg σ .pure) :=
+  inferInstanceAs (WP (StateT σ Id) (.arg σ .pure))
+instance Reader.instWP : WP (ReaderM ρ) (.arg ρ .pure) :=
+  inferInstanceAs (WP (ReaderT ρ Id) (.arg ρ .pure))
+instance Except.instWP : WP (Except ε) (.except ε .pure) :=
+  inferInstanceAs (WP (ExceptT ε Id) (.except ε .pure))
 
 @[simp]
 theorem WP.ReaderT_run_apply [WP m ps] (x : ReaderT ρ m α) :
@@ -106,12 +93,6 @@ theorem WP.ExceptT_run_apply [WP m ps] (x : ExceptT ε m α) :
     simp[wp, ExceptT.run]
     congr
     (ext x; cases x) <;> rfl
-
--- the following are just the definitions of wp:
--- @[simp] -- leads to errors in WPMonad
-theorem WP.pushExcept_wp [WP m ps] (x : ExceptT ε m α) : PredTrans.pushExcept wp⟦x⟧ = wp⟦x⟧ := by simp[wp]
--- @[simp] -- leads to errors
-theorem WP.pushArg_wp [WP m ps] (x : StateT σ m α) : PredTrans.pushArg (fun s => wp⟦x s⟧) = wp⟦x⟧ := by simp[wp]
 
 theorem WP.dite_apply {ps} {Q : PostCond α ps} (c : Prop) [Decidable c] [WP m ps] (t : c → m α) (e : ¬ c → m α) :
   wp⟦if h : c then t h else e h⟧.apply Q = if h : c then wp⟦t h⟧.apply Q else wp⟦e h⟧.apply Q := by split <;> rfl

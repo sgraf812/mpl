@@ -50,10 +50,6 @@ theorem WP.morph_dite_apply {ps} {Q : PostCond α ps} (c : Prop) [Decidable c] [
 theorem WP.morph_ite_apply {ps} {Q : PostCond α ps} (c : Prop) [Decidable c] [Monad m] [Monad n] [MonadMorphism m n morph] [WP n ps] (t : m α) (e : m α) :
   wp⟦morph (if c then t else e)⟧.apply Q = if c then wp⟦morph t⟧.apply Q else wp⟦morph e⟧.apply Q := by split <;> rfl
 
-@[simp]
-theorem WP.popArg_ReaderT_wp [Monad m] [WPMonad m ps] (x : ReaderT ρ m α) :
-  wp⟦x⟧.popArg s = wp⟦(·, s) <$> x.run s⟧ := by simp[wp, ReaderT.run]
-
 instance Idd.instWPMonad : WPMonad Idd .pure where
   pure_pure a := by simp only [wp, PredTrans.pure, Pure.pure, Idd.pure]
   bind_bind x f := by simp only [wp, PredTrans.pure, Bind.bind, Idd.bind, PredTrans.bind]
@@ -79,12 +75,13 @@ instance ExceptT.instWPMonad [Monad m] [WPMonad m ps] : WPMonad (ExceptT ε m) (
     PredTrans.pushExcept_apply]
   bind_bind x f := by
     ext Q
-    simp [wp, bind, ExceptT.bind, bind_bind, ExceptT.bindCont, PredTrans.bind, ExceptT.mk, PredTrans.pushExcept_apply]
+    simp only [wp, bind, ExceptT.bind, mk, bind_bind, PredTrans.bind, ExceptT.bindCont,
+      PredTrans.pushExcept_apply]
     congr
     ext b
     cases b
     case error a => simp[PredTrans.pure, pure]
-    case ok a => congr
+    case ok a => rfl
 
 instance EStateM.instWPMonad : WPMonad (EStateM ε σ) (.except ε (.arg σ .pure)) where
   pure_pure a := by simp only [wp, pure, EStateM.pure, PredTrans.pure]
@@ -93,13 +90,11 @@ instance EStateM.instWPMonad : WPMonad (EStateM ε σ) (.except ε (.arg σ .pur
     simp [wp, bind, EStateM.bind, eq_iff_iff, PredTrans.bind]
     cases (x s) <;> simp
 
+instance Except.instWPMonad : WPMonad (Except ε) (.except ε .pure) where
+  pure_pure a := rfl
+  bind_bind x f := by cases x <;> rfl
+
 instance State.instWPMonad : WPMonad (StateM σ) (.arg σ .pure) :=
   inferInstanceAs (WPMonad (StateT σ Id) (.arg σ .pure))
 instance Reader.instWPMonad : WPMonad (ReaderM ρ) (.arg ρ .pure) :=
   inferInstanceAs (WPMonad (ReaderT ρ Id) (.arg ρ .pure))
-theorem Except.instMonad_eq ε : @Except.instMonad ε = @ExceptT.instMonad ε Id Id.instMonad := by
-  have h : Monad (Except ε) = Monad (ExceptT ε Id) := rfl
-  simp[Except.instMonad, ExceptT.instMonad]
-  sorry
-instance Except.instWPMonad : WPMonad (Except ε) (.except ε .pure) :=
-  Except.instMonad_eq ε ▸ inferInstanceAs (WPMonad (ExceptT ε Id) (.except ε .pure))

@@ -207,7 +207,7 @@ macro_rules
     | CHONK_trivial
     | xapp
     | xwp
-    | simp_all only [$args,*, if_true_left, if_false_left, and_self, and_true, List.length_nil, List.length_cons, zero_add, ne_eq, not_false_eq_true, gt_iff_lt, Prod.mk_le_mk, le_refl
+    | simp_all only [if_true_left, if_false_left, and_self, and_true, List.length_nil, List.length_cons, zero_add, ne_eq, not_false_eq_true, gt_iff_lt, Prod.mk_le_mk, le_refl
         , reduceIte
         , Nat.sub_one_add_one
       ]
