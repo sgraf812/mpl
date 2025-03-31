@@ -61,7 +61,7 @@ theorem WP.morph_ite_apply {ps} {Q : PostCond α ps} (c : Prop) [Decidable c] [M
   wp⟦morph (if c then t else e)⟧.apply Q = if c then wp⟦morph t⟧.apply Q else wp⟦morph e⟧.apply Q := by split <;> rfl
 
 instance Idd.instWPMonad : WPMonad Idd .pure where
-  pure_pure a := by simp only [wp, PredTrans.pure, Pure.pure, Idd.pure]
+  pure_pure a := by simp only [wp, PredTrans.pure, Pure.pure, Idd.run_pure]
   bind_bind x f := by simp only [wp, PredTrans.pure, Bind.bind, Idd.bind, PredTrans.bind]
 
 instance Id.instWPMonad : WPMonad Id .pure where

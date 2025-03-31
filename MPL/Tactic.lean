@@ -149,7 +149,7 @@ macro_rules
   | `(tactic| xapp_no_simp)       => `(tactic| ((try xbind); xapp_no_xbind))
   | `(tactic| xapp_no_simp $spec) => `(tactic| ((try xbind); xapp_no_xbind $spec))
   | `(tactic| xapp)               => `(tactic| xapp_no_simp <;> try simp +contextual only [gt_iff_lt, Prod.mk_le_mk, le_refl, and_true])
-  | `(tactic| xapp $spec)         => `(tactic| xapp_no_simp $spec <;> try simp +contextual only [gt_iff_lt, Prod.mk_le_mk, le_refl, and_true])
+  | `(tactic| xapp $spec)         => `(tactic| xapp_no_simp $spec <;> ((try simp +contextual only [gt_iff_lt, Prod.mk_le_mk, le_refl, and_true]); try (guard_target = (_ : Prop); trivial)))
 
 elab "xapp2_no_xbind" spec:optional(term) : tactic => withMainContext do
   xapp_n_no_xbind (← getMainGoal) spec ``wp_apply_triple_conseq

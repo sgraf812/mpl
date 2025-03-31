@@ -13,7 +13,7 @@ def forInWithInvariant {m : Type → Type u₂} {α : Type} {β : Type} [Monad m
 
 @[spec]
 theorem Specs.forInWithInvariant_list {α : Type} {β : Type} ⦃m : Type → Type v⦄ {ps : PredShape}
-  [Monad m] [LawfulMonad m] [WPMonad m ps]
+  [Monad m] [WPMonad m ps]
   {xs : List α} {init : β} {f : α → β → m (ForInStep β)}
   {inv : PostCond (β × List.Zipper xs) ps}
   (step : ∀ b rpref x suff (h : xs = rpref.reverse ++ x :: suff),
@@ -369,9 +369,9 @@ partial def elab_newdecl : CommandElab := fun decl => do
     | _ => throwError "no triple"
   --log refined_spec
   let erased_spec ← erase_spec (mkConst defn.name) numProgBinders refined_spec
-  dbg_trace erased_spec
+  -- dbg_trace erased_spec
   let levelParams := collectLevelParams {} erased_spec |>.params
-  dbg_trace levelParams
+  -- dbg_trace levelParams
 
 --  let refined_spec ← instantiateMVars (← spec_ty (← mkConstWithFreshMVarLevels defn.name) defn.type)
   let val := (← Term.elabTerm (← `(by unfold $(TSyntax.mk (mkIdent refinedDeclId2)); repeat CHONK)) (.some refined_spec) (catchExPostpone := false))
@@ -391,6 +391,8 @@ partial def elab_newdecl : CommandElab := fun decl => do
     -- value := ← Term.elabTermEnsuringType (← `(by sorry)) refined_spec
     value := val
   })
+
+namespace Test
 
 @[reducible]
 def fib_spec : Nat → Nat
@@ -420,7 +422,7 @@ theorem fib_triple : ⦃PreCond.pure True⦄ fib_impl n ⦃⇓ r | r = fib_spec 
   simp[h]
   xapp Specs.forIn_list ?inv ?step
   case inv => exact PostCond.total fun (⟨a, b⟩, xs) => a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)
-  case pre => xwp; simp_all
+  case pre => simp_all
   case step => intros; xwp; simp_all
   intro _ _
   simp_all[Nat.sub_one_add_one]
@@ -448,7 +450,7 @@ def fib_impl_strange (n : Nat) : Idd Nat
   return b
 
 def mkFreshInt {m : Type → Type} [Monad m] : StateT (Nat × Nat) m Nat
-  forall {ps} [LawfulMonad m] [WPMonad m ps] (n o : Nat)
+  forall {ps} [WPMonad m ps] (n o : Nat)
   requires s => PreCond.pure (s.1 = n ∧ s.2 = o)
   ensures r s => PreCond.pure (r = n ∧ s.1 = n + 1 ∧ s.2 = o)
 := do
@@ -457,6 +459,7 @@ def mkFreshInt {m : Type → Type} [Monad m] : StateT (Nat × Nat) m Nat
   modify (fun s => (s.1 + 1, s.2))
   pure n
 
+/- signals is not implemented yet
 --set_option trace.Elab.definition true in
 def blah1 (n: Nat) : StateM Nat Bool
   requires s => s > 4
@@ -493,3 +496,4 @@ def ex (n : Nat) : ExceptT Nat (StateT Nat Idd) Nat
     if x > 4 then throw 42
   set 1
   return x
+-/

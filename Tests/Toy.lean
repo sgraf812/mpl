@@ -15,7 +15,6 @@ theorem test_sum :
   intro _
   xwp
   xapp (Specs.forIn_list (PostCond.total fun (r, xs) => (∀ x, x ∈ xs.suff → x ≤ 5) ∧ r + xs.suff.length * 5 ≤ 25) ?step)
-  case pre => sorry --sgrind -- (try simp); grind
   case step =>
     intro b pref x suff h
     xwp
@@ -161,7 +160,6 @@ theorem test_loop_break :
   xwp
   -- xbind -- optional
   xapp (Specs.forIn_list (fun (r, xs) s => (r ≤ 4 ∧ r = xs.rpref.sum ∨ r > 4) ∧ s = 42, ()) ?step)
-  case pre => simp only [hs]; conv in (List.sum _) => { whnf }; simp
   case step =>
     intro b pref x suff h
     xstart
@@ -197,7 +195,6 @@ theorem test_loop_early_return :
   xapp get_spec
   xbind
   xapp (Specs.forIn_list (fun (r, xs) s => (r.1 = none ∧ r.2 = xs.rpref.sum ∧ r.2 ≤ 4 ∨ r.1 = some 42 ∧ r.2 > 4) ∧ s = 4, ()) ?step)
-  case pre => simp[hs]
   case step =>
     intro b pref x suff h s ⟨h, hs⟩
     xwp
@@ -396,11 +393,11 @@ theorem op.spec :
 theorem prog.spec : ⦃isValid⦄ prog n ⦃⇓r | PreCond.pure (r > 100) ⊓ isValid⦄ := by
   unfold prog
   intro a b c d h
-  xapp op.spec; case pre => exact h
+  xapp op.spec
   intro r₁ a b c d ⟨hr₁, h⟩
-  xapp op.spec; case pre => exact h
+  xapp op.spec
   intro r₂ a b c d ⟨hr₂, h⟩
-  xapp op.spec; case pre => exact h
+  xapp op.spec
   intro r₃ a b c d ⟨hr₃, h⟩
   xpure
   simp[h]
@@ -409,11 +406,11 @@ theorem prog.spec : ⦃isValid⦄ prog n ⦃⇓r | PreCond.pure (r > 100) ⊓ is
 theorem prog.spec' : ⦃isValid⦄ prog n ⦃⇓r | ⌜r > 100⌝ ∧ isValid⦄ := by
   unfold prog
   xintro □h
-  xapp op.spec; case pre => xsimp
+  xapp op.spec
   xintro →r₁ ⟨⌜hr₁⌝, □h⟩
-  xapp op.spec; case pre => xsimp
+  xapp op.spec
   xintro →r₂ ⟨⌜hr₂⌝, □h⟩
-  xapp op.spec; case pre => xsimp
+  xapp op.spec
   xintro →r₃ ⟨⌜hr₃⌝, □h⟩
   xpure
   simp[h]
