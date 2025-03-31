@@ -68,6 +68,14 @@ instance Reader.instWP : WP (ReaderM ρ) (.arg ρ .pure) :=
 instance Except.instWP : WP (Except ε) (.except ε .pure) :=
   inferInstanceAs (WP (ExceptT ε Id) (.except ε .pure))
 
+theorem StateM.by_wp {α} {x : σ → α × σ} {prog : StateM σ α} (h : StateT.run prog = x) (P : α → σ → Prop) :
+  (PreCond.pure True ≤ (wp prog).apply (PostCond.total P)) → (∀ s, P (x s).1 (x s).2) := by
+    intro hspec
+    intro s
+    have := hspec s .intro
+    simp[wp, PredTrans.pure] at this
+    exact h ▸ this
+
 @[wp_simp]
 theorem WP.ReaderT_run_apply [WP m ps] (x : ReaderT ρ m α) :
   wp⟦x.run r⟧.apply Q = wp⟦x⟧.apply (fun a _ => Q.1 a, Q.2) r := rfl

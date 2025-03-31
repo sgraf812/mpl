@@ -92,7 +92,7 @@ theorem test_ex :
     · grind -- simp[hinv, h]
     · simp only [PredTrans.pure_apply]; sorry -- grind -- omega
   simp only [List.sum_nil, add_zero]
-  sorry -- sgrind
+  intro _ _; simp; omega -- sgrind
 
 theorem test_ex2 :
   ⦃fun s => s = 4⦄
@@ -286,7 +286,7 @@ theorem fib_triple : ⦃PreCond.pure True⦄ fib_impl n ⦃⇓ r | r = fib_spec 
   simp[h]
   xapp Specs.forIn_list ?inv ?step
   case inv => exact PostCond.total fun (⟨a, b⟩, xs) => a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)
-  case pre => xwp; simp_all
+  case pre => simp_all
   case step => intros; xwp; simp_all
   intro _ _
   simp_all[Nat.sub_one_add_one]
