@@ -248,8 +248,6 @@ structure PredTrans (ps : PredShape) (α : Type) : Type where
   apply : PostCond α ps → PreCond ps
   mono : PredTrans.Mono apply
 
---infix:100 " ⇐ " => PredTrans.apply
-
 def PredTrans.const {ps : PredShape} {α : Type} (p : PreCond ps) : PredTrans ps α :=
   ⟨fun _ => p, fun _ _ _ => le_rfl⟩
 

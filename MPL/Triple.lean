@@ -3,67 +3,31 @@ import MPL.WPMonad
 namespace MPL
 
 universe u
-variable {m : Type → Type u} {ps : PredShape}
+variable {m : Type → Type u} {ps : PredShape} [WP m ps]
 
-section Delab
-open Lean Lean.Macro
-
--- macro for adding unexpanders for function applications
-open Lean.Parser.Term in
-private def matchAlts' := leading_parser matchAlts
-
-syntax "delab_rule" ident matchAlts' : command
-macro_rules
-  | `(delab_rule $f $[| $p => $s]*) => do
-    let f := f.getId
-    if f.isAnonymous then
-      throwUnsupported
-    let f ← match ← Macro.resolveGlobalName f with
-      | [(name, [])] => pure name
-      | _           => throwUnsupported
-
-    let (p : TSyntaxArray `term) := p
-    if p.any (· matches `(`($$_))) then
-      `(@[app_unexpander $(mkIdent f)]
-        def unexpand : Lean.PrettyPrinter.Unexpander
-          $[| $p => $s]*)
-    else
-      `(@[app_unexpander $(mkIdent f)]
-        def unexpand : Lean.PrettyPrinter.Unexpander
-          $[| $p => $s]*
-          | _ => throw ())
-
-end Delab
-
-def triple {m : Type → Type u} {ps : PredShape} [WP m ps] {α} (x : m α) (P : PreCond ps) (Q : PostCond α ps) : Prop :=
+def triple (x : m α) (P : PreCond ps) (Q : PostCond α ps) : Prop :=
   P ≤ wp⟦x⟧.apply Q
-
-notation:lead "{{" P "}} " x:lead " {{" Q "}}" =>
-  P ≤ PredTrans.apply x Q
-
-delab_rule LE.le
-  | `(_ $P (PredTrans.apply $x $Q)) => `({{$P}} $x {{$Q}})
 
 notation:lead "⦃" P "⦄ " x:lead " ⦃" Q "⦄" =>
   triple x P Q
 notation:lead "⦃" P "⦄ " x:lead " ⦃⇓" v " | " Q "⦄" =>
   ⦃P⦄ x ⦃PostCond.total fun v => Q⦄
 
-theorem triple_conseq [WP m ps] {α} (x : m α) {P P' : PreCond ps} {Q Q' : PostCond α ps}
+theorem triple_conseq {α} (x : m α) {P P' : PreCond ps} {Q Q' : PostCond α ps}
   (hp : P ≤ P' := by simp) (hq : Q' ≤ Q := by simp) (h : triple x P' Q') :
   triple x P Q := by
     apply le_trans hp
     apply le_trans h
     apply wp⟦x⟧.mono Q' Q hq
 
-theorem triple_extract_persistent [WP m ps] {α} {P : Prop} {P' : PreCond ps} {Q : PostCond α ps}
+theorem triple_extract_persistent {α} {P : Prop} {P' : PreCond ps} {Q : PostCond α ps}
   (x : m α) (h : P → triple x P' Q) :
   triple x (PreCond.pure P ⊓ P') Q := PreCond.imp_pure_extract_l h
 
-theorem triple_pure [Monad m] [WP m ps] [MonadMorphism m (PredTrans ps) wp] {α} {Q : PostCond α ps} (a : α) (himp : P ≤ Q.1 a) :
+theorem triple_pure [Monad m] [MonadMorphism m (PredTrans ps) wp] {α} {Q : PostCond α ps} (a : α) (himp : P ≤ Q.1 a) :
   triple (pure (f:=m) a) P Q := by apply le_trans himp (by simp only [pure_pure, PredTrans.pure_apply, le_refl])
 
-theorem triple_bind [Monad m] [WP m ps] [MonadMorphism m (PredTrans ps) wp] {α β} {P : PreCond ps} {Q : α → PreCond ps} {R : PostCond β ps} (x : m α) (f : α → m β)
+theorem triple_bind [Monad m] [MonadMorphism m (PredTrans ps) wp] {α β} {P : PreCond ps} {Q : α → PreCond ps} {R : PostCond β ps} (x : m α) (f : α → m β)
   (hx : triple x P (Q, R.2))
   (hf : ∀ b, triple (f b) (Q b) R) :
   triple (x >>= f) P R := by
@@ -73,11 +37,11 @@ theorem triple_bind [Monad m] [WP m ps] [MonadMorphism m (PredTrans ps) wp] {α 
     simp only [Prod.mk_le_mk, le_refl, and_true]
     exact hf
 
-theorem triple_bind2 [Monad m] [WP m ps] [MonadMorphism m (PredTrans ps) wp] {α β} {P : PreCond ps} {R : PostCond β ps} (x : m α) (f : α → m β)
+theorem triple_bind2 [Monad m] [MonadMorphism m (PredTrans ps) wp] {α β} {P : PreCond ps} {R : PostCond β ps} (x : m α) (f : α → m β)
   (h : triple x P (fun a => wp⟦f a⟧.apply R, R.2)) :
   triple (x >>= f) P R := triple_bind x f h (fun _ => le_rfl)
 
---theorem triple_bind_pre [Monad m] [WP m ps] [MonadMorphism m (PredTrans ps) wp] {α β} {P : PreCond ps} {Q : PostCond β ps} (x : m α) (f : α → m β)
+--theorem triple_bind_pre [Monad m] [MonadMorphism m (PredTrans ps) wp] {α β} {P : PreCond ps} {Q : PostCond β ps} (x : m α) (f : α → m β)
 --  (hx : triple wp⟦x⟧ P (fun a => triple wp⟦f a⟧ Q, Q.2)) :
 --  triple wp⟦x >>= f⟧ P R := by
 --    apply le_trans hx
@@ -86,7 +50,7 @@ theorem triple_bind2 [Monad m] [WP m ps] [MonadMorphism m (PredTrans ps) wp] {α
 --    simp only [Prod.mk_le_mk, le_refl, and_true]
 --    exact hf
 
-theorem triple_extract_persistent_true {ps : PredShape} {α} [WP m ps] (x : m α) {P : Prop} {Q : PostCond α ps}
+theorem triple_extract_persistent_true {α} (x : m α) {P : Prop} {Q : PostCond α ps}
   (h : P → triple x (PreCond.pure True) Q) :
   triple x (PreCond.pure P) Q := by
     have : PreCond.pure P = (PreCond.pure P ⊓ PreCond.pure True : PreCond ps) := by simp
@@ -94,15 +58,15 @@ theorem triple_extract_persistent_true {ps : PredShape} {α} [WP m ps] (x : m α
     exact triple_extract_persistent x h
 
 /-
-theorem triple_conseq_l [Monad m] [WP m ps] [MonadMorphism m (PredTrans ps) wp] {P P' : PreCond ps} {Q : PostCond α ps}
+theorem triple_conseq_l [Monad m] [MonadMorphism m (PredTrans ps) wp] {P P' : PreCond ps} {Q : PostCond α ps}
   (x : m α) (hp : P ≤ P') (h : triple x P' Q) :
   triple x P Q := triple_conseq x hp le_rfl h
 
-theorem triple_conseq_r [Monad m] [WP m ps] [MonadMorphism m (PredTrans ps) wp] {P : PreCond ps} {Q Q' : PostCond α ps}
+theorem triple_conseq_r [Monad m] [MonadMorphism m (PredTrans ps) wp] {P : PreCond ps} {Q Q' : PostCond α ps}
   (x : m α) (hq : Q ≤ Q') (h : triple x P Q) :
   triple x P Q' := triple_conseq x le_rfl hq h
 
---theorem triple_map [Monad m] [LawfulMonad m] [WP m ps] [MonadMorphism m (PredTrans ps) wp] (f : α → β) (x : m α)
+--theorem triple_map [Monad m] [LawfulMonad m] [MonadMorphism m (PredTrans ps) wp] (f : α → β) (x : m α)
 --  (h : triple x P (fun a => Q.1 (f a), Q.2)) :
 --  triple (f <$> x) P Q := by
 --    simp only [← bind_pure_comp]
@@ -111,7 +75,7 @@ theorem triple_conseq_r [Monad m] [WP m ps] [MonadMorphism m (PredTrans ps) wp] 
 --    apply triple_pure
 --    simp only [le_refl]
 
---theorem triple_seq [Monad m] [LawfulMonad m] [WP m ps] [MonadMorphism m (PredTrans ps) wp] (f : m (α → β)) (x : m α) {Q : (α → β) → PreCond ps}
+--theorem triple_seq [Monad m] [LawfulMonad m] [MonadMorphism m (PredTrans ps) wp] (f : m (α → β)) (x : m α) {Q : (α → β) → PreCond ps}
 --  (hf : triple f P (Q, R.2))
 --  (hx : ∀ f, triple x (Q f) (fun a => R.1 (f a), R.2)) :
 --  triple (f <*> x) P R := by
