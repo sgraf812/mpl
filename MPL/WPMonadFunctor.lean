@@ -80,7 +80,11 @@ example :
       WP.ExceptT_run_apply, WP.bind_apply, MonadMorphism.ite_ite, pure_pure, PredTrans.ite_apply,
       PredTrans.pure_apply, MonadReader.read_apply, MonadReaderOf.read_apply,
       ExceptT.monadLift_apply, PredTrans.monadLiftExcept_apply, StateT.monadLift_apply,
-      PredTrans.monadLiftArg_apply, ite_app, ReaderT.read_apply]
-    simp
+      PredTrans.monadLiftArg_apply, ReaderT.read_apply]
+    simp only [ite_app, Bool.not_eq_eq_eq_not, Bool.not_true, Bool.ite_eq_false]
+
+-- perf issues! Find them early
+-- congruence closure use case
+-- functional induction vs. monad
 
 end MPL

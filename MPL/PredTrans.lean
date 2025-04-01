@@ -1,8 +1,10 @@
 import Mathlib.Order.CompleteLattice
 import MPL.MonadMorphism
+import MPL.PostCond
 
 namespace MPL
 
+namespace Hide
 inductive PredShape : Type 1 where
   | pure : PredShape
   | arg : (σ : Type) → PredShape → PredShape
@@ -25,23 +27,19 @@ def FailConds : PredShape → Type
 def PostCond (α : Type) (s : PredShape) : Type :=
   (α → PreCond s) × FailConds s
 
-open PredShape in
-example {ρ ε σ : Type} : PreCond (arg σ (arg ρ (except ε pure))) = (σ → ρ → Prop) := rfl
-
 section PostCondExamples
-open PredShape
 
 variable (α ρ ε ε₁ ε₂ σ σ₁ σ₂ : Type)
-#reduce (types:=true) PreCond (except ε₂ (arg σ₂ (except ε₁ (arg σ₁ pure))))
-#reduce (types:=true) PostCond α (except ε₂ (arg σ₂ (except ε₁ (arg σ₁ pure))))
+#reduce (types:=true) PreCond (.except ε₂ (.arg σ₂ (.except ε₁ (.arg σ₁ .pure))))
+#reduce (types:=true) PostCond α (.except ε₂ (.arg σ₂ (.except ε₁ (.arg σ₁ .pure))))
 -- at one point I also had PredShape.reader, but it's simpler to implement it as state
 -- because then we can turn a precondition into a postcondition without complicated traversals.
 -- Same for writer (presumably).
-example : PostCond α (arg ρ pure) = ((α → ρ → Prop) × Unit) := rfl
-example : PostCond α (except ε pure) = ((α → Prop) × (ε → Prop) × Unit) := rfl
-example : PostCond α (arg σ (except ε pure)) = ((α → σ → Prop) × (ε → Prop) × Unit) := rfl
-example : PostCond α (except ε (arg σ₁ pure)) = ((α → σ₁ → Prop) × (ε → σ₁ → Prop) × Unit) := rfl
-example : PostCond α (arg σ₂ (except ε (arg σ₁ pure))) = ((α → σ₂ → σ₁ → Prop) × (ε → σ₁ → Prop) × Unit) := rfl
+example : PostCond α (.arg ρ .pure) = ((α → ρ → Prop) × Unit) := rfl
+example : PostCond α (.except ε .pure) = ((α → Prop) × (ε → Prop) × Unit) := rfl
+example : PostCond α (.arg σ (.except ε .pure)) = ((α → σ → Prop) × (ε → Prop) × Unit) := rfl
+example : PostCond α (.except ε (.arg σ₁ .pure)) = ((α → σ₁ → Prop) × (ε → σ₁ → Prop) × Unit) := rfl
+example : PostCond α (.arg σ₂ (.except ε (.arg σ₁ .pure))) = ((α → σ₂ → σ₁ → Prop) × (ε → σ₁ → Prop) × Unit) := rfl
 example : PostCond α (.except ε₂ (.arg σ₂ (.except ε₁ (.arg σ₁ .pure)))) = ((α → σ₂ → σ₁ → Prop) × (ε₂ → σ₂ → σ₁ → Prop) × (ε₁ → σ₁ → Prop) × Unit) := rfl
 
 -- #reduce (types := true) ((do pure ((← MonadReaderOf.read) < 13 ∧ (← MonadReaderOf.read) = "hi")) : PreCond (state Nat (state String pure)) Prop)
@@ -78,26 +76,26 @@ noncomputable instance PreCond.instLattice : {ps : PredShape} → CompleteLattic
   | .arg σ s => let _ := @instLattice s; (inferInstance : CompleteLattice (σ → PreCond s))
   | .except ε s => @instLattice s
 
-noncomputable instance PreCond.instPreorder {ps : PredShape} : Preorder (PreCond ps) := inferInstance
-noncomputable instance PreCond.instLE {ps : PredShape} : LE (PreCond ps) := inferInstance
-noncomputable instance PreCond.instTop {ps : PredShape} : Top (PreCond ps) := inferInstance
-noncomputable instance PreCond.instBot {ps : PredShape} : Bot (PreCond ps) := inferInstance
+-- noncomputable instance PreCond.instPreorder {ps : PredShape} : Preorder (PreCond ps) := inferInstance
+-- noncomputable instance PreCond.instLE {ps : PredShape} : LE (PreCond ps) := inferInstance
+-- noncomputable instance PreCond.instTop {ps : PredShape} : Top (PreCond ps) := inferInstance
+-- noncomputable instance PreCond.instBot {ps : PredShape} : Bot (PreCond ps) := inferInstance
 
 theorem PreCond.le_ext {ps} {p q : α → PreCond ps} : p ≤ q ↔ ∀ a, p a ≤ q a := ⟨fun h => h, fun h => h⟩
 
-@[simp]
-theorem PreCond.le_pure_pure {ps} {p q : Prop} : @PreCond.pure ps p ≤ @PreCond.pure ps q ↔ p ≤ q := by
-  induction ps
-  case pure => simp
-  case arg σ s ih => sorry
-  case except ε s ih => sorry
+-- @[simp]
+-- theorem PreCond.le_pure_pure {ps} {p q : Prop} : @PreCond.pure ps p ≤ @PreCond.pure ps q ↔ p ≤ q := by
+--   induction ps
+--   case pure => simp
+--   case arg σ s ih => sorry
+--   case except ε s ih => sorry
 
-@[simp]
-theorem PreCond.ext_pure_pure {ps} {p q : Prop} : @PreCond.pure ps p = @PreCond.pure ps q ↔ p = q := by
-  induction ps
-  case pure => simp
-  case arg σ s ih => sorry
-  case except ε s ih => sorry
+-- @[simp]
+-- theorem PreCond.ext_pure_pure {ps} {p q : Prop} : @PreCond.pure ps p = @PreCond.pure ps q ↔ p = q := by
+--   induction ps
+--   case pure => simp
+--   case arg σ s ih => sorry
+--   case except ε s ih => sorry
 
 theorem PreCond.imp_pure_extract_l {ps} {P : Prop} {P' : PreCond ps} {Q : PreCond ps}
   (h : P → P' ≤ Q) : PreCond.pure P ⊓ P' ≤ Q := by
@@ -138,8 +136,8 @@ noncomputable instance FailConds.instLattice : {ps : PredShape} → CompleteLatt
   | .except ε s => let _ := @instLattice s; (inferInstance : CompleteLattice ((ε → PreCond s) × FailConds s))
 
 -- noncomputable instance FailConds.instLE {ps : PredShape} : LE (FailConds ps) := FailConds.instLattice.toLE
-noncomputable instance PostCond.instPreorder : {ps : PredShape} → Preorder (PostCond α ps) := inferInstance
-noncomputable instance PostCond.instLE {ps : PredShape} : LE (PostCond α ps) := inferInstance
+-- noncomputable instance PostCond.instPreorder : {ps : PredShape} → Preorder (PostCond α ps) := inferInstance
+-- noncomputable instance PostCond.instLE {ps : PredShape} : LE (PostCond α ps) := inferInstance
 
 --attribute [grind =] Prod.le_def Pi.le_def -- le_Prop_eq -- pointfree defn of le_Prop_eq not supported
 --@[grind =]
@@ -160,14 +158,14 @@ lemma PreCond.bot_le {x : PreCond ps} : pure False ≤ x := by
   case except ε s ih => exact ih
 
 @[simp]
-lemma PreCond.pure_true_top {ps : PredShape} : PreCond.pure True = @Top.top (PreCond ps) PreCond.instTop := by
+lemma PreCond.pure_true_top {ps : PredShape} : PreCond.pure True = @Top.top (PreCond ps) _ := by
   induction ps
   case pure => rfl
   case arg σ s ih => ext; exact ih
   case except ε s ih => exact ih
 
 @[simp]
-lemma PreCond.pure_false_bot {ps : PredShape} : PreCond.pure False = @Bot.bot (PreCond ps) PreCond.instBot := by
+lemma PreCond.pure_false_bot {ps : PredShape} : PreCond.pure False = @Bot.bot (PreCond ps) _ := by
   induction ps
   case pure => rfl
   case arg σ s ih => ext; exact ih
@@ -215,15 +213,15 @@ abbrev PostCond.partial (p : α → PreCond ps) : PostCond α ps :=
 instance : Inhabited (PostCond α ps) where
   default := PostCond.total (fun _ => default)
 
-@[simp]
-lemma PostCond.total_fst : (PostCond.total p).1 = p := by rfl
-@[simp]
-lemma PostCond.partial_fst : (PostCond.partial p).1 = p := by rfl
-
-@[simp]
-lemma PostCond.total_snd : (PostCond.total p).2 = FailConds.false := by rfl
-@[simp]
-lemma PostCond.partial_snd : (PostCond.partial p).2 = FailConds.true := by rfl
+--@[simp]
+--lemma PostCond.total_fst : (PostCond.total p).1 = p := by rfl
+--@[simp]
+--lemma PostCond.partial_fst : (PostCond.partial p).1 = p := by rfl
+--
+--@[simp]
+--lemma PostCond.total_snd : (PostCond.total p).2 = FailConds.false := by rfl
+--@[simp]
+--lemma PostCond.partial_snd : (PostCond.partial p).2 = FailConds.true := by rfl
 
 @[simp]
 lemma PostCond.total_def {p : α → PreCond ps} : (p, FailConds.false) = PostCond.total p := rfl
@@ -240,8 +238,10 @@ lemma PostCond.le_partial (p q : α → PreCond ps) : PostCond.partial p ≤ Pos
   simp only [PostCond.partial, Prod.le_def, le_refl, and_true]
   rfl
 
+end Hide
+
 def PredTrans.Mono {ps : PredShape} {α : Type} (x : PostCond α ps → PreCond ps) : Prop :=
-  ∀ Q₁ Q₂, Q₁ ≤ Q₂ → x Q₁ ≤ x Q₂
+  ∀ Q₁ Q₂, Q₁.entails Q₂ → (x Q₁).entails (x Q₂)
 
 @[ext]
 structure PredTrans (ps : PredShape) (α : Type) : Type where
@@ -249,22 +249,28 @@ structure PredTrans (ps : PredShape) (α : Type) : Type where
   mono : PredTrans.Mono apply
 
 def PredTrans.const {ps : PredShape} {α : Type} (p : PreCond ps) : PredTrans ps α :=
-  ⟨fun _ => p, fun _ _ _ => le_rfl⟩
+  ⟨fun _ => p, fun _ _ _ => SProp.entails_refl _⟩
 
 def PredTrans.le {ps : PredShape} {α : Type} (x y : PredTrans ps α) : Prop :=
-  y.apply ≤ x.apply -- the weaker the precondition, the smaller the PredTrans
+  ∀ Q, (y.apply Q).entails (x.apply Q) -- the weaker the precondition, the smaller the PredTrans
 def PredTrans.top {ps : PredShape} {α : Type} : PredTrans ps α :=
   PredTrans.const (PreCond.pure False)
 def PredTrans.bot {ps : PredShape} {α : Type} : PredTrans ps α :=
   PredTrans.const (PreCond.pure True)
-noncomputable def PredTrans.sup {ps : PredShape} {α : Type} : PredTrans ps α → PredTrans ps α → PredTrans ps α :=
-  fun x y => PredTrans.mk (x.apply ⊔ y.apply) sorry
-noncomputable def PredTrans.inf {ps : PredShape} {α : Type} : PredTrans ps α → PredTrans ps α → PredTrans ps α :=
-  fun x y => PredTrans.mk (x.apply ⊓ y.apply) sorry
-noncomputable def PredTrans.sSup {ps : PredShape} {α : Type} : Set (PredTrans ps α) → PredTrans ps α :=
-  fun x => PredTrans.mk (InfSet.sInf { PredTrans.apply p | p ∈ x }) sorry
+noncomputable def PredTrans.sup {ps : PredShape} {α : Type} (x y : PredTrans ps α) : PredTrans ps α :=
+  { apply := fun Q => (x.apply Q).and (y.apply Q), mono := by
+      intro Q₁ Q₂ h
+      simp only [apply]
+      sorry }
+noncomputable def PredTrans.inf {ps : PredShape} {α : Type} (x y : PredTrans ps α) : PredTrans ps α :=
+  { apply := fun Q => (x.apply Q).or (y.apply Q), mono := by
+      intro Q₁ Q₂ h
+      simp only [apply]
+      sorry }
 noncomputable def PredTrans.sInf {ps : PredShape} {α : Type} : Set (PredTrans ps α) → PredTrans ps α :=
-  fun x => PredTrans.mk (SupSet.sSup { PredTrans.apply p | p ∈ x }) sorry
+  fun x => PredTrans.mk (fun Q => sprop(∃ p, ⌜p ∈ x⌝ ∧ p.apply Q)) sorry
+noncomputable def PredTrans.sSup {ps : PredShape} {α : Type} : Set (PredTrans ps α) → PredTrans ps α :=
+  fun x => PredTrans.mk (fun Q => sprop(∀ p, ⌜p ∈ x⌝ → p.apply Q)) sorry
 
 noncomputable instance : CompleteLattice (PredTrans ps α) where
   le := PredTrans.le
@@ -296,9 +302,9 @@ def PredTrans.pure {ps : PredShape} {α : Type} (a : α) : PredTrans ps α :=
 def PredTrans.bind {ps : PredShape} {α β : Type} (x : PredTrans ps α) (f : α → PredTrans ps β) : PredTrans ps β :=
   { apply := fun Q => x.apply (fun a => (f a).apply Q, Q.2), mono := by
       intro Q₁ Q₂ h
-      simp only [apply]
+      rw [apply]
       apply x.mono
-      simp[h.2]
+      refine ⟨?_, h.2⟩
       intro a
       apply (f a).mono
       exact h }
@@ -324,7 +330,7 @@ theorem PredTrans.seq_apply {ps : PredShape} {α β : Type} (f : PredTrans ps (�
   (f <*> x).apply Q = f.apply (fun g => x.apply (fun a => Q.1 (g a), Q.2), Q.2) := by rfl
 
 theorem PredTrans.bind_mono {ps : PredShape} {α β : Type} {x y : PredTrans ps α} {f : α → PredTrans ps β}
-  (h : x ≤ y) : x >>= f ≤ y >>= f := by intro Q; apply le_trans (h (_, Q.2)) le_rfl
+  (h : x ≤ y) : x >>= f ≤ y >>= f := by intro Q; exact (h (_, Q.2))
 
 instance : LawfulMonad (PredTrans ps) where
   bind_pure_comp f x := by simp only [bind, pure, Functor.map, Function.comp_def]
@@ -385,7 +391,7 @@ def PredTrans.popArg {ps : PredShape} {α} (x : PredTrans (.arg σ ps) α) : Sta
     mono := by
       intro Q₁ Q₂ h
       apply x.mono
-      simp[h.2]
+      refine ⟨?_, h.2⟩
       intro r s'
       apply h.1 }
 

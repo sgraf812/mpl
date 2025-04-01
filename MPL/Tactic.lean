@@ -15,12 +15,12 @@ namespace MPL
 open Lean Meta Elab Tactic
 
 theorem wp_apply_triple_conseq {m : Type → Type} {ps : PredShape} [WP m ps] {α} {x : m α} {P : PreCond ps} {Q Q' : PostCond α ps}
-  (h : ⦃P⦄ x ⦃Q⦄) (hpost : wp⟦x⟧.apply Q ≤ wp⟦x⟧.apply Q') :
-  P ≤ wp⟦x⟧.apply Q' := le_trans h hpost
+  (h : ⦃P⦄ x ⦃Q⦄) (hpost : SProp.entails (wp⟦x⟧.apply Q) (wp⟦x⟧.apply Q')) :
+  P.entails (wp⟦x⟧.apply Q') := SProp.entails_trans h hpost
 
 theorem wp_apply_triple_conseq_mono {m : Type → Type} {ps : PredShape} [WP m ps] {α} {x : m α} {P : PreCond ps} {Q Q' : PostCond α ps}
-  (h : ⦃P⦄ x ⦃Q⦄) (hpost : Q ≤ Q') :
-  P ≤ wp⟦x⟧.apply Q' := wp_apply_triple_conseq h (wp⟦x⟧.mono _ _ hpost)
+  (h : ⦃P⦄ x ⦃Q⦄) (hpost : Q.entails Q') :
+  P.entails (wp⟦x⟧.apply Q') := wp_apply_triple_conseq h (wp⟦x⟧.mono _ _ hpost)
 
 macro "xstart" : tactic => `(tactic| unfold triple)
 
@@ -51,6 +51,7 @@ theorem ite_extrude_yield {c : Prop} [Decidable c] {x y : α} :
 
 attribute [wp_simp]
   refl
+  PostCond.entails FailConds.entails_false FailConds.entails_refl FailConds.entails_true FailConds.pure_def SProp.entails_refl
   -- Lawful monad normalization that we don't appear to be needing!
   -- bind_pure_comp map_pure id_map' ExceptT.map_throw bind_map bind_map_left bind_pure pure_bind bind_assoc
   -- MonadMorphism and basic if/then/else:
@@ -79,6 +80,8 @@ attribute [wp_simp]
   ReaderT.withReader_apply
   ExceptT.throw_apply
   ExceptT.tryCatch_apply
+  Except.throw_apply
+  Except.tryCatch_apply
   -- lifting state
   MonadStateOf.get_apply MonadStateOf.getThe_apply MonadState.get_apply
   MonadStateOf.set_apply MonadState.set_apply
@@ -134,7 +137,7 @@ def xapp_n_no_xbind (goal : MVarId) (spec : Option (TSyntax `term)) (thm : Name)
         pruneSolvedGoals
     else
       throwError s!"not an application of a constant: {x}"
-  try let _ ← post_goal.apply (mkConst ``le_refl [.zero]) catch _ => pure ()
+  try let _ ← post_goal.apply (mkConst ``PostCond.entails_refl) catch _ => pure ()
 
 syntax "xapp_no_xbind" (ppSpace colGt term)? : tactic
 
@@ -148,8 +151,8 @@ syntax "xapp" (ppSpace colGt term)? : tactic
 macro_rules
   | `(tactic| xapp_no_simp)       => `(tactic| ((try xbind); xapp_no_xbind))
   | `(tactic| xapp_no_simp $spec) => `(tactic| ((try xbind); xapp_no_xbind $spec))
-  | `(tactic| xapp)               => `(tactic| xapp_no_simp <;> try simp +contextual only [gt_iff_lt, Prod.mk_le_mk, le_refl, and_true])
-  | `(tactic| xapp $spec)         => `(tactic| xapp_no_simp $spec <;> ((try simp +contextual only [gt_iff_lt, Prod.mk_le_mk, le_refl, and_true]); try (guard_target = (_ : Prop); trivial)))
+  | `(tactic| xapp)               => `(tactic| xapp_no_simp <;> try simp +contextual only [gt_iff_lt, Prod.mk_le_mk, le_refl, and_true, PostCond.entails, FailConds.entails_false, FailConds.entails_refl, FailConds.entails_true, FailConds.pure_def, SProp.entails_refl])
+  | `(tactic| xapp $spec)         => `(tactic| xapp_no_simp $spec <;> ((try simp +contextual only [gt_iff_lt, Prod.mk_le_mk, le_refl, and_true, PostCond.entails, FailConds.entails_false, FailConds.entails_refl, FailConds.entails_true, FailConds.pure_def, SProp.entails_refl]); try (guard_target = (_ : Prop); trivial)))
 
 elab "xapp2_no_xbind" spec:optional(term) : tactic => withMainContext do
   xapp_n_no_xbind (← getMainGoal) spec ``wp_apply_triple_conseq
@@ -203,7 +206,6 @@ macro_rules
   | `(tactic| CHONK) => `(tactic| CHONK[if_true_left]) -- if_true_left is redundant, but empty list did not work for some reason.
   | `(tactic| CHONK [$args,*]) => `(tactic| (intros; first
     | (intro; repeat intro) -- expand ≤ on → and PreConds, also turns triple goals into wp goals
-    | assumption
     | CHONK_trivial
     | xapp
     | xwp

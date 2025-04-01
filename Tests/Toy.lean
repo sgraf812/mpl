@@ -208,6 +208,12 @@ theorem test_loop_early_return :
   case some r => simp_all
 
 example : x = 6 ∧ x ≤ 4 → False := by intro h; omega
+
+example : wp⟦do try { throw 42; return 1 } catch _ => return 2 : Except Nat Nat⟧ =
+          wp⟦pure 2 : Except Nat Nat⟧ := by
+  ext Q : 2
+  xwp
+
 section UserStory1
 
 def FinSimpleGraph (n : ℕ) := SimpleGraph (Fin n)

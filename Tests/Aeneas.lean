@@ -35,8 +35,8 @@ instance Result.instWP : WP Result (.except Error .pure) where
   | .fail e => wp⟦throw e : Except Error _⟧
   | .div => PredTrans.top -- const False
 
-instance : WPMonad Result (.except Error .pure) where
-  pure_pure := by intros; simp[wp]
+instance Result.instWPMonad : WPMonad Result (.except Error .pure) where
+  pure_pure := by intros; ext Q; simp[wp, PredTrans.pure, pure, Except.pure, Id.run]
   bind_bind x f := by
     intros
     simp[Result.instWP, bind]
@@ -122,6 +122,7 @@ theorem mul2_add1_spec' (x : U32) (h : 2 * x.val + 1 ≤ U32.max)
   rw[mul2_add1]
   xstart
   intro h
+  xbind
   xapp U32.add_spec' (by omega)
   xapp U32.add_spec' (by simp; omega)
   simp +arith [h]
@@ -139,13 +140,11 @@ theorem U32.add_apply {x y : U32} {Q : PCond U32} :
       simp[hxy, hz.symm, wp]
       sorry -- show Q.1 z ↔ Q.1 (ofNatCore z.val ⋯)
     next h =>
-      simp[wp,HAdd.hAdd,UScalar.add]
+      simp[Result.instWP, HAdd.hAdd, UScalar.add]
       have : ¬x.val + y.val ≤ U32.max → UScalar.tryMk .U32 (Add.add x.val y.val) = Result.fail integerOverflow :=
         sorry -- by definition of tryMk
-      simp[this h]
+      simp only [this h]
       xwp
-      -- goddamn Monad (Except ε)!!
-      sorry
 
 theorem mul2_add1_apply (x : U32) (h : 2 * x.val + 1 ≤ U32.max)
   : wp⟦mul2_add1 x⟧.apply Q = Q.1 (UScalar.ofNatCore (2 * ↑x + (1 : Nat)) sorry) := by
