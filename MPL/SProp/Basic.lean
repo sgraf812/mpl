@@ -3,41 +3,52 @@ import Lean
 namespace MPL
 
 /-- A value indexed by a list of states. -/
-def SVal (σs : List Type) (α : Type) := match σs with
+abbrev SVal (σs : List Type) (α : Type) := match σs with
 | [] => α
 | σ :: σs => σ → SVal σs α
--- Note: SVal is not defined in terms of List.foldr, because that is not reducible.
--- Reducibility is important for simp to apply lemmas such as
---   lemma ite_app {c:Prop} [Decidable c] (t e : α → β) (a : α) : (if c then t else e) a = if c then t a else e a
 
-abbrev SVal.pure {σs : List Type} (a : α) : SVal σs α := match σs with
+/- Note about the reducibility of SVal:
+We need SVal to be reducible, so that simp can apply lemmas such as
+  lemma ite_app {c:Prop} [Decidable c] (t e : α → β) (a : α) : (if c then t else e) a = if c then t a else e a
+However, this makes it impossible to define a `Monad` instance for `SVal σs`.
+We need such a monad instance for idiom bracket notation of `SProp`.
+Hence we define a wrapper type `SVal.M` that is semi-reducible and has the proper `Monad` instance.
+-/
+
+/-- A semi-reducible wrapper around `SVal` equipped with a `Monad` instance. -/
+def SVal.M : List Type → Type → Type := SVal
+
+abbrev SVal.M.pure {σs : List Type} (a : α) : SVal σs α := match σs with
 | [] => a
 | σ :: σs => fun (_ : σ) => pure a
 
-abbrev SVal.bind {σs : List Type} {α β : Type} (m : SVal σs α) (f : α → SVal σs β) : SVal σs β := match σs with
+abbrev SVal.M.bind {σs : List Type} {α β : Type} (m : SVal σs α) (f : α → SVal σs β) : SVal σs β := match σs with
 | [] => f m
 | σ :: σs => fun (s : σ) => bind (m s) (f · s)
 
-instance (σs : List Type) : Monad (SVal σs) where
-  pure := SVal.pure
-  bind := SVal.bind
+instance (σs : List Type) : Monad (SVal.M σs) where
+  pure := SVal.M.pure
+  bind := SVal.M.bind
 
-instance (σs : List Type) : MonadReaderOf σ (SVal (σ::σs)) where
-  read := fun s => pure s
+instance (σs : List Type) : MonadReaderOf σ (SVal.M (σ::σs)) where
+  read := fun s => pure (f:=SVal.M σs) s
 
-instance (σs : List Type) [MonadReaderOf σ₁ (SVal σs)] : MonadReaderOf σ₁ (SVal (σ₂::σs)) where
-  read := fun _ => read
+instance (σs : List Type) [MonadReaderOf σ₁ (SVal.M σs)] : MonadReaderOf σ₁ (SVal.M (σ₂::σs)) where
+  read := fun _ => read (m:=SVal.M σs)
 
 @[simp]
-theorem SVal.pure_empty (a : α) : Pure.pure (f:=SVal []) a = a := rfl
+theorem SVal.M.pure_empty (a : α) : Pure.pure (f:=SVal.M []) a = a := rfl
 
 /-- A Proposition indexed by a list of states. -/
 abbrev SProp (σs : List Type) : Type := SVal σs Prop
 
-def SProp.pure {σs : List Type} (P : Prop) : SProp σs := Pure.pure (f:=SVal σs) P
+abbrev SProp.pure {σs : List Type} (P : Prop) : SProp σs := SVal.M.pure P
 
 @[simp]
 theorem SProp.pure_empty (P : Prop) : SProp.pure P (σs:=[]) = P := rfl
+
+@[simp]
+theorem SProp.pure_apply (P : Prop) (s : σ) : SProp.pure (σs:=σ::σs) P s = SProp.pure P := rfl
 
 @[ext]
 theorem SProp.ext {σs : List Type} {P Q : SProp (σ::σs)} : (∀ s, P s = Q s) → P = Q := funext
@@ -47,24 +58,31 @@ def SProp.entails {σs : List Type} (P Q : SProp σs) : Prop := match σs with
 | [] => P → Q
 | σ :: _ => ∀ (s : σ), entails (P s) (Q s)
 
+@[simp]
 abbrev SProp.and {σs : List Type} (P Q : SProp σs) : SProp σs := match σs with
 | [] => P ∧ Q
 | σ :: _ => fun (s : σ) => and (P s) (Q s)
 
+@[simp]
 abbrev SProp.or {σs : List Type} (P Q : SProp σs) : SProp σs := match σs with
 | [] => P ∨ Q
 | σ :: _ => fun (s : σ) => or (P s) (Q s)
 
+@[simp]
 abbrev SProp.imp {σs : List Type} (P Q : SProp σs) : SProp σs := match σs with
 | [] => P → Q
 | σ :: _ => fun (s : σ) => imp (P s) (Q s)
 
 abbrev SProp.iff {σs : List Type} (P Q : SProp σs) : SProp σs := and (imp P Q) (imp Q P)
+@[simp]
+theorem SProp.iff_apply {σs : List Type} {P Q : SProp (σ::σs)} (s : σ) : (P.iff Q) s = SProp.iff (P s) (Q s) := by simp[SProp.iff]
 
+@[simp]
 abbrev SProp.exists {α} {σs : List Type} (P : α → SProp σs) : SProp σs := match σs with
 | [] => ∃ a, P a
 | σ :: _ => fun (s : σ) => «exists» (fun a => P a s)
 
+@[simp]
 abbrev SProp.forall {α} {σs : List Type} (P : α → SProp σs) : SProp σs := match σs with
 | [] => ∀ a, P a
 | σ :: _ => fun (s : σ) => «forall» (fun a => P a s)
@@ -117,3 +135,6 @@ theorem SProp.and_self {σs : List Type} (P : SProp σs) : P.and P = P := by
   induction σs
   case nil => simp only [_root_.and_self, SProp.pure_empty]
   case cons σ σs ih => ext s; exact ih (P s)
+
+@[simp]
+def SProp.idiom {σs : List Type} (P : SVal.M σs Prop) : SProp σs := P

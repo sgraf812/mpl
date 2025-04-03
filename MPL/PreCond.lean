@@ -26,16 +26,6 @@ instance : Inhabited (PreCond ps) where
 
 example {ρ ε σ : Type} : PreCond (.arg σ (.arg ρ (.except ε .pure))) = (σ → ρ → Prop) := rfl
 
--- noncomputable instance PreCond.instLattice : {ps : PredShape} → CompleteLattice (PreCond ps)
---   | .pure => ((inferInstance : CompleteLattice Prop) : CompleteLattice (PreCond .pure))
---   | .arg σ s => let _ := @instLattice s; (inferInstance : CompleteLattice (σ → PreCond s))
---   | .except ε s => @instLattice s
---
--- noncomputable instance PreCond.instPreorder {ps : PredShape} : Preorder (PreCond ps) := inferInstance
--- noncomputable instance PreCond.instLE {ps : PredShape} : LE (PreCond ps) := inferInstance
--- noncomputable instance PreCond.instTop {ps : PredShape} : Top (PreCond ps) := inferInstance
--- noncomputable instance PreCond.instBot {ps : PredShape} : Bot (PreCond ps) := inferInstance
-
 theorem PreCond.imp_pure_extract_l {ps} {P : Prop} {P' : PreCond ps} {Q : PreCond ps}
   (h : P → P' ⊢ₛ Q) : ⌜P⌝ ∧ P' ⊢ₛ Q := by
   induction ps

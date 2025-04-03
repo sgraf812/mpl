@@ -6,7 +6,7 @@ universe u
 variable {m : Type → Type u} {ps : PredShape} [WP m ps]
 
 def triple (x : m α) (P : PreCond ps) (Q : PostCond α ps) : Prop :=
-  SProp.entails P (wp⟦x⟧.apply Q)
+  P ⊢ₛ wp⟦x⟧.apply Q
 
 syntax:lead "⦃" term "⦄ " term:lead " ⦃" term "⦄" : term
 syntax:lead "⦃" term "⦄ " term:lead " ⦃⇓" ident " | " term "⦄" : term
@@ -23,7 +23,7 @@ theorem triple_conseq {α} (x : m α) {P P' : PreCond ps} {Q Q' : PostCond α ps
 
 theorem triple_extract_persistent {α} {P : Prop} {P' : PreCond ps} {Q : PostCond α ps}
   (x : m α) (h : P → triple x P' Q) :
-  triple x sprop(⌜P⌝ ∧ P') Q := PreCond.imp_pure_extract_l h
+  triple (ps:=ps) x sprop(⌜P⌝ ∧ P') Q := PreCond.imp_pure_extract_l h
 
 theorem triple_pure [Monad m] [MonadMorphism m (PredTrans ps) wp] {α} {Q : PostCond α ps} (a : α) (himp : P.entails (Q.1 a)) :
   triple (pure (f:=m) a) P Q := by apply SProp.entails_trans himp (by simp only [pure_pure, PredTrans.pure_apply, SProp.entails_refl])
@@ -53,8 +53,8 @@ theorem triple_bind2 [Monad m] [MonadMorphism m (PredTrans ps) wp] {α β} {P : 
 --    exact hf
 
 theorem triple_extract_persistent_true {α} (x : m α) {P : Prop} {Q : PostCond α ps}
-  (h : P → triple x (sprop(⌜True⌝)) Q) :
-  triple x (sprop(⌜P⌝)) Q := by
+  (h : P → triple (ps:=ps) x (sprop(⌜True⌝)) Q) :
+  triple (ps:=ps) x (sprop(⌜P⌝)) Q := by
     have : sprop(⌜P⌝) = (sprop(⌜P⌝ ∧ ⌜True⌝) : PreCond ps) := by simp
     rw[this]
     exact triple_extract_persistent x h

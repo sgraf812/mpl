@@ -10,7 +10,7 @@ def FailConds : PredShape → Type
 abbrev FailConds.const {ps : PredShape} (p : Prop) : FailConds ps := match ps with
   | .pure => ()
   | .arg σ s => @FailConds.const s p
-  | .except ε s => (fun _ε => SProp.pure p, @FailConds.const s p)
+  | .except ε s => (fun _ε => sprop(⌜p⌝), @FailConds.const s p)
 
 def FailConds.true : FailConds ps := FailConds.const True
 def FailConds.false : FailConds ps := FailConds.const False

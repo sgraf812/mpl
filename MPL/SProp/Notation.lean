@@ -86,13 +86,15 @@ macro_rules
   | `(sprop(∃ $x:ident, $P)) => ``(SProp.exists (fun $x => sprop($P)))
   | `(sprop(exists $x:ident, $P)) => ``(SProp.exists (fun $x => sprop($P)))
   | `(‹$t›ₛ) => `(← readThe $t)
-set_option quotPrecheck false in
-macro_rules
-  | `(sprop(⌜$t⌝)) => do
-    let t ← expandMacros t
-    ``(do SProp.pure $(⟨t⟩))
 
-def theNat : SVal [Nat, Bool] Nat := fun n b => n
+open Elab Term in
+set_option quotPrecheck false in
+elab_rules : term <= ety
+  | `(⌜$t⌝) => do
+    let t ← Elab.liftMacroM (expandMacros t)
+    elabTerm (← ``(SProp.idiom do (SProp.pure $(⟨t⟩)))) ety
+
+def theNat : SVal.M [Nat, Bool] Nat := fun n b => n
 example (P Q : SProp [Nat, Bool]): SProp [Char, Nat, Bool] :=
   sprop(fun c => ((∀ y, if y = 4 then ⌜y = (← theNat)⌝ ∧ P else Q) ∧ Q) → (∃ x, P → if (x : Bool) then Q else P))
 
@@ -105,7 +107,12 @@ delab_rule SProp.entails
     let P ← unpackSprop P; let Q ← unpackSprop Q;
     ``($P ⊢ₛ $Q)
 delab_rule SProp.pure
-  | `($_ $φ $ts*) => ``(sprop(⌜$φ⌝ $ts*))
+  | `($_ $φ $ts*) => if ts.isEmpty then ``(sprop(⌜$φ⌝)) else ``(sprop(⌜$φ⌝ $ts*))
+delab_rule SProp.idiom
+  | `($_ $t $ts*) => do
+    match t with
+    | `(sprop(⌜$φ⌝)) => if ts.isEmpty then ``(sprop(⌜$φ⌝)) else ``(sprop(⌜$φ⌝ $ts*))
+    | _ => throw ()
 delab_rule SProp.and
   | `($_ $P $Q) => do
     let P ← unpackSprop P; let Q ← unpackSprop Q;
