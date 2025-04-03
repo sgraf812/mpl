@@ -68,9 +68,12 @@ theorem MonadWithReaderOf.withTheReader_apply [MonadWithReaderOf ρ m] [WP m sh]
 theorem MonadWithReader.withReader_apply [MonadWithReaderOf ρ m] [WP m sh] (f : ρ → ρ) (x : m α) :
   wp⟦MonadWithReader.withReader f x⟧.apply Q = wp⟦MonadWithReaderOf.withReader f x⟧.apply Q := rfl
 
-lemma ite_app {c:Prop} [Decidable c] (t e : α → β) (a : α) : (if c then t else e) a = if c then t a else e a := by
+lemma ite_app {c:Prop} [Decidable c] (t e : SVal (α::σs) β) (a : α) : (if c then t else e) a = if c then t a else e a := by
   split <;> rfl
-
+#discr_tree_simp_key ite_app
+example {Q : PostCond ℕ (PredShape.except ℕ (PredShape.arg ℕ (PredShape.arg Bool PredShape.pure)))}:
+  ((fun s r => ((if r = false then fun s x => Q.1 0 s r else fun s x => Q.1 1 s r) :  : PreCond (PredShape.except ℕ (PredShape.arg ℕ (PredShape.arg Bool PredShape.pure)))) s !r)) = sorry := by
+  simp
 example :
   wp (m:= ExceptT Nat (StateT Nat (ReaderT Bool Id))) (withTheReader Bool not (do if (← read) then return 0 else return 1)) =
   wp (m:= ExceptT Nat (StateT Nat (ReaderT Bool Id))) (do if (← read) then return 1 else return 0) := by
@@ -81,6 +84,7 @@ example :
       PredTrans.pure_apply, MonadReader.read_apply, MonadReaderOf.read_apply,
       ExceptT.monadLift_apply, PredTrans.monadLiftExcept_apply, StateT.monadLift_apply,
       PredTrans.monadLiftArg_apply, ReaderT.read_apply]
+    simp
     simp only [ite_app, Bool.not_eq_eq_eq_not, Bool.not_true, Bool.ite_eq_false]
 
 end MPL

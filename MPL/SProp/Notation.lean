@@ -90,7 +90,7 @@ set_option quotPrecheck false in
 macro_rules
   | `(sprop(⌜$t⌝)) => do
     let t ← expandMacros t
-    ``(SProp.idiom (do pure $(⟨t⟩)))
+    ``(do SProp.pure $(⟨t⟩))
 
 def theNat : SVal [Nat, Bool] Nat := fun n b => n
 example (P Q : SProp [Nat, Bool]): SProp [Char, Nat, Bool] :=
@@ -105,7 +105,7 @@ delab_rule SProp.entails
     let P ← unpackSprop P; let Q ← unpackSprop Q;
     ``($P ⊢ₛ $Q)
 delab_rule SProp.pure
-  | `($_ $φ) => ``(sprop(⌜$φ⌝))
+  | `($_ $φ $ts*) => ``(sprop(⌜$φ⌝ $ts*))
 delab_rule SProp.and
   | `($_ $P $Q) => do
     let P ← unpackSprop P; let Q ← unpackSprop Q;
@@ -136,12 +136,6 @@ delab_rule SProp.iff
   | `($_ $P $Q) => do
     let P ← unpackSprop P; let Q ← unpackSprop Q;
     ``(sprop($P ↔ $Q))
-delab_rule SProp.idiom
-  | `($_ $t $ts*) => do
-    unless t.raw.isOfKind ``Lean.Parser.Term.app do throw ()
-    unless t.raw[0].getId == `pure || t.raw[0].getId == ``pure || t.raw[0].getId == ``SProp.pure do throw ()
-    let a : Term := ⟨t.raw[1][0]⟩
-    ``(sprop(⌜$a⌝ $ts*))
 
 #check fun P Q => sprop(fun n => ((∀ y, if y = n then P else ⌜True⌝) ∧ Q) → P → (∃ x, P → if (x : Bool) then Q else P))
 #check fun P Q => sprop(fun n => ((∀ y, if y = n then ⌜4 = ‹Nat›ₛ⌝ else Q) ∧ Q) → P → (∃ x, P → if (x : Bool) then Q else P))

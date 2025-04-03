@@ -10,7 +10,7 @@ def FailConds : PredShape → Type
 abbrev FailConds.const {ps : PredShape} (p : Prop) : FailConds ps := match ps with
   | .pure => ()
   | .arg σ s => @FailConds.const s p
-  | .except ε s => (fun _ε => pure p, @FailConds.const s p)
+  | .except ε s => (fun _ε => SProp.pure p, @FailConds.const s p)
 
 def FailConds.true : FailConds ps := FailConds.const True
 def FailConds.false : FailConds ps := FailConds.const False
@@ -24,8 +24,10 @@ def FailConds.entails {ps : PredShape} (x y : FailConds ps) : Prop :=
   | .arg _ ps => @entails ps x y
   | .except _ ps => (∀ e, x.1 e ⊢ₛ y.1 e) ∧ @entails ps x.2 y.2
 
+infixr:25 "⊢ₑ" => FailConds.entails
+
 @[simp, refl]
-theorem FailConds.entails_refl {ps : PredShape} (x : FailConds ps) : FailConds.entails x x := by
+theorem FailConds.entails_refl {ps : PredShape} (x : FailConds ps) : x ⊢ₑ x := by
   induction ps
   case pure => simp[entails]
   case arg σ s ih => exact (ih x)
@@ -35,17 +37,16 @@ theorem FailConds.entails_refl {ps : PredShape} (x : FailConds ps) : FailConds.e
 @[simp]
 theorem FailConds.pure_def {x : FailConds .pure} : x = () := rfl
 
-#discr_tree_simp_key PreCond.entails_false
 @[simp]
-theorem FailConds.entails_false {x : FailConds ps} : FailConds.entails FailConds.false x := by
+theorem FailConds.entails_false {x : FailConds ps} : FailConds.false ⊢ₑ x := by
   simp only [false]
   induction ps
   case pure => simp[entails]
   case arg σ s ih => exact ih
-  case except ε s ih => simp[entails, PreCond.entails_false, implies_true, ih, and_self]
+  case except ε s ih => simp only [entails, PreCond.entails_false, implies_true, ih, and_self]
 
 @[simp]
-theorem FailConds.entails_true {x : FailConds ps} : FailConds.entails x FailConds.true := by
+theorem FailConds.entails_true {x : FailConds ps} : x ⊢ₑ FailConds.true := by
   simp only [true]
   induction ps
   case pure => simp[entails]
@@ -78,8 +79,10 @@ instance : Inhabited (PostCond α ps) where
 abbrev PostCond.entails (p q : PostCond α ps) : Prop :=
   (∀ a, SProp.entails (p.1 a) (q.1 a)) ∧ FailConds.entails p.2 q.2
 
+infixr:25 "⊢ₚ" => PostCond.entails
+
 @[refl,simp]
-abbrev PostCond.entails_refl (Q : PostCond α ps) : PostCond.entails Q Q := by
+abbrev PostCond.entails_refl (Q : PostCond α ps) : Q ⊢ₚ Q := by
   simp only [entails, PreCond, SProp.entails_refl, implies_true, FailConds.entails_refl, and_self]
 
 @[simp]
@@ -89,9 +92,9 @@ theorem PostCond.total_def {p : α → PreCond ps} : (p, FailConds.false) = Post
 theorem PostCond.partial_def {p : α → PreCond ps} : (p, FailConds.true) = PostCond.partial p := rfl
 
 @[simp]
-theorem PostCond.entails_total (p : α → PreCond ps) (q : PostCond α ps) : (PostCond.total p).entails q ↔ ∀ a, SProp.entails (p a) (q.1 a) := by
+theorem PostCond.entails_total (p : α → PreCond ps) (q : PostCond α ps) : (PostCond.total p) ⊢ₚ q ↔ ∀ a, p a ⊢ₛ q.1 a := by
   simp only [total, entails, FailConds.entails_false, and_true]
 
 @[simp]
-theorem PostCond.entails_partial (p : PostCond α ps) (q : α → PreCond ps) : p.entails (PostCond.partial q) ↔ ∀ a, SProp.entails (p.1 a) (q a) := by
+theorem PostCond.entails_partial (p : PostCond α ps) (q : α → PreCond ps) : p ⊢ₚ (PostCond.partial q) ↔ ∀ a, p.1 a ⊢ₛ q a := by
   simp only [total, entails, FailConds.entails_true, and_true]
