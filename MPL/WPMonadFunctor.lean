@@ -83,8 +83,4 @@ example :
       PredTrans.monadLiftArg_apply, ReaderT.read_apply]
     simp only [ite_app, Bool.not_eq_eq_eq_not, Bool.not_true, Bool.ite_eq_false]
 
--- perf issues! Find them early
--- congruence closure use case
--- functional induction vs. monad
-
 end MPL

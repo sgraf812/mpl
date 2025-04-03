@@ -2,13 +2,39 @@ import Lean
 
 namespace MPL
 
-/-- A Proposition indexed by a list of states. -/
-abbrev SProp (σs : List Type) : Type := match σs with
-| [] => Prop
-| (σ::σs) => σ → SProp σs
+/-- A value indexed by a list of states. -/
+def SVal (σs : List Type) (α : Type) := match σs with
+| [] => α
+| σ :: σs => σ → SVal σs α
 -- Note: SProp is not defined in terms of List.foldr, because that is not reducible.
 -- Reducibility is important for simp to apply lemmas such as
 --   lemma ite_app {c:Prop} [Decidable c] (t e : α → β) (a : α) : (if c then t else e) a = if c then t a else e a
+
+abbrev SVal.pure {σs : List Type} (a : α) : SVal σs α := match σs with
+| [] => a
+| σ :: σs => fun (_ : σ) => pure a
+
+abbrev SVal.bind {σs : List Type} {α β : Type} (m : SVal σs α) (f : α → SVal σs β) : SVal σs β := match σs with
+| [] => f m
+| σ :: σs => fun (s : σ) => bind (m s) (f · s)
+
+instance (σs : List Type) : Monad (SVal σs) where
+  pure := SVal.pure
+  bind := SVal.bind
+
+instance (σs : List Type) : MonadReaderOf σ (SVal (σ::σs)) where
+  read := fun s => pure s
+
+instance (σs : List Type) [MonadReaderOf σ₁ (SVal σs)] : MonadReaderOf σ₁ (SVal (σ₂::σs)) where
+  read := fun _ => read
+
+@[simp]
+theorem SVal.pure_pure (a : α) : Pure.pure (f:=SVal []) a = a := rfl
+
+/-- A Proposition indexed by a list of states. -/
+abbrev SProp (σs : List Type) : Type := SVal σs Prop
+
+abbrev SProp.pure {σs : List Type} (P : Prop) : SProp σs := Pure.pure (f:=SVal σs) P
 
 @[ext]
 theorem SProp.ext {σs : List Type} {P Q : SProp (σ::σs)} : (∀ s, P s = Q s) → P = Q := funext
@@ -17,10 +43,6 @@ theorem SProp.ext {σs : List Type} {P Q : SProp (σ::σs)} : (∀ s, P s = Q s)
 def SProp.entails {σs : List Type} (P Q : SProp σs) : Prop := match σs with
 | [] => P → Q
 | σ :: _ => ∀ (s : σ), entails (P s) (Q s)
-
-abbrev SProp.pure {σs : List Type} (P : Prop) : SProp σs := match σs with
-| [] => P
-| σ :: _ => fun (_ : σ) => pure P
 
 abbrev SProp.and {σs : List Type} (P Q : SProp σs) : SProp σs := match σs with
 | [] => P ∧ Q
@@ -66,29 +88,31 @@ theorem SProp.entails_trans {σs : List Type} {P Q R : SProp σs} : P.entails Q 
 @[simp]
 theorem SProp.and_true {σs : List Type} (P : SProp σs) : P.and (pure True) = P := by
   induction σs
-  case nil => simp only [_root_.and_true]
+  case nil => simp only [_root_.and_true, SVal.pure_pure]
   case cons σ σs ih => ext s; exact ih (P s)
 
 @[simp]
 theorem SProp.true_and {σs : List Type} (P : SProp σs) : (pure True).and P = P := by
   induction σs
-  case nil => simp only [_root_.true_and]
+  case nil => simp only [_root_.true_and, SVal.pure_pure]
   case cons σ σs ih => ext s; exact ih (P s)
 
 @[simp]
 theorem SProp.and_false {σs : List Type} (P : SProp σs) : P.and (pure False) = pure False := by
   induction σs
-  case nil => simp only [_root_.and_false]
+  case nil => simp only [_root_.and_false, SVal.pure_pure]
   case cons σ σs ih => ext s; exact ih (P s)
 
 @[simp]
 theorem SProp.false_and {σs : List Type} (P : SProp σs) : (pure False).and P = pure False := by
   induction σs
-  case nil => simp only [_root_.false_and]
+  case nil => simp only [_root_.false_and, SVal.pure_pure]
   case cons σ σs ih => ext s; exact ih (P s)
 
 @[simp]
 theorem SProp.and_self {σs : List Type} (P : SProp σs) : P.and P = P := by
   induction σs
-  case nil => simp only [_root_.and_self]
+  case nil => simp only [_root_.and_self, SVal.pure_pure]
   case cons σ σs ih => ext s; exact ih (P s)
+
+def SProp.idiom {σs : List Type} (P : SVal σs Prop) : SProp σs := P

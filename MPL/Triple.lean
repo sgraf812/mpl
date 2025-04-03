@@ -8,15 +8,11 @@ variable {m : Type → Type u} {ps : PredShape} [WP m ps]
 def triple (x : m α) (P : PreCond ps) (Q : PostCond α ps) : Prop :=
   SProp.entails P (wp⟦x⟧.apply Q)
 
--- syntax:lead "⦃" sprop "⦄ " term:lead " ⦃" sprop "⦄" : term
--- syntax:lead "⦃" sprop "⦄ " term:lead " ⦃⇓" ident " | " sprop "⦄" : term
--- macro_rules
---   | `(⦃$P⦄ $x:term ⦃$Q⦄) => `(triple $x sprop($P) sprop($Q))
---   | `(⦃$P⦄ $x:term ⦃⇓ $v | $Q⦄) => `(triple $x sprop($P) sprop(fun $v => $Q))
-notation:lead "⦃" P "⦄ " x:lead " ⦃" Q "⦄" =>
-  triple x P Q
-notation:lead "⦃" P "⦄ " x:lead " ⦃⇓" v " | " Q "⦄" =>
-  ⦃P⦄ x ⦃PostCond.total fun v => Q⦄
+syntax:lead "⦃" term "⦄ " term:lead " ⦃" term "⦄" : term
+syntax:lead "⦃" term "⦄ " term:lead " ⦃⇓" ident " | " term "⦄" : term
+macro_rules
+  | `(⦃$P⦄ $x:term ⦃$Q⦄) => `(triple $x sprop($P) sprop($Q))
+  | `(⦃$P⦄ $x:term ⦃⇓ $v | $Q⦄) => `(triple $x sprop($P) (PostCond.total fun $v => sprop($Q)))
 
 theorem triple_conseq {α} (x : m α) {P P' : PreCond ps} {Q Q' : PostCond α ps}
   (hp : P.entails P' := by simp) (hq : Q'.entails Q := by simp) (h : triple x P' Q') :

@@ -409,7 +409,7 @@ theorem prog.spec : ⦃isValid⦄ prog n ⦃⇓r | PreCond.pure (r > 100) ⊓ is
   simp[h]
   omega
 
-theorem prog.spec' : ⦃isValid⦄ prog n ⦃⇓r | ⌜r > 100⌝ ∧ isValid⦄ := by
+theorem prog.spec' : ⦃isValid⦄ prog n ⦃⇓r | sprop(⌜r > 100⌝ ∧ isValid)⦄ := by
   unfold prog
   xintro □h
   xapp op.spec

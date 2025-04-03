@@ -32,125 +32,117 @@ end Delab
 
 namespace MPL
 
-declare_syntax_cat sprop
-
 open Lean Macro Parser
 
-def spropBasicFun : Parser := leading_parser
-  ppGroup (many1 (ppSpace >> Term.funBinder) >> Term.optType >> unicodeSymbol " ↦" " =>") >> ppSpace >> categoryParser `sprop 0
+-- define `sprop` embedding in `term`.
+-- An explicit `sprop` marker avoids exponential blowup in terms
+-- that do not opt into the extended syntax.
+syntax:max "sprop(" term ")" : term
+syntax:max "term(" term ")" : term
 
-def spropForall := leading_parser:leadPrec
-  unicodeSymbol "∀" "forall" >>
-  many1 (ppSpace >> (Term.binderIdent <|> Term.bracketedBinder)) >>
-  Term.optType >> ", " >> categoryParser `sprop 0
-
--- define `sprop` embedding in `term`
-syntax:max "sprop(" sprop ")" : term
-
-syntax:max "term(" term ")" : sprop
-syntax:max "(" sprop ")" : sprop
-syntax:max ident : sprop
-syntax:max "?" ident : sprop
-syntax:80 sprop:80 term:81 : sprop
-syntax:lead "fun " spropBasicFun : sprop
-@[inherit_doc ite] syntax (name := ipropIfThenElse)
-  ppRealGroup(ppRealFill(ppIndent("if " term " then") ppSpace sprop)
-    ppDedent(ppSpace) ppRealFill("else " sprop)) : sprop
-syntax:min sprop " : " term : sprop
-
--- Now the actual logic.
-/-- Embedding of pure Lean propositions. -/
-syntax "⌜" term "⌝" : sprop
-/-- Conjunction in SProp. -/
-syntax:35 sprop:36 " ∧ " sprop:35 : sprop
-/-- Disjunction in SProp. -/
-syntax:35 sprop:36 " ∨ " sprop:35 : sprop
-/-- Implication in SProp. -/
-syntax:25 sprop:26 " → " sprop:25 : sprop
-/-- Bidirectional implication in SProp. -/
-syntax:20 sprop:21 " ↔ " sprop:21 : sprop
-/-- Entailment in SProp. -/
-syntax:25 sprop:26 " → " sprop:25 : sprop
-/-- Disjunction in SProp. -/
-syntax:35 sprop:36 " ∨ " sprop:35 : sprop
-/-- Universal quantification in SProp. -/
-syntax:lead spropForall : sprop
-/-- Existential quantification in SProp. -/
-syntax "∃" explicitBinders ", " sprop : sprop
-syntax "exists" explicitBinders ", " sprop : sprop
-/-- ‹t› in sprop -/
-syntax "‹" term "› " : sprop
-
--- /-- Entailment predicate on indexed propositions. -/
--- syntax:25 sprop:29 " ⊢ " sprop:25 : term
--- macro_rules
---   | `($P:sprop ⊢ $Q:sprop) => ``(SProp.entails sprop($P) sprop($Q))
-
+-- allow fallback to `term`
 macro_rules
   | `(sprop(term($t))) => pure t
-  | `(sprop(($P))) => ``((sprop($P)))
-  | `(sprop($x:ident)) => ``($x)
-  | `(sprop(?$x:ident)) => ``(?$x)
-  | `(sprop($P $Q)) => ``(sprop($P) $Q)
-  | `(sprop(fun $[$bs]* $[: $ty]? => $p)) => ``(fun $bs* $[: $ty]? => sprop($p))
-  | `(sprop(if $c then $t else $e)) => ``(if $c then sprop($t) else sprop($e))
-  | `(sprop($P : $t)) => ``((sprop($P) : $t))
+  | `(sprop($t))       => pure t
 
-  | `(sprop(⌜$t⌝)) => ``(SProp.pure $t)
+-- push `sprop` inside some `term` constructs
+macro_rules
+  | `(sprop(($P)))                  => ``((sprop($P)))
+  | `(sprop(fun $xs* => $b))        => ``(fun $xs* => sprop($b))
+  | `(sprop(if $c then $t else $e)) => ``(if $c then sprop($t) else sprop($e))
+  | `(sprop(($P : $t)))             => ``((sprop($P) : $t))
+
+/-- Remove an `sprop` layer from a `term` syntax object. -/
+-- inverts the rules above.
+partial def unpackSprop [Monad m] [MonadRef m] [MonadQuotation m] : Term → m Term
+  | `(sprop($P))             => do `($P)
+  | `(($P))                  => do `(($(← unpackSprop P)))
+  | `(if $c then $t else $e) => do
+    let t ← unpackSprop t
+    let e ← unpackSprop e
+    `(if $c then $t else $e)
+  | `(fun $xs* => $b)        => do
+    let b ← unpackSprop b
+    `(fun $xs* => $b)
+  | `(($P : $t))             => do ``(($(← unpackSprop P) : $t))
+  | `($t)                    => `($t)
+
+-- Now the actual logic.
+/-- Embedding of pure Lean propositions into `SProp`. -/
+syntax "⌜" term "⌝" : term
+/-- Entailment in `SProp`. -/
+syntax:25 term:26 " ⊢ₛ " term:25 : term
+/-- ‹t› in `SProp`. -/
+syntax "‹" term "›ₛ" : term
+
+macro_rules
+  | `($P ⊢ₛ $Q) => ``(SProp.entails sprop($P) sprop($Q))
   | `(sprop($P ∧ $Q)) => ``(SProp.and sprop($P) sprop($Q))
   | `(sprop($P ∨ $Q)) => ``(SProp.or sprop($P) sprop($Q))
   | `(sprop($P → $Q)) => ``(SProp.imp sprop($P) sprop($Q))
   | `(sprop($P ↔ $Q)) => ``(SProp.iff sprop($P) sprop($Q))
   | `(sprop(∀ $x:ident, $P)) => ``(SProp.forall (fun $x => sprop($P)))
   | `(sprop(∀ $x:ident $xs*, $P)) => ``(SProp.forall (fun $x => sprop(∀ $xs*, $P)))
---  | `(sprop(∀ $x: $xs*, $P)) => ``(SProp.forall (fun $x => sprop(∀ $xs*, $P $x))) -- urgh
-  | `(sprop(∃ $x:ident, $P)) => ``(SProp.exists (fun $x => sprop($P))) -- TODO: support multiple binders
+  | `(sprop(∃ $x:ident, $P)) => ``(SProp.exists (fun $x => sprop($P)))
+  | `(sprop(exists $x:ident, $P)) => ``(SProp.exists (fun $x => sprop($P)))
+  | `(‹$t›ₛ) => `(← readThe $t)
+set_option quotPrecheck false in
+macro_rules
+  | `(sprop(⌜$t⌝)) => do
+    let t ← expandMacros t
+    ``(SProp.idiom (do pure $(⟨t⟩)))
 
-example (P Q : SProp [Bool]): SProp [Nat, Bool] :=
-  sprop(fun n => ((∀ y, if y = n then P else Q) ∧ Q) → (∃ x, P → if (x : Bool) then Q else P))
+def theNat : SVal [Nat, Bool] Nat := fun n b => n
+example (P Q : SProp [Nat, Bool]): SProp [Char, Nat, Bool] :=
+  sprop(fun c => ((∀ y, if y = 4 then ⌜y = (← theNat)⌝ ∧ P else Q) ∧ Q) → (∃ x, P → if (x : Bool) then Q else P))
 
-/-- Remove an `sprop` quotation from a `term` syntax object. -/
-partial def unpacksprop [Monad m] [MonadRef m] [MonadQuotation m] : Term → m (TSyntax `sprop)
-  | `(sprop($P))             => do `(sprop|$P)
-  | `($x:ident)              => do `(sprop|$x:ident)
-  | `(?$x:ident)             => do `(sprop|?$x:ident)
-  | `(($P))                  => do `(sprop|$(← unpacksprop P))
-  | `($P $Q)                 => do `(sprop|$(← unpacksprop P) $Q)
-  | `(fun $[$bs]* $[: $ty]? => $p) => do `(sprop|fun $[$bs]* $[: $ty]? => $(← unpacksprop p))
-  | `(if $c then $t else $e) => do `(sprop|if $c then $(← unpacksprop t) else $(← unpacksprop e))
-  | `(($P : $t))             => do `(sprop|$(← unpacksprop P) : $t)
+#check fun P Q => sprop(fun n => ((∀ y, if y = n then P else Q) ∧ Q) → P → (∃ x, P → if (x : Bool) then Q else P))
+#check fun P Q => sprop(fun n => ((∀ y, if y = n then ⌜‹Nat›ₛ = 4⌝ else Q) ∧ Q) → P → (∃ x, P → if (x : Bool) then Q else P))
+#check fun P Q => sprop(fun (n:Nat) => ((∀ y, if y = n then ⌜(← theNat) = 4⌝ else Q) ∧ Q) → P → (∃ x, P → if (x : Bool) then Q else P))
 
-  | `($P ∧ $Q)               => do `(sprop|$(← unpacksprop P) ∧ $(← unpacksprop Q))
-  | `(∀x, $P ∧ $Q)           => do `(sprop|$(← unpacksprop P) ∧ $(← unpacksprop Q))
-  | `($P ∨ $Q)               => do `(sprop|$(← unpacksprop P) ∨ $(← unpacksprop Q))
-  | `(∀x, $P ∨ $Q)           => do `(sprop|$(← unpacksprop P) ∨ $(← unpacksprop Q))
-  | `($P → $Q)              => do `(sprop|$(← unpacksprop P) → $(← unpacksprop Q))
-  | `(∀x, $P → $Q)          => do `(sprop|$(← unpacksprop P) → $(← unpacksprop Q))
-  | `($P ↔ $Q)              => do `(sprop|$(← unpacksprop P) ↔ $(← unpacksprop Q))
-  | `(∀x, $P ↔ $Q)          => do `(sprop|$(← unpacksprop P) ↔ $(← unpacksprop Q))
-  | t                        => do `(sprop|⌜$t:term⌝)
-
-/-
+delab_rule SProp.entails
+  | `($_ $P $Q)  => do
+    let P ← unpackSprop P; let Q ← unpackSprop Q;
+    ``($P ⊢ₛ $Q)
 delab_rule SProp.pure
   | `($_ $φ) => ``(sprop(⌜$φ⌝))
 delab_rule SProp.and
-  | `($_ $P $Q) => do ``(sprop($(← unpacksprop P) ∧ $(← unpacksprop Q)))
+  | `($_ $P $Q) => do
+    let P ← unpackSprop P; let Q ← unpackSprop Q;
+    ``(sprop($P ∧ $Q))
 delab_rule SProp.or
-  | `($_ $P $Q) => do ``(sprop($(← unpacksprop P) ∨ $(← unpacksprop Q)))
+  | `($_ $P $Q) => do
+    let P ← unpackSprop P; let Q ← unpackSprop Q;
+    ``(sprop($P ∨ $Q))
 delab_rule SProp.imp
-  | `($_ $P $Q) => do ``(sprop($(← unpacksprop P) → $(← unpacksprop Q)))
+  | `($_ $P $Q) => do
+    let P ← unpackSprop P; let Q ← unpackSprop Q;
+    ``(sprop($P → $Q))
 delab_rule SProp.forall
-  | `($_ fun $x:ident => sprop(∀ $y:ident $[$z:ident]*, $Ψ)) => do
+  | `($_ fun $x:ident => ∀ $y:ident $[$z:ident]*, $Ψ) => do
+    let Ψ ← unpackSprop Ψ
     ``(sprop(∀ $x:ident $y:ident $[$z:ident]*, $Ψ))
-  | `($_ fun $x:ident => $Ψ) => do ``(sprop(∀ $x:ident, $(← unpacksprop Ψ)))
+  | `($_ fun $x:ident => $Ψ) => do
+    let Ψ ← unpackSprop Ψ
+    ``(sprop(∀ $x:ident, $Ψ))
 delab_rule SProp.exists
-  | `($_ fun $x:ident => sprop(∃ $y:ident $[$z:ident]*, $Ψ)) => do
+  | `($_ fun $x:ident => ∃ $y:ident $[$z:ident]*, $Ψ) => do
+    let Ψ ← unpackSprop Ψ
     ``(sprop(∃ $x:ident $y:ident $[$z:ident]*, $Ψ))
-  | `($_ fun $x:ident => $Ψ) => do ``(sprop(∃ $x:ident, $(← unpacksprop Ψ)))
+  | `($_ fun $x:ident => $Ψ) => do
+    let Ψ ← unpackSprop Ψ
+    ``(sprop(∃ $x:ident, $Ψ))
+delab_rule SProp.iff
+  | `($_ $P $Q) => do
+    let P ← unpackSprop P; let Q ← unpackSprop Q;
+    ``(sprop($P ↔ $Q))
+delab_rule SProp.idiom
+  | `($_ $t $ts*) => do
+    unless t.raw.isOfKind ``Lean.Parser.Term.app do throw ()
+    unless t.raw[0].getId == `pure || t.raw[0].getId == ``pure || t.raw[0].getId == ``SProp.pure do throw ()
+    let a : Term := ⟨t.raw[1][0]⟩
+    ``(sprop(⌜$a⌝ $ts*))
 
-delab_rule SProp.pure
-  | `($_ True) => ``(sprop(SProp.pure True))
-  | `($_ False) => ``(sprop(SProp.pure False))
-delab_rule SProp.imp
-  | `($_ $P sprop(False)) => do ``(sprop(SProp.imp $(← unpacksprop P) sprop(False)))
--/
+#check fun P Q => sprop(fun n => ((∀ y, if y = n then P else ⌜True⌝) ∧ Q) → P → (∃ x, P → if (x : Bool) then Q else P))
+#check fun P Q => sprop(fun n => ((∀ y, if y = n then ⌜4 = ‹Nat›ₛ⌝ else Q) ∧ Q) → P → (∃ x, P → if (x : Bool) then Q else P))
+#check fun P Q => sprop(fun n => ((∀ y, if y = n then ⌜‹Nat›ₛ + ‹Nat›ₛ = 4⌝ else Q) ∧ Q) → P → (∃ x, P → if (x : Bool) then Q else P))

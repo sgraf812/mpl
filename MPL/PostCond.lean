@@ -10,7 +10,7 @@ def FailConds : PredShape → Type
 abbrev FailConds.const {ps : PredShape} (p : Prop) : FailConds ps := match ps with
   | .pure => ()
   | .arg σ s => @FailConds.const s p
-  | .except ε s => (fun _ε => PreCond.pure p, @FailConds.const s p)
+  | .except ε s => (fun _ε => pure p, @FailConds.const s p)
 
 def FailConds.true : FailConds ps := FailConds.const True
 def FailConds.false : FailConds ps := FailConds.const False
@@ -22,7 +22,7 @@ def FailConds.entails {ps : PredShape} (x y : FailConds ps) : Prop :=
   match ps with
   | .pure => True
   | .arg _ ps => @entails ps x y
-  | .except _ ps => (∀ e, SProp.entails (x.1 e) (y.1 e)) ∧ @entails ps x.2 y.2
+  | .except _ ps => (∀ e, x.1 e ⊢ₛ y.1 e) ∧ @entails ps x.2 y.2
 
 @[simp, refl]
 theorem FailConds.entails_refl {ps : PredShape} (x : FailConds ps) : FailConds.entails x x := by
@@ -35,13 +35,14 @@ theorem FailConds.entails_refl {ps : PredShape} (x : FailConds ps) : FailConds.e
 @[simp]
 theorem FailConds.pure_def {x : FailConds .pure} : x = () := rfl
 
+#discr_tree_simp_key PreCond.entails_false
 @[simp]
 theorem FailConds.entails_false {x : FailConds ps} : FailConds.entails FailConds.false x := by
   simp only [false]
   induction ps
   case pure => simp[entails]
   case arg σ s ih => exact ih
-  case except ε s ih => simp only [entails, PreCond.entails_false, implies_true, ih, and_self]
+  case except ε s ih => simp[entails, PreCond.entails_false, implies_true, ih, and_self]
 
 @[simp]
 theorem FailConds.entails_true {x : FailConds ps} : FailConds.entails x FailConds.true := by
