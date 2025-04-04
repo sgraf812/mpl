@@ -42,8 +42,6 @@ instance Result.instWPMonad : WPMonad Result (.except Error .pure) where
     simp[Result.instWP, bind]
     ext Q
     cases x <;> simp[PredTrans.bind, PredTrans.top, PredTrans.const]; xwp
-    sorry -- Sigh; need to remove the redundant Monad (Except ε) instance
-          -- which is not defeq to Monad (ExceptT ε Id)
 
 /-- Kinds of unsigned integers -/
 inductive UScalarTy where

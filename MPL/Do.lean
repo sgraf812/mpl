@@ -414,7 +414,7 @@ def fib_impl (n : Nat) : Idd Nat
     b := a' + b
   return b
 
-theorem fib_triple : ⦃PreCond.pure True⦄ fib_impl n ⦃⇓ r | r = fib_spec n⦄ := by
+theorem fib_triple : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => ⌜r = fib_spec n⌝⦄ := by
   unfold fib_impl
   intro h
   xwp
@@ -449,10 +449,12 @@ def fib_impl_strange (n : Nat) : Idd Nat
     e := 4
   return b
 
+private abbrev st : SVal ((Nat × Nat)::σs) (Nat × Nat) := fun s => SVal.pure s
+
 def mkFreshInt {m : Type → Type} [Monad m] : StateT (Nat × Nat) m Nat
   forall {ps} [WPMonad m ps] (n o : Nat)
-  requires s => PreCond.pure (s.1 = n ∧ s.2 = o)
-  ensures r s => PreCond.pure (r = n ∧ s.1 = n + 1 ∧ s.2 = o)
+  requires => ⌜(#st).1 = n ∧ (#st).2 = o⌝
+  ensures r => ⌜r = n ∧ (#st).1 = n + 1 ∧ (#st).2 = o⌝
 := do
   let n ← Prod.fst <$> get
   -- assert _ => PreCond.pure (o = 13)

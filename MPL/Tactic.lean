@@ -214,7 +214,7 @@ macro_rules
         , Nat.sub_one_add_one
       ]
     | (simp_all[$args,*, Nat.sub_one_add_one]; done)
-    | grind
+    -- | grind
     ))
 
 --  `(tactic| ((try intros); xstart; intro h; xwp; try (all_goals simp_all)))

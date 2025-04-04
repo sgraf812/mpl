@@ -147,14 +147,14 @@ example :
     xwp
 
 theorem test_loop_break :
-  ⦃fun s => s = 42⦄
+  ⦃⌜‹Nat›ₛ = 42⌝⦄
   do
     let mut x := 0
     let s ← get
     for i in [1:s] do { x := x + i; if x > 4 then break }
     (set 1 : StateT Nat Idd PUnit)
     return x
-  ⦃⇓ r s => r > 4 ∧ s = 1⦄ := by
+  ⦃⇓ r => ⌜r > 4 ∧ ‹Nat›ₛ = 1⌝⦄ := by
   xstart
   intro s hs
   xwp
@@ -162,7 +162,6 @@ theorem test_loop_break :
   xapp (Specs.forIn_list (fun (r, xs) s => (r ≤ 4 ∧ r = xs.rpref.sum ∨ r > 4) ∧ s = 42, ()) ?step)
   case step =>
     intro b pref x suff h
-    xstart
     xwp
     simp only [h, List.sum_cons]
     intro b' hinv
@@ -170,9 +169,9 @@ theorem test_loop_break :
     · simp_all
     · simp only [PredTrans.pure_apply]; sorry -- grind -- omega
   intro r s' ⟨h, hs'⟩
-  simp[hs] at h
+  subst_vars
   (conv at h in (List.sum _) => whnf)
-  simp[hs] at h
+  simp_all
   omega
 
 theorem get_spec [Monad m] [WPMonad m ps] {Q : PostCond σ (.arg σ ps)} :
@@ -406,7 +405,8 @@ theorem prog.spec : ⦃isValid⦄ prog n ⦃⇓r => ⌜r > 100⌝ ∧ isValid⦄
   xapp op.spec
   intro r₃ a b c d ⟨hr₃, h⟩
   xpure
-  simp_all only [SProp.idiom_apply, SProp.idiom, SProp.and, and_true, gt_iff_lt]
+  simp_all only [SProp.idiom_cons, SProp.idiom_nil, SProp.and_cons, SProp.and_nil,
+    and_true, gt_iff_lt]
   omega
 
 theorem prog.spec' : ⦃isValid⦄ prog n ⦃⇓r => ⌜r > 100⌝ ∧ isValid⦄ := by

@@ -105,7 +105,7 @@ app_unexpand_rule SProp.entails
 app_unexpand_rule SProp.idiom
   | `($_ $t $ts*) => do
     match t with
-    | `(fun escape => $e) => ``(⌜$e⌝)
+    | `(fun $_ => $e) => if ts.isEmpty then ``(⌜$e⌝) else ``(⌜$e⌝ $ts*)
     | _ => throw ()
 app_unexpand_rule SVal.GetTy.applyEscape
   | `($_ $f $_) => do
@@ -147,3 +147,5 @@ app_unexpand_rule SProp.iff
 #check fun P Q => sprop(fun n => ((∀ y, if y = n then ⌜4 = ‹Nat›ₛ⌝ else Q) ∧ Q) → P → (∃ x, P → if (x : Bool) then Q else P))
 #check fun P Q => sprop(fun n => ((∀ y, if y = n then ⌜‹Nat›ₛ + ‹Nat›ₛ = 4⌝ else Q) ∧ Q) → P → (∃ x, P → if (x : Bool) then Q else P))
 #check fun P Q => sprop(fun n => ((∀ y, if y = n then ⌜‹Nat›ₛ + #theNat = 4⌝ else Q) ∧ Q) → P → (∃ x, P → if (x : Bool) then Q else P))
+-- Unexpansion should work irrespective of binder name for `f`/`escape`:
+#check ∀ (a b n o : Nat) (s : Nat × Nat), (SProp.idiom fun f => a = n ∧ b = o) ⊢ₛ SProp.idiom fun f => s.1 = n ∧ a = n + 1 ∧ b = o

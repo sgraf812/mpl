@@ -12,11 +12,13 @@ def mkFreshInt [Monad m] [MonadStateOf AppState m] : m Nat := do
   modify (fun s => (s.1 + 1, s.2))
   pure n
 
+private abbrev st : SVal (AppState::σs) (Nat × Nat) := fun s => SVal.pure s
+
 @[spec]
 theorem mkFreshInt_spec [Monad m] [WPMonad m sh] :
-  ⦃fun s => PreCond.pure (s.1 = n ∧ s.2 = o)⦄
+  ⦃⌜(#st).1 = n ∧ (#st).2 = o⌝⦄
   (mkFreshInt : StateT AppState m Nat)
-  ⦃⇓ r | fun s => PreCond.pure (r = n ∧ s.1 = n + 1 ∧ s.2 = o)⦄ := by
+  ⦃⇓ r => ⌜r = n ∧ (#st).1 = n + 1 ∧ (#st).2 = o⌝⦄ := by
   unfold mkFreshInt
   xstart
   intro s
@@ -103,7 +105,7 @@ def mkFreshPair : StateM AppState (Nat × Nat) := do
 theorem mkFreshPair_spec :
   ⦃PreCond.pure True⦄
   mkFreshPair
-  ⦃⇓ (a, b) | PreCond.pure (a ≠ b)⦄ := by
+  ⦃⇓ (a, b) => ⌜a ≠ b⌝⦄ := by
   unfold mkFreshPair
   xstart
   xwp
@@ -112,7 +114,7 @@ theorem mkFreshPair_spec :
   intro a s₁ hs₁
   xapp mkFreshInt_spec
   intro b s₂ hs₂
-  simp[hs₁, hs₂]
+  simp_all[hs₁, hs₂]
 
 -- eliminating a Hoare triple spec into the pure world
 
@@ -156,7 +158,7 @@ def fib_spec : Nat → Nat
 | 1 => 1
 | n+2 => fib_spec n + fib_spec (n+1)
 
-theorem fib_triple : ⦃PreCond.pure True⦄ fib_impl n ⦃⇓ r | r = fib_spec n⦄ := by
+theorem fib_triple : ⦃True⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ := by
   unfold fib_impl
   intro h
   xwp
