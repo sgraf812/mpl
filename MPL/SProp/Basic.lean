@@ -73,7 +73,11 @@ abbrev SProp.imp {σs : List Type} (P Q : SProp σs) : SProp σs := match σs wi
 | [] => P → Q
 | σ :: _ => fun (s : σ) => imp (P s) (Q s)
 
-abbrev SProp.iff {σs : List Type} (P Q : SProp σs) : SProp σs := and (imp P Q) (imp Q P)
+@[simp]
+abbrev SProp.iff {σs : List Type} (P Q : SProp σs) : SProp σs := match σs with
+| [] => P ↔ Q
+| σ :: _ => fun (s : σ) => iff (P s) (Q s)
+
 @[simp]
 theorem SProp.iff_apply {σs : List Type} {P Q : SProp (σ::σs)} (s : σ) : (P.iff Q) s = SProp.iff (P s) (Q s) := by simp[SProp.iff]
 

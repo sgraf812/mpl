@@ -161,7 +161,7 @@ theorem MPL.disjointUnion_characterization (ss : Array (HashSet α)) :
   apply Idd.by_wp h
   xwp
   xapp (Specs.forIn_list ?inv ?step)
-  case inv => exact PostCond.total fun ((acc : MProd (HashSet α) Bool), ss) =>
+  case inv => exact ⇓ ((acc : MProd (HashSet α) Bool), ss) =>
       (∀ a, a ∈ acc.1.toFinset ↔ ∃ s ∈ ss.pref, a ∈ s.toFinset) ∧
       (acc.snd →
         ∀ (i j : Fin ss.rpref.length), i ≠ j → ss.rpref[i].toFinset ∩ ss.rpref[j].toFinset = ∅)
@@ -170,8 +170,8 @@ theorem MPL.disjointUnion_characterization (ss : Array (HashSet α)) :
     intro acc rpref s suff h
     xwp
     simp only [List.mem_reverse, ne_eq, toFinset_union, Finset.mem_union, List.mem_cons,
-      exists_eq_or_imp, le_Prop_eq, and_imp]
-    intro hinv₁ hinv₂
+      exists_eq_or_imp]
+    intro ⟨hinv₁, hinv₂⟩
     refine ⟨?step₁, ?step₂⟩
     case step₁ =>
       intro a
@@ -223,7 +223,7 @@ theorem MPL.disjointUnion_characterization (ss : Array (HashSet α)) :
         simp only [toFinset_inter, toFinset_union, Finset.union_inter_cancel_right] at hB
         simp[hB]
   simp
-  intro ⟨U, b⟩ ⟨hinv₁, hinv₂⟩
+  intro ⟨U, b⟩ hinv₁ hinv₂
   use hinv₁
   intro hB i j hNe
   -- apply hinv₂ hB sorry sorry sorry -- some tedious symmetry argument about i and ss.size - 1 - i

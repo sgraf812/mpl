@@ -11,7 +11,7 @@ theorem test_sum :
     for i in [1:5] do
       x := x + i
     pure (f := Idd) x
-  ⦃⇓r | r < 30⦄ := by
+  ⦃⇓r => r < 30⦄ := by
   intro _
   xwp
   xapp (Specs.forIn_list (PostCond.total fun (r, xs) => (∀ x, x ∈ xs.suff → x ≤ 5) ∧ r + xs.suff.length * 5 ≤ 25) ?step)
@@ -32,7 +32,7 @@ def mkFreshInt [Monad m] [MonadStateOf (Nat × Nat) m] : m Nat := do
 theorem mkFreshInt_spec [Monad m] [LawfulMonad m] [WPMonad m sh] :
   ⦃fun s => PreCond.pure (s.1 = n ∧ s.2 = o)⦄
   (mkFreshInt : StateT (Nat × Nat) m Nat)
-  ⦃⇓ r | fun s => PreCond.pure (r = n ∧ s.1 = n + 1 ∧ s.2 = o)⦄ := by
+  ⦃⇓ r => fun s => PreCond.pure (r = n ∧ s.1 = n + 1 ∧ s.2 = o)⦄ := by
   unfold mkFreshInt
   xwp
   intro s
@@ -52,14 +52,14 @@ theorem MonadStateOf.mkFreshInt_apply [Monad m] [MonadStateOf (Nat × Nat) m] [M
 theorem mkFreshInt_lift_spec [Monad m] [LawfulMonad m] [WPMonad m sh] :
   ⦃fun _ s => PreCond.pure (s.1 = n ∧ s.2 = o)⦄
   (mkFreshInt : ExceptT Char (ReaderT Bool (StateT (Nat × Nat) m)) Nat)
-  ⦃⇓ r | fun _ s => PreCond.pure (r = n ∧ s.1 = n + 1 ∧ s.2 = o)⦄ := by
+  ⦃⇓ r _ s => PreCond.pure (r = n ∧ s.1 = n + 1 ∧ s.2 = o)⦄ := by
   xwp
   simp
 
 theorem mkFreshInt_spec_fail [Monad m] [LawfulMonad m] [WPMonad m sh] :
   ⦃fun s => PreCond.pure (s.1 = n ∧ s.2 = o)⦄
   (mkFreshInt : StateT (Nat × Nat) m Nat)
-  ⦃⇓ r | fun s => PreCond.pure (r = n ∧ s.1 = n + 1 ∧ s.2 = o)⦄ := by
+  ⦃⇓ r s => PreCond.pure (r = n ∧ s.1 = n + 1 ∧ s.2 = o)⦄ := by
   unfold mkFreshInt
   intro s
   fail_if_success xstart
@@ -154,7 +154,7 @@ theorem test_loop_break :
     for i in [1:s] do { x := x + i; if x > 4 then break }
     (set 1 : StateT Nat Idd PUnit)
     return x
-  ⦃⇓ r | fun s => r > 4 ∧ s = 1⦄ := by
+  ⦃⇓ r s => r > 4 ∧ s = 1⦄ := by
   xstart
   intro s hs
   xwp
@@ -186,7 +186,7 @@ theorem test_loop_early_return :
     for i in [1:s] do { x := x + i; if x > 4 then return 42 }
     (set 1 : StateT Nat Idd PUnit)
     return x
-  ⦃⇓ r | fun s => r = 42 ∧ s = 4⦄ := by
+  ⦃⇓ r s => r = 42 ∧ s = 4⦄ := by
   xstart
   simp only [gt_iff_lt, bind_pure_comp, map_pure, Std.Range.forIn_eq_forIn_range', Std.Range.size,
     add_tsub_cancel_right, Nat.div_one, pure_bind]-- , bind_bind, MonadState.wp_get, StateT.wp_get,
@@ -284,7 +284,7 @@ def fib_spec : Nat → Nat
 | 1 => 1
 | n+2 => fib_spec n + fib_spec (n+1)
 
-theorem fib_triple : ⦃PreCond.pure True⦄ fib_impl n ⦃⇓ r | r = fib_spec n⦄ := by
+theorem fib_triple : ⦃PreCond.pure True⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ := by
   unfold fib_impl
   intro h
   xwp
@@ -318,11 +318,11 @@ def program (n : Nat) (k : Nat) : IO Nat := do
   let r₂ ← addRandomEvens n k
   return r₁ + r₂
 
-axiom IO.rand_spec {n : Nat} : ⦃True⦄ (IO.rand 0 n : IO Nat) ⦃⇓r | r < n⦄
+axiom IO.rand_spec {n : Nat} : ⦃True⦄ (IO.rand 0 n : IO Nat) ⦃⇓r => r < n⦄
 
 /-- The result has the same parity as the input. -/
 @[spec]
-theorem addRandomEvens_spec (n k) : ⦃True⦄ (addRandomEvens n k) ⦃⇓r | r % 2 = k % 2⦄ := by
+theorem addRandomEvens_spec (n k) : ⦃True⦄ (addRandomEvens n k) ⦃⇓r => r % 2 = k % 2⦄ := by
   unfold addRandomEvens -- TODO: integrate into xwp or xstart, make it an option
   xwp
   intro h
@@ -334,7 +334,7 @@ theorem addRandomEvens_spec (n k) : ⦃True⦄ (addRandomEvens n k) ⦃⇓r | r 
 
 /-- Since we're adding even numbers to our number twice, and summing,
 the entire result is even. -/
-theorem program_spec (n k) : ⦃True⦄ program n k ⦃⇓r | r % 2 = 0⦄ := by
+theorem program_spec (n k) : ⦃True⦄ program n k ⦃⇓r => r % 2 = 0⦄ := by
   unfold program
   xwp
   intro h
@@ -394,9 +394,9 @@ def prog (n : Nat) : M Nat := do
 def isValid : Nat → Char → Bool → String → Prop := sorry
 
 theorem op.spec :
-  ⦃isValid⦄ op n ⦃⇓r | PreCond.pure (r > 42) ∧ isValid⦄ := sorry
+  ⦃isValid⦄ op n ⦃⇓r => PreCond.pure (r > 42) ∧ isValid⦄ := sorry
 
-theorem prog.spec : ⦃isValid⦄ prog n ⦃⇓r | PreCond.pure (r > 100) ∧ isValid⦄ := by
+theorem prog.spec : ⦃isValid⦄ prog n ⦃⇓r => PreCond.pure (r > 100) ∧ isValid⦄ := by
   unfold prog
   intro a b c d h
   xapp op.spec
@@ -410,7 +410,7 @@ theorem prog.spec : ⦃isValid⦄ prog n ⦃⇓r | PreCond.pure (r > 100) ∧ is
   omega
 
 set_option trace.Meta.synthInstance true in
-theorem prog.spec' : ⦃isValid⦄ prog n ⦃⇓r | sprop(⌜r > 100⌝ ∧ isValid)⦄ := by
+theorem prog.spec' : ⦃isValid⦄ prog n ⦃⇓r => ⌜r > 100⌝ ∧ isValid⦄ := by
   unfold prog
   xintro □h
   xapp op.spec

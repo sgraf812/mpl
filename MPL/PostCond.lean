@@ -72,12 +72,14 @@ abbrev PostCond.total (p : α → PreCond ps) : PostCond α ps :=
 abbrev PostCond.partial (p : α → PreCond ps) : PostCond α ps :=
   (p, FailConds.true)
 
+open Lean Parser Term in
+def funArrow : Parser := unicodeSymbol " ↦" " =>"
 @[inherit_doc PostCond.total]
-macro "⇓ " x:Lean.Parser.Term.funBinder " => " e:term : term =>
-  `(PostCond.total (fun $x => sprop($e)))
+macro "⇓" xs:Lean.Parser.Term.funBinder+ funArrow e:term : term =>
+  `(PostCond.total (fun $xs* => sprop($e)))
 
 instance : Inhabited (PostCond α ps) where
-  default := ⇓ _ => default
+  default := ⇓_ => default
 
 @[simp]
 abbrev PostCond.entails (p q : PostCond α ps) : Prop :=
