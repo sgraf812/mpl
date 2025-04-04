@@ -394,9 +394,8 @@ def prog (n : Nat) : M Nat := do
 def isValid : Nat → Char → Bool → String → Prop := sorry
 
 theorem op.spec :
-  ⦃isValid⦄ op n ⦃⇓r | PreCond.pure (r > 42) ⊓ isValid⦄ := sorry
+  ⦃isValid⦄ op n ⦃⇓r | PreCond.pure (r > 42) ∧ isValid⦄ := sorry
 
-set_option trace.Meta.synthInstance true in
 theorem prog.spec : ⦃isValid⦄ prog n ⦃⇓r | PreCond.pure (r > 100) ∧ isValid⦄ := by
   unfold prog
   intro a b c d h
@@ -410,6 +409,7 @@ theorem prog.spec : ⦃isValid⦄ prog n ⦃⇓r | PreCond.pure (r > 100) ∧ is
   simp[h]
   omega
 
+set_option trace.Meta.synthInstance true in
 theorem prog.spec' : ⦃isValid⦄ prog n ⦃⇓r | sprop(⌜r > 100⌝ ∧ isValid)⦄ := by
   unfold prog
   xintro □h

@@ -72,8 +72,12 @@ abbrev PostCond.total (p : α → PreCond ps) : PostCond α ps :=
 abbrev PostCond.partial (p : α → PreCond ps) : PostCond α ps :=
   (p, FailConds.true)
 
+@[inherit_doc PostCond.total]
+macro "⇓ " x:Lean.Parser.Term.funBinder " => " e:term : term =>
+  `(PostCond.total (fun $x => sprop($e)))
+
 instance : Inhabited (PostCond α ps) where
-  default := PostCond.total (fun _ => default)
+  default := ⇓ _ => default
 
 @[simp]
 abbrev PostCond.entails (p q : PostCond α ps) : Prop :=

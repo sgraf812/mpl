@@ -9,10 +9,10 @@ def triple (x : m α) (P : PreCond ps) (Q : PostCond α ps) : Prop :=
   P ⊢ₛ wp⟦x⟧.apply Q
 
 syntax:lead "⦃" term "⦄ " term:lead " ⦃" term "⦄" : term
-syntax:lead "⦃" term "⦄ " term:lead " ⦃⇓" ident " | " term "⦄" : term
+-- syntax:lead "⦃" term "⦄ " term:lead " ⦃⇓" ident " | " term "⦄" : term
 macro_rules
   | `(⦃$P⦄ $x:term ⦃$Q⦄) => `(triple $x sprop($P) sprop($Q))
-  | `(⦃$P⦄ $x:term ⦃⇓ $v | $Q⦄) => `(triple $x sprop($P) (PostCond.total fun $v => sprop($Q)))
+--  | `(⦃$P⦄ $x:term ⦃⇓ $v | $Q⦄) => `(triple $x sprop($P) (PostCond.total fun $v => sprop($Q)))
 
 theorem triple_conseq {α} (x : m α) {P P' : PreCond ps} {Q Q' : PostCond α ps}
   (hp : P.entails P' := by simp) (hq : Q'.entails Q := by simp) (h : triple x P' Q') :
