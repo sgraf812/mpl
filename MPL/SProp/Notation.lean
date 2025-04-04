@@ -7,9 +7,9 @@ open Lean Macro Parser
 -- macro for adding unexpanders for function applications
 private def matchAlts' := leading_parser Term.matchAlts
 
-syntax "delab_rule" ident matchAlts' : command
+syntax "app_unexpand_rule" ident matchAlts' : command
 macro_rules
-  | `(delab_rule $f $[| $p => $s]*) => do
+  | `(app_unexpand_rule $f $[| $p => $s]*) => do
     let f := f.getId
     if f.isAnonymous then
       throwUnsupported
@@ -74,6 +74,8 @@ syntax "⌜" term "⌝" : term
 syntax:25 term:26 " ⊢ₛ " term:25 : term
 /-- ‹t› in `SProp`. -/
 syntax "‹" term "›ₛ" : term
+/-- Use getter `t` in `SProp` idiom notation. -/
+syntax:max "#" term:max : term
 
 macro_rules
   | `($P ⊢ₛ $Q) => ``(SProp.entails sprop($P) sprop($Q))
@@ -85,61 +87,58 @@ macro_rules
   | `(sprop(∀ $x:ident $xs*, $P)) => ``(SProp.forall (fun $x => sprop(∀ $xs*, $P)))
   | `(sprop(∃ $x:ident, $P)) => ``(SProp.exists (fun $x => sprop($P)))
   | `(sprop(exists $x:ident, $P)) => ``(SProp.exists (fun $x => sprop($P)))
-  | `(‹$t›ₛ) => `(← readThe $t)
+  | `(⌜$t⌝) => ``(SProp.idiom (fun escape => $t))
+  | `(#$t) => `(SVal.GetTy.applyEscape $t (by assumption))
+  | `(‹$t›ₛ) => `(#(SVal.getThe $t))
 
-open Elab Term in
-set_option quotPrecheck false in
-elab_rules : term <= ety
-  | `(⌜$t⌝) => do
-    let t ← Elab.liftMacroM (expandMacros t)
-    elabTerm (← ``(SProp.idiom do (SProp.pure $(⟨t⟩)))) ety
-
-def theNat : SVal.M [Nat, Bool] Nat := fun n b => n
+def theNat : SVal [Nat, Bool] Nat := fun n b => n
 example (P Q : SProp [Nat, Bool]): SProp [Char, Nat, Bool] :=
-  sprop(fun c => ((∀ y, if y = 4 then ⌜y = (← theNat)⌝ ∧ P else Q) ∧ Q) → (∃ x, P → if (x : Bool) then Q else P))
+  sprop(fun c => ((∀ y, if y = 4 then ⌜y = #theNat⌝ ∧ P else Q) ∧ Q) → (∃ x, P → if (x : Bool) then Q else P))
 
 #check fun P Q => sprop(fun n => ((∀ y, if y = n then P else Q) ∧ Q) → P → (∃ x, P → if (x : Bool) then Q else P))
 #check fun P Q => sprop(fun n => ((∀ y, if y = n then ⌜‹Nat›ₛ = 4⌝ else Q) ∧ Q) → P → (∃ x, P → if (x : Bool) then Q else P))
-#check fun P Q => sprop(fun (n:Nat) => ((∀ y, if y = n then ⌜(← theNat) = 4⌝ else Q) ∧ Q) → P → (∃ x, P → if (x : Bool) then Q else P))
 
-delab_rule SProp.entails
+app_unexpand_rule SProp.entails
   | `($_ $P $Q)  => do
     let P ← unpackSprop P; let Q ← unpackSprop Q;
     ``($P ⊢ₛ $Q)
-delab_rule SProp.pure
-  | `($_ $φ $ts*) => if ts.isEmpty then ``(sprop(⌜$φ⌝)) else ``(sprop(⌜$φ⌝ $ts*))
-delab_rule SProp.idiom
+app_unexpand_rule SProp.idiom
   | `($_ $t $ts*) => do
     match t with
-    | `(sprop(⌜$φ⌝)) => if ts.isEmpty then ``(sprop(⌜$φ⌝)) else ``(sprop(⌜$φ⌝ $ts*))
+    | `(fun escape => $e) => ``(⌜$e⌝)
     | _ => throw ()
-delab_rule SProp.and
+app_unexpand_rule SVal.GetTy.applyEscape
+  | `($_ $f $_) => do
+    match f with
+    | `(SVal.getThe $t) => ``(‹$t›ₛ)
+    | t => ``(#$t)
+app_unexpand_rule SProp.and
   | `($_ $P $Q) => do
     let P ← unpackSprop P; let Q ← unpackSprop Q;
     ``(sprop($P ∧ $Q))
-delab_rule SProp.or
+app_unexpand_rule SProp.or
   | `($_ $P $Q) => do
     let P ← unpackSprop P; let Q ← unpackSprop Q;
     ``(sprop($P ∨ $Q))
-delab_rule SProp.imp
+app_unexpand_rule SProp.imp
   | `($_ $P $Q) => do
     let P ← unpackSprop P; let Q ← unpackSprop Q;
     ``(sprop($P → $Q))
-delab_rule SProp.forall
+app_unexpand_rule SProp.forall
   | `($_ fun $x:ident => ∀ $y:ident $[$z:ident]*, $Ψ) => do
     let Ψ ← unpackSprop Ψ
     ``(sprop(∀ $x:ident $y:ident $[$z:ident]*, $Ψ))
   | `($_ fun $x:ident => $Ψ) => do
     let Ψ ← unpackSprop Ψ
     ``(sprop(∀ $x:ident, $Ψ))
-delab_rule SProp.exists
+app_unexpand_rule SProp.exists
   | `($_ fun $x:ident => ∃ $y:ident $[$z:ident]*, $Ψ) => do
     let Ψ ← unpackSprop Ψ
     ``(sprop(∃ $x:ident $y:ident $[$z:ident]*, $Ψ))
   | `($_ fun $x:ident => $Ψ) => do
     let Ψ ← unpackSprop Ψ
     ``(sprop(∃ $x:ident, $Ψ))
-delab_rule SProp.iff
+app_unexpand_rule SProp.iff
   | `($_ $P $Q) => do
     let P ← unpackSprop P; let Q ← unpackSprop Q;
     ``(sprop($P ↔ $Q))
@@ -147,3 +146,4 @@ delab_rule SProp.iff
 #check fun P Q => sprop(fun n => ((∀ y, if y = n then P else ⌜True⌝) ∧ Q) → P → (∃ x, P → if (x : Bool) then Q else P))
 #check fun P Q => sprop(fun n => ((∀ y, if y = n then ⌜4 = ‹Nat›ₛ⌝ else Q) ∧ Q) → P → (∃ x, P → if (x : Bool) then Q else P))
 #check fun P Q => sprop(fun n => ((∀ y, if y = n then ⌜‹Nat›ₛ + ‹Nat›ₛ = 4⌝ else Q) ∧ Q) → P → (∃ x, P → if (x : Bool) then Q else P))
+#check fun P Q => sprop(fun n => ((∀ y, if y = n then ⌜‹Nat›ₛ + #theNat = 4⌝ else Q) ∧ Q) → P → (∃ x, P → if (x : Bool) then Q else P))

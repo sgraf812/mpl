@@ -18,9 +18,9 @@ def PredTrans.const {ps : PredShape} {α : Type} (p : PreCond ps) : PredTrans ps
 def PredTrans.le {ps : PredShape} {α : Type} (x y : PredTrans ps α) : Prop :=
   ∀ Q, (y.apply Q).entails (x.apply Q) -- the weaker the precondition, the smaller the PredTrans
 def PredTrans.top {ps : PredShape} {α : Type} : PredTrans ps α :=
-  PredTrans.const (PreCond.pure False)
+  PredTrans.const ⌜False⌝
 def PredTrans.bot {ps : PredShape} {α : Type} : PredTrans ps α :=
-  PredTrans.const (PreCond.pure True)
+  PredTrans.const ⌜True⌝
 noncomputable def PredTrans.sup {ps : PredShape} {α : Type} (x y : PredTrans ps α) : PredTrans ps α :=
   { apply := fun Q => (x.apply Q).and (y.apply Q), mono := by
       intro Q₁ Q₂ h

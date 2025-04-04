@@ -53,9 +53,9 @@ theorem triple_bind2 [Monad m] [MonadMorphism m (PredTrans ps) wp] {α β} {P : 
 --    exact hf
 
 theorem triple_extract_persistent_true {α} (x : m α) {P : Prop} {Q : PostCond α ps}
-  (h : P → triple (ps:=ps) x (sprop(⌜True⌝)) Q) :
-  triple (ps:=ps) x (sprop(⌜P⌝)) Q := by
-    have : sprop(⌜P⌝) = (sprop(⌜P⌝ ∧ ⌜True⌝) : PreCond ps) := by simp
+  (h : P → triple (ps:=ps) x ⌜True⌝ Q) :
+  triple x ⌜P⌝ Q := by
+    have : ⌜P⌝ = (sprop(⌜P⌝ ∧ ⌜True⌝) : PreCond ps) := by simp
     rw[this]
     exact triple_extract_persistent x h
 

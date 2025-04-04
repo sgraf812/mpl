@@ -7,48 +7,47 @@ abbrev SVal (σs : List Type) (α : Type) := match σs with
 | [] => α
 | σ :: σs => σ → SVal σs α
 
-/- Note about the reducibility of SVal:
-We need SVal to be reducible, so that simp can apply lemmas such as
-  lemma ite_app {c:Prop} [Decidable c] (t e : α → β) (a : α) : (if c then t else e) a = if c then t a else e a
-However, this makes it impossible to define a `Monad` instance for `SVal σs`.
-We need such a monad instance for idiom bracket notation of `SProp`.
-Hence we define a wrapper type `SVal.M` that is semi-reducible and has the proper `Monad` instance.
--/
-
-/-- A semi-reducible wrapper around `SVal` equipped with a `Monad` instance. -/
-def SVal.M : List Type → Type → Type := SVal
-
-abbrev SVal.M.pure {σs : List Type} (a : α) : SVal σs α := match σs with
+abbrev SVal.pure {σs : List Type} (a : α) : SVal σs α := match σs with
 | [] => a
 | σ :: σs => fun (_ : σ) => pure a
 
-abbrev SVal.M.bind {σs : List Type} {α β : Type} (m : SVal σs α) (f : α → SVal σs β) : SVal σs β := match σs with
-| [] => f m
-| σ :: σs => fun (s : σ) => bind (m s) (f · s)
-
-instance (σs : List Type) : Monad (SVal.M σs) where
-  pure := SVal.M.pure
-  bind := SVal.M.bind
-
-instance (σs : List Type) : MonadReaderOf σ (SVal.M (σ::σs)) where
-  read := fun s => pure (f:=SVal.M σs) s
-
-instance (σs : List Type) [MonadReaderOf σ₁ (SVal.M σs)] : MonadReaderOf σ₁ (SVal.M (σ₂::σs)) where
-  read := fun _ => read (m:=SVal.M σs)
+/- Note about the reducibility of SVal:
+We need SVal to be reducible, so that simp can apply lemmas such as
+  lemma ite_app {c:Prop} [Decidable c] (t e : α → β) (a : α) : (if c then t else e) a = if c then t a else e a
+-/
 
 @[simp]
-theorem SVal.M.pure_empty (a : α) : Pure.pure (f:=SVal.M []) a = a := rfl
+theorem SVal.pure_empty (a : α) : SVal.pure (σs:=[]) a = a := rfl
 
 /-- A Proposition indexed by a list of states. -/
 abbrev SProp (σs : List Type) : Type := SVal σs Prop
 
-abbrev SProp.pure {σs : List Type} (P : Prop) : SProp σs := SVal.M.pure P
+@[simp]
+def SProp.idiom {σs : List Type} (P : (∀ α, SVal σs α → α) → Prop) : SProp σs := match σs with
+| [] => P (fun α m => m)
+| σ :: σs => fun (s : σ) => SProp.idiom (fun f => P (fun α m => f α (m s)))
+
+class SVal.GetTy (σ : Type) (σs : List Type) where
+  get : SVal σs σ
+
+instance : SVal.GetTy σ (σ :: σs) where
+  get := fun s => SVal.pure s
+
+instance [SVal.GetTy σ₁ σs] : SVal.GetTy σ₁ (σ₂ :: σs) where
+  get := fun _ => SVal.GetTy.get
+
+abbrev SVal.GetTy.applyEscape {σs : List Type} (f : SVal σs σ) (escape : ∀ α, SVal σs α → α) : σ := escape σ f
+abbrev SVal.getThe {σs : List Type} (σ : Type) [SVal.GetTy σ σs] : SVal σs σ := SVal.GetTy.get
 
 @[simp]
-theorem SProp.pure_empty (P : Prop) : SProp.pure P (σs:=[]) = P := rfl
+theorem SProp.idiom_empty {P : (∀ α, SVal [] α → α) → Prop} : SProp.idiom (σs:=[]) P = P @id := rfl
 
 @[simp]
-theorem SProp.pure_apply (P : Prop) (s : σ) : SProp.pure (σs:=σ::σs) P s = SProp.pure P := rfl
+theorem SProp.idiom_apply {σs : List Type} {P : (∀ α, SVal (σ::σs) α → α) → Prop} {s : σ} : SProp.idiom (σs:=σ::σs) P s = SProp.idiom (fun escape => P (fun α m => escape α (m s))) := rfl
+
+/-- A pure proposition `P : Prop` embedded into `SProp`. For internal use in this module only; prefer to use idiom bracket notation `⌜P⌝. -/
+@[simp]
+private abbrev SProp.pure {σs : List Type} (P : Prop) : SProp σs := SProp.idiom (fun _ => P)
 
 @[ext]
 theorem SProp.ext {σs : List Type} {P Q : SProp (σ::σs)} : (∀ s, P s = Q s) → P = Q := funext
@@ -113,32 +112,29 @@ theorem SProp.entails_trans {σs : List Type} {P Q R : SProp σs} : P.entails Q 
 @[simp]
 theorem SProp.and_true {σs : List Type} (P : SProp σs) : P.and (pure True) = P := by
   induction σs
-  case nil => simp only [_root_.and_true, SProp.pure_empty]
+  case nil => simp only [and, pure, idiom, _root_.and_true]
   case cons σ σs ih => ext s; exact ih (P s)
 
 @[simp]
 theorem SProp.true_and {σs : List Type} (P : SProp σs) : (pure True).and P = P := by
   induction σs
-  case nil => simp only [_root_.true_and, SProp.pure_empty]
+  case nil => simp only [and, pure, idiom, _root_.true_and]
   case cons σ σs ih => ext s; exact ih (P s)
 
 @[simp]
 theorem SProp.and_false {σs : List Type} (P : SProp σs) : P.and (pure False) = pure False := by
   induction σs
-  case nil => simp only [_root_.and_false, SProp.pure_empty]
+  case nil => simp only [and, pure, idiom, _root_.and_false]
   case cons σ σs ih => ext s; exact ih (P s)
 
 @[simp]
 theorem SProp.false_and {σs : List Type} (P : SProp σs) : (pure False).and P = pure False := by
   induction σs
-  case nil => simp only [_root_.false_and, SProp.pure_empty]
+  case nil => simp only [and, pure, idiom, _root_.false_and]
   case cons σ σs ih => ext s; exact ih (P s)
 
 @[simp]
 theorem SProp.and_self {σs : List Type} (P : SProp σs) : P.and P = P := by
   induction σs
-  case nil => simp only [_root_.and_self, SProp.pure_empty]
+  case nil => simp only [and, pure, idiom, _root_.and_self]
   case cons σ σs ih => ext s; exact ih (P s)
-
-@[simp]
-def SProp.idiom {σs : List Type} (P : SVal.M σs Prop) : SProp σs := P

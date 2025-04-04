@@ -19,7 +19,9 @@ abbrev PreCond (ps : PredShape) : Type := SProp (PredShape.args ps)
 @[ext]
 theorem PreCond.ext {ps : PredShape} {P Q : PreCond (.arg σ ps)} : (∀ s, P s = Q s) → P = Q := SProp.ext
 
-abbrev PreCond.pure : {ps : PredShape} → Prop → PreCond ps := SProp.pure
+abbrev PreCond.pure {ps : PredShape} (P : Prop) : PreCond ps := ⌜P⌝
+app_unexpand_rule PreCond.pure
+  | `($_ $P) => ``(⌜$P⌝)
 
 instance : Inhabited (PreCond ps) where
   default := PreCond.pure True

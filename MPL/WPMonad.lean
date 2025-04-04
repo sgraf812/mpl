@@ -96,8 +96,9 @@ instance ExceptT.instWPMonad [Monad m] [WPMonad m ps] : WPMonad (ExceptT ε m) (
 instance EStateM.instWPMonad : WPMonad (EStateM ε σ) (.except ε (.arg σ .pure)) where
   pure_pure a := by simp only [wp, pure, EStateM.pure, PredTrans.pure]
   bind_bind x f := by
-    ext Q s
+    ext Q : 2
     simp [wp, bind, EStateM.bind, eq_iff_iff, PredTrans.bind]
+    ext s : 1
     cases (x s) <;> simp
 
 instance Except.instWPMonad : WPMonad (Except ε) (.except ε .pure) where

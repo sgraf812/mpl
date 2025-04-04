@@ -30,9 +30,9 @@ def mkFreshInt [Monad m] [MonadStateOf (Nat × Nat) m] : m Nat := do
 
 @[spec]
 theorem mkFreshInt_spec [Monad m] [LawfulMonad m] [WPMonad m sh] :
-  ⦃fun s => PreCond.pure (s.1 = n ∧ s.2 = o)⦄
+  ⦃fun s => ⌜s.1 = n ∧ s.2 = o⌝⦄
   (mkFreshInt : StateT (Nat × Nat) m Nat)
-  ⦃⇓ r => fun s => PreCond.pure (r = n ∧ s.1 = n + 1 ∧ s.2 = o)⦄ := by
+  ⦃⇓ r => fun s => ⌜r = n ∧ s.1 = n + 1 ∧ s.2 = o⌝⦄ := by
   unfold mkFreshInt
   xwp
   intro s
@@ -50,16 +50,16 @@ theorem MonadStateOf.mkFreshInt_apply [Monad m] [MonadStateOf (Nat × Nat) m] [M
 
 @[spec]
 theorem mkFreshInt_lift_spec [Monad m] [LawfulMonad m] [WPMonad m sh] :
-  ⦃fun _ s => PreCond.pure (s.1 = n ∧ s.2 = o)⦄
+  ⦃fun _ s => ⌜s.1 = n ∧ s.2 = o⌝⦄
   (mkFreshInt : ExceptT Char (ReaderT Bool (StateT (Nat × Nat) m)) Nat)
-  ⦃⇓ r _ s => PreCond.pure (r = n ∧ s.1 = n + 1 ∧ s.2 = o)⦄ := by
+  ⦃⇓ r _ s => ⌜r = n ∧ s.1 = n + 1 ∧ s.2 = o⌝⦄ := by
   xwp
   simp
 
 theorem mkFreshInt_spec_fail [Monad m] [LawfulMonad m] [WPMonad m sh] :
-  ⦃fun s => PreCond.pure (s.1 = n ∧ s.2 = o)⦄
+  ⦃fun s => ⌜s.1 = n ∧ s.2 = o⌝⦄
   (mkFreshInt : StateT (Nat × Nat) m Nat)
-  ⦃⇓ r s => PreCond.pure (r = n ∧ s.1 = n + 1 ∧ s.2 = o)⦄ := by
+  ⦃⇓ r s => ⌜r = n ∧ s.1 = n + 1 ∧ s.2 = o⌝⦄ := by
   unfold mkFreshInt
   intro s
   fail_if_success xstart
@@ -284,7 +284,7 @@ def fib_spec : Nat → Nat
 | 1 => 1
 | n+2 => fib_spec n + fib_spec (n+1)
 
-theorem fib_triple : ⦃PreCond.pure True⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ := by
+theorem fib_triple : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => ⌜r = fib_spec n⌝⦄ := by
   unfold fib_impl
   intro h
   xwp
@@ -394,9 +394,9 @@ def prog (n : Nat) : M Nat := do
 def isValid : Nat → Char → Bool → String → Prop := sorry
 
 theorem op.spec :
-  ⦃isValid⦄ op n ⦃⇓r => PreCond.pure (r > 42) ∧ isValid⦄ := sorry
+  ⦃isValid⦄ op n ⦃⇓r => ⌜r > 42⌝ ∧ isValid⦄ := sorry
 
-theorem prog.spec : ⦃isValid⦄ prog n ⦃⇓r => PreCond.pure (r > 100) ∧ isValid⦄ := by
+theorem prog.spec : ⦃isValid⦄ prog n ⦃⇓r => ⌜r > 100⌝ ∧ isValid⦄ := by
   unfold prog
   intro a b c d h
   xapp op.spec
@@ -406,10 +406,9 @@ theorem prog.spec : ⦃isValid⦄ prog n ⦃⇓r => PreCond.pure (r > 100) ∧ i
   xapp op.spec
   intro r₃ a b c d ⟨hr₃, h⟩
   xpure
-  simp[h]
+  simp_all only [SProp.idiom_apply, SProp.idiom, SProp.and, and_true, gt_iff_lt]
   omega
 
-set_option trace.Meta.synthInstance true in
 theorem prog.spec' : ⦃isValid⦄ prog n ⦃⇓r => ⌜r > 100⌝ ∧ isValid⦄ := by
   unfold prog
   xintro □h
@@ -420,7 +419,7 @@ theorem prog.spec' : ⦃isValid⦄ prog n ⦃⇓r => ⌜r > 100⌝ ∧ isValid�
   xapp op.spec
   xintro →r₃ ⟨⌜hr₃⌝, □h⟩
   xpure
-  simp[h]
+  simp_all only [SProp.idiom_apply, SProp.idiom, SProp.and, and_true, gt_iff_lt]
   omega
 
 end WeNeedAProofMode
