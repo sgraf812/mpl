@@ -1,5 +1,5 @@
 import Lean
-import MPL.SProp.Basic
+import MPL.SProp.SProp
 
 section Delab
 open Lean Macro Parser
