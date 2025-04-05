@@ -409,6 +409,11 @@ theorem prog.spec : ⦃isValid⦄ prog n ⦃⇓r => ⌜r > 100⌝ ∧ isValid⦄
     and_true, gt_iff_lt]
   omega
 
+private abbrev theNat : SVal [Nat, Bool] Nat := fun n b => n
+private def test (P Q : PreCond (.arg Nat (.arg Bool .pure))) : PreCond (.arg Char (.arg Nat (.arg Bool .pure))) :=
+  sprop(fun n => ((∀ y, if y = n then ⌜‹Nat›ₛ + #theNat = 4⌝ else Q) ∧ Q) → P → (∃ x, P → if (x : Bool) then Q else P))
+
+/-
 theorem prog.spec' : ⦃isValid⦄ prog n ⦃⇓r => ⌜r > 100⌝ ∧ isValid⦄ := by
   unfold prog
   xintro □h
@@ -421,5 +426,5 @@ theorem prog.spec' : ⦃isValid⦄ prog n ⦃⇓r => ⌜r > 100⌝ ∧ isValid�
   xpure
   simp_all only [SProp.idiom_apply, SProp.idiom, SProp.and, and_true, gt_iff_lt]
   omega
-
+-/
 end WeNeedAProofMode

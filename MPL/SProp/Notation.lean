@@ -1,3 +1,9 @@
+/-
+Copyright (c) 2022 Lars König. All rights reserved.
+Released under Apache 2.0 license.
+Authors: Lars König, Sebastian Graf
+-/
+
 import Lean
 import MPL.SProp.SProp
 
@@ -72,6 +78,8 @@ partial def unpackSprop [Monad m] [MonadRef m] [MonadQuotation m] : Term → m T
 syntax "⌜" term "⌝" : term
 /-- Entailment in `SProp`. -/
 syntax:25 term:26 " ⊢ₛ " term:25 : term
+/-- Tautology in `SProp`. -/
+syntax:25 "⊢ₛ " term:25 : term
 /-- ‹t› in `SProp`. -/
 syntax "‹" term "›ₛ" : term
 /-- Use getter `t` in `SProp` idiom notation. -/
@@ -90,8 +98,9 @@ macro_rules
   | `(⌜$t⌝) => ``(SProp.idiom (fun escape => $t))
   | `(#$t) => `(SVal.GetTy.applyEscape $t (by assumption))
   | `(‹$t›ₛ) => `(#(SVal.getThe $t))
+  | `(⊢ₛ $P) => ``(SProp.entails ⌜True⌝ sprop($P))
 
-def theNat : SVal [Nat, Bool] Nat := fun n b => n
+private abbrev theNat : SVal [Nat, Bool] Nat := fun n b => n
 example (P Q : SProp [Nat, Bool]): SProp [Char, Nat, Bool] :=
   sprop(fun c => ((∀ y, if y = 4 then ⌜y = #theNat⌝ ∧ P else Q) ∧ Q) → (∃ x, P → if (x : Bool) then Q else P))
 
