@@ -69,7 +69,7 @@ theorem MonadWithReader.withReader_apply [MonadWithReaderOf ρ m] [WP m sh] (f :
   wp⟦MonadWithReader.withReader f x⟧.apply Q = wp⟦MonadWithReaderOf.withReader f x⟧.apply Q := rfl
 
 @[simp]
-lemma ite_app {c:Prop} [Decidable c] (t e : α → β) (a : α) : (ite (α := α → β) c t e) a = if c then t a else e a := by
+theorem ite_app {c:Prop} [Decidable c] (t e : α → β) (a : α) : (ite (α := α → β) c t e) a = if c then t a else e a := by
   split <;> rfl
 
 example :

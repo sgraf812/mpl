@@ -13,7 +13,6 @@ abbrev PredShape.args : PredShape → List Type
   | .arg σ s => σ :: PredShape.args s
   | .except ε s => PredShape.args s
 
-@[simp]
 abbrev PreCond (ps : PredShape) : Type := SProp (PredShape.args ps)
 
 @[ext]

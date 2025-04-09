@@ -103,8 +103,33 @@ end Instances
 
 open Lean Elab Meta Term Command
 
-lemma congr_apply_Q {α : Type} {m : Type → Type u} (a b : m α) (h : a = b) {ps : PredShape} [WP m ps] (Q : PostCond α ps) :
+theorem congr_apply_Q {α : Type} {m : Type → Type u} (a b : m α) (h : a = b) {ps : PredShape} [WP m ps] (Q : PostCond α ps) :
   wp⟦a⟧.apply Q = wp⟦b⟧.apply Q := by congr
+
+-- the following function is vendored from Mathlib for now.  TODO: Specialize, simplify
+/-- If `e` is a projection of the structure constructor, reduce the projection.
+Otherwise returns `none`. If this function detects that expression is ill-typed, throws an error.
+For example, given `Prod.fst (x, y)`, returns `some x`. -/
+private def _root_.Lean.Expr.reduceProjStruct? (e : Expr) : MetaM (Option Expr) := do
+  let .const cname _ := e.getAppFn | return none
+  let some pinfo ← getProjectionFnInfo? cname | return none
+  let args := e.getAppArgs
+  if ha : args.size = pinfo.numParams + 1 then
+    -- The last argument of a projection is the structure.
+    let sarg := args[pinfo.numParams]'(ha ▸ pinfo.numParams.lt_succ_self)
+    -- Check that the structure is a constructor expression.
+    unless sarg.getAppFn.isConstOf pinfo.ctorName do
+      return none
+    let sfields := sarg.getAppArgs
+    -- The ith projection extracts the ith field of the constructor
+    let sidx := pinfo.numParams + pinfo.i
+    if hs : sidx < sfields.size then
+      return some (sfields[sidx]'hs)
+    else
+      throwError m!"ill-formed expression, {cname} is the {pinfo.i + 1}-th projection function \
+        but {sarg} does not have enough arguments"
+  else
+    return none
 
 def deriveWPSimpFromEq (eq type : Expr) (baseName : Name) (fieldProjs : List Name := []) : TermElabM Name := do
   let lemmaName := baseName ++ `wp_apply

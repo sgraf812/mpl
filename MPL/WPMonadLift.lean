@@ -43,7 +43,7 @@ instance ReaderT.instLiftMonadMorphism [Monad m] [LawfulMonad m] : MonadMorphism
   bind_bind x f := by ext; simp[liftM, MonadLift.monadLift, ReaderT.run, bind, ReaderT.bind]
 
 instance ExceptT.instLiftMonadMorphism [Monad m] [LawfulMonad m] : MonadMorphism m (ExceptT ε m) MonadLift.monadLift where
-  pure_pure x := by ext; simp[liftM, MonadLift.monadLift, ExceptT.lift]
+  pure_pure x := by ext; simp only [MonadLift.monadLift, ExceptT.lift, map_pure, ExceptT.run_pure]; rfl
   bind_bind x f := by ext; simp[liftM, MonadLift.monadLift, ExceptT.lift, ExceptT.mk, bind, ExceptT.bind, ExceptT.bindCont]
 
 -- Now rewrites for the standard lib:

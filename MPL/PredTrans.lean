@@ -1,4 +1,3 @@
-import Mathlib.Order.CompleteLattice
 import MPL.MonadMorphism
 import MPL.PostCond
 
@@ -13,52 +12,11 @@ structure PredTrans (ps : PredShape) (α : Type) : Type where
   mono : PredTrans.Mono apply
 
 def PredTrans.const {ps : PredShape} {α : Type} (p : PreCond ps) : PredTrans ps α :=
-  ⟨fun _ => p, fun _ _ _ => SProp.entails_refl _⟩
+  ⟨fun _ => p, fun _ _ _ => SProp.entails.refl _⟩
 
 def PredTrans.le {ps : PredShape} {α : Type} (x y : PredTrans ps α) : Prop :=
   ∀ Q, (y.apply Q).entails (x.apply Q) -- the weaker the precondition, the smaller the PredTrans
-def PredTrans.top {ps : PredShape} {α : Type} : PredTrans ps α :=
-  PredTrans.const ⌜False⌝
-def PredTrans.bot {ps : PredShape} {α : Type} : PredTrans ps α :=
-  PredTrans.const ⌜True⌝
-noncomputable def PredTrans.sup {ps : PredShape} {α : Type} (x y : PredTrans ps α) : PredTrans ps α :=
-  { apply := fun Q => (x.apply Q).and (y.apply Q), mono := by
-      intro Q₁ Q₂ h
-      simp only [apply]
-      sorry }
-noncomputable def PredTrans.inf {ps : PredShape} {α : Type} (x y : PredTrans ps α) : PredTrans ps α :=
-  { apply := fun Q => (x.apply Q).or (y.apply Q), mono := by
-      intro Q₁ Q₂ h
-      simp only [apply]
-      sorry }
-noncomputable def PredTrans.sInf {ps : PredShape} {α : Type} : Set (PredTrans ps α) → PredTrans ps α :=
-  fun x => PredTrans.mk (fun Q => sprop(∃ p, ⌜p ∈ x⌝ ∧ p.apply Q)) sorry
-noncomputable def PredTrans.sSup {ps : PredShape} {α : Type} : Set (PredTrans ps α) → PredTrans ps α :=
-  fun x => PredTrans.mk (fun Q => sprop(∀ p, ⌜p ∈ x⌝ → p.apply Q)) sorry
-
-noncomputable instance : CompleteLattice (PredTrans ps α) where
-  le := PredTrans.le
-  le_refl := by simp [PredTrans.le]
-  le_trans := sorry
-  le_antisymm := sorry
-  sup := PredTrans.sup
-  le_sup_left := sorry
-  le_sup_right := sorry
-  sup_le := sorry
-  inf := PredTrans.inf
-  le_inf := sorry
-  inf_le_left := sorry
-  inf_le_right := sorry
-  sSup := PredTrans.sSup
-  le_sSup := sorry
-  sSup_le := sorry
-  top := PredTrans.top
-  bot := PredTrans.bot
-  le_top := sorry
-  bot_le := sorry
-  sInf := PredTrans.sInf
-  le_sInf := sorry
-  sInf_le := sorry
+instance : LE (PredTrans ps α) := ⟨PredTrans.le⟩
 
 def PredTrans.pure {ps : PredShape} {α : Type} (a : α) : PredTrans ps α :=
   { apply := fun Q => Q.1 a, mono := by intro _ _ h; apply h.1 }
@@ -131,7 +89,7 @@ def PredTrans.tryCatch {ps : PredShape} {ε : Type} (x : PredTrans (.except ε p
   { apply := fun Q => x.apply (Q.1, fun e => (handle e).apply Q, Q.2.2), mono := by
       intro Q₁ Q₂ h
       apply x.mono
-      use h.1, ?_, h.2.2
+      refine ⟨h.1, ?_, h.2.2⟩
       intro e
       apply (handle e).mono _ _ h }
 
@@ -185,7 +143,7 @@ theorem PredTrans.modifyGet_pure {ps : PredShape} {σ : Type} {α : Type} (a : �
 def PredTrans.withReader {ps : PredShape} {σ : Type} (f : σ → σ) (x : PredTrans (.arg σ ps) α) : PredTrans (.arg σ ps) α :=
   PredTrans.pushArg fun r => do let (a, _) ← PredTrans.popArg x (f r); Pure.pure (a, r)
 
-lemma PredTrans.withReader_mono {ps : PredShape} {σ : Type} (f : σ → σ) (x x' : PredTrans (.arg σ ps) α) :
+theorem PredTrans.withReader_mono {ps : PredShape} {σ : Type} (f : σ → σ) (x x' : PredTrans (.arg σ ps) α) :
   x ≤ x' → withReader f x ≤ withReader f x' := by intro h Q r; apply h
 
 instance PredTrans.instMonadLiftArg : MonadLift (PredTrans m) (PredTrans (.arg σ m)) where

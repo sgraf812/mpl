@@ -7,7 +7,7 @@ namespace List
 
 theorem tail_of_cons_suffix : hd::tl <:+ l → tl <:+ l := by
   intro ⟨pre, h⟩
-  use (pre ++ [hd])
+  exists (pre ++ [hd])
   simp[h]
 
 -- TODO: Replace l by α, remove property, define toList instead?

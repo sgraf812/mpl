@@ -31,7 +31,7 @@ theorem FailConds.entails_refl {ps : PredShape} (x : FailConds ps) : x ⊢ₑ x 
   induction ps
   case pure => simp[entails]
   case arg σ s ih => exact (ih x)
-  case except ε s ih => simp only [entails, PreCond, SProp.entails_refl, implies_true, ih,
+  case except ε s ih => simp only [entails, PreCond, SProp.entails.refl, implies_true, ih,
     and_self]
 
 @[simp]
@@ -89,7 +89,7 @@ infixr:25 "⊢ₚ" => PostCond.entails
 
 @[refl,simp]
 abbrev PostCond.entails_refl (Q : PostCond α ps) : Q ⊢ₚ Q := by
-  simp only [entails, PreCond, SProp.entails_refl, implies_true, FailConds.entails_refl, and_self]
+  simp only [entails, PreCond, SProp.entails.refl, implies_true, FailConds.entails_refl, and_self]
 
 @[simp]
 theorem PostCond.total_def {p : α → PreCond ps} : (p, FailConds.false) = PostCond.total p := rfl

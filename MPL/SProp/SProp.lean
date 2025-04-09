@@ -27,6 +27,12 @@ def entails {σs : List Type} (P Q : SProp σs) : Prop := match σs with
 
 -- Reducibility of entails must be semi-reducible so that entails_refl is useful for rfl
 
+def bientails {σs : List Type} (P Q : SProp σs) : Prop := match σs with
+| [] => P ↔ Q
+| σ :: _ => ∀ (s : σ), bientails (P s) (Q s)
+@[simp] theorem bientails_nil {P Q : SProp []} : bientails P Q = (P ↔ Q) := rfl
+theorem bientails_cons_intro {σs : List Type} {P Q : SProp (σ::σs)} : (∀ s, bientails (P s) (Q s)) → bientails P Q := by simp only [bientails, imp_self]
+
 def and {σs : List Type} (P Q : SProp σs) : SProp σs := match σs with
 | [] => P ∧ Q
 | σ :: _ => fun (s : σ) => and (P s) (Q s)
@@ -38,6 +44,12 @@ def or {σs : List Type} (P Q : SProp σs) : SProp σs := match σs with
 | σ :: _ => fun (s : σ) => or (P s) (Q s)
 @[simp] theorem or_nil {P Q : SProp []} : or P Q = (P ∨ Q) := rfl
 @[simp] theorem or_cons {σs : List Type} {P Q : SProp (σ::σs)} : or P Q s = or (P s) (Q s) := rfl
+
+def not {σs : List Type} (P : SProp σs) : SProp σs := match σs with
+| [] => ¬ P
+| σ :: _ => fun (s : σ) => not (P s)
+@[simp] theorem not_nil {P : SProp []} : not P = (¬ P) := rfl
+@[simp] theorem not_cons {σs : List Type} {P : SProp (σ::σs)} : not P s = not (P s) := rfl
 
 def imp {σs : List Type} (P Q : SProp σs) : SProp σs := match σs with
 | [] => P → Q

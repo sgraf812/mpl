@@ -80,25 +80,37 @@ syntax "⌜" term "⌝" : term
 syntax:25 term:26 " ⊢ₛ " term:25 : term
 /-- Tautology in `SProp`. -/
 syntax:25 "⊢ₛ " term:25 : term
+/-- Bi-entailment in `SProp`. -/
+syntax:25 term:25 " ⊣⊢ₛ " term:25 : term
 /-- ‹t› in `SProp`. -/
 syntax "‹" term "›ₛ" : term
 /-- Use getter `t` in `SProp` idiom notation. -/
 syntax:max "#" term:max : term
 
+#check ∃ x, x = 0
 macro_rules
   | `($P ⊢ₛ $Q) => ``(SProp.entails sprop($P) sprop($Q))
   | `(sprop($P ∧ $Q)) => ``(SProp.and sprop($P) sprop($Q))
   | `(sprop($P ∨ $Q)) => ``(SProp.or sprop($P) sprop($Q))
+  | `(sprop(¬ $P)) => ``(SProp.not sprop($P))
   | `(sprop($P → $Q)) => ``(SProp.imp sprop($P) sprop($Q))
   | `(sprop($P ↔ $Q)) => ``(SProp.iff sprop($P) sprop($Q))
-  | `(sprop(∀ $x:ident, $P)) => ``(SProp.forall (fun $x => sprop($P)))
-  | `(sprop(∀ $x:ident $xs*, $P)) => ``(SProp.forall (fun $x => sprop(∀ $xs*, $P)))
-  | `(sprop(∃ $x:ident, $P)) => ``(SProp.exists (fun $x => sprop($P)))
-  | `(sprop(exists $x:ident, $P)) => ``(SProp.exists (fun $x => sprop($P)))
+  | `(sprop(∃ $xs:explicitBinders, $P)) => do expandExplicitBinders ``SProp.exists xs (← `(sprop($P)))
   | `(⌜$t⌝) => ``(SProp.idiom (fun escape => $t))
   | `(#$t) => `(SVal.GetTy.applyEscape $t (by assumption))
   | `(‹$t›ₛ) => `(#(SVal.getThe $t))
   | `(⊢ₛ $P) => ``(SProp.entails ⌜True⌝ sprop($P))
+  | `($P ⊣⊢ₛ $Q) => ``(SProp.bientails sprop($P) sprop($Q))
+  -- Sadly, ∀ does not resently use expandExplicitBinders...
+  | `(sprop(∀ _%$tk, $P)) => ``(SProp.forall (fun _%$tk => sprop($P)))
+  | `(sprop(∀ _%$tk : $ty, $P)) => ``(SProp.forall (fun _%$tk : $ty => sprop($P)))
+  | `(sprop(∀ (_%$tk $xs* : $ty), $P)) => ``(SProp.forall (fun _%$tk : $ty => sprop(∀ ($xs* : $ty), $P)))
+  | `(sprop(∀ $x:ident, $P)) => ``(SProp.forall (fun $x => sprop($P)))
+  | `(sprop(∀ ($x:ident : $ty), $P)) => ``(SProp.forall (fun $x : $ty => sprop($P)))
+  | `(sprop(∀ ($x:ident $xs* : $ty), $P)) => ``(SProp.forall (fun $x : $ty => sprop(∀ ($xs* : $ty), $P)))
+  | `(sprop(∀ $x:ident $xs*, $P)) => ``(SProp.forall (fun $x => sprop(∀ $xs*, $P)))
+  | `(sprop(∀ ($x:ident : $ty) $xs*, $P)) => ``(SProp.forall (fun $x : $ty => sprop(∀ $xs*, $P)))
+  | `(sprop(∀ ($x:ident $xs* : $ty) $ys*, $P)) => ``(SProp.forall (fun $x : $ty => sprop(∀ ($xs* : $ty) $ys*, $P)))
 
 private abbrev theNat : SVal [Nat, Bool] Nat := fun n b => n
 example (P Q : SProp [Nat, Bool]): SProp [Char, Nat, Bool] :=
@@ -110,7 +122,13 @@ example (P Q : SProp [Nat, Bool]): SProp [Char, Nat, Bool] :=
 app_unexpand_rule SProp.entails
   | `($_ $P $Q)  => do
     let P ← unpackSprop P; let Q ← unpackSprop Q;
-    ``($P ⊢ₛ $Q)
+    match P with
+    | `(⌜True⌝) => ``(⊢ₛ $Q)
+    | _ => ``($P ⊢ₛ $Q)
+app_unexpand_rule SProp.bientails
+  | `($_ $P $Q)  => do
+    let P ← unpackSprop P; let Q ← unpackSprop Q;
+    ``($P ⊣⊢ₛ $Q)
 app_unexpand_rule SProp.idiom
   | `($_ $t $ts*) => do
     match t with
@@ -129,6 +147,10 @@ app_unexpand_rule SProp.or
   | `($_ $P $Q) => do
     let P ← unpackSprop P; let Q ← unpackSprop Q;
     ``(sprop($P ∨ $Q))
+app_unexpand_rule SProp.not
+  | `($_ $P) => do
+    let P ← unpackSprop P;
+    ``(sprop(¬ $P))
 app_unexpand_rule SProp.imp
   | `($_ $P $Q) => do
     let P ← unpackSprop P; let Q ← unpackSprop Q;
