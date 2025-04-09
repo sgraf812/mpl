@@ -27,27 +27,6 @@ instance : Inhabited (PreCond ps) where
 
 example {ρ ε σ : Type} : PreCond (.arg σ (.arg ρ (.except ε .pure))) = (σ → ρ → Prop) := rfl
 
-theorem PreCond.imp_pure_extract_l {ps} {P : Prop} {P' : PreCond ps} {Q : PreCond ps}
-  (h : P → P' ⊢ₛ Q) : ⌜P⌝ ∧ P' ⊢ₛ Q := by
-  induction ps
-  case pure => intro ⟨hp, hp'⟩; exact h hp hp'
-  case arg σ s ih => intro s; apply ih (fun hp => h hp s)
-  case except ε s ih => simp; apply ih h
-
-theorem PreCond.imp_pure_extract_r {ps} {P : Prop} {P' : PreCond ps} {Q : PreCond ps}
-  (h : P → P' ⊢ₛ Q) : P' ∧ ⌜P⌝ ⊢ₛ Q := by
-  induction ps
-  case pure => intro ⟨hp, hp'⟩; exact h hp' hp
-  case arg σ s ih => intro s; apply ih (fun hp => h hp s)
-  case except ε s ih => simp; apply ih h
-
-theorem PreCond.imp_pure_extract {ps} {P : Prop} {Q : PreCond ps}
-  (h : P → ⌜True⌝ ⊢ₛ Q) : ⌜P⌝ ⊢ₛ Q := by
-  induction ps
-  case pure => intro hp; exact (h hp) .intro
-  case arg σ s ih => intro s; apply ih (fun hp => h hp s)
-  case except ε s ih => simp; apply ih h
-
 @[simp]
 theorem PreCond.entails_false {x : PreCond ps} : ⌜False⌝ ⊢ₛ x := by
   induction ps
