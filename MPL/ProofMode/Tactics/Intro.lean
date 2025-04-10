@@ -6,10 +6,6 @@ namespace MPL.ProofMode.Tactics
 theorem imp_intro_empty {σs : List Type} {P Q : SProp σs} (h : P ⊢ₛ Q) : ⊢ₛ P → Q :=
   (SProp.entails_true_intro P Q).mpr h
 
-def getFreshHypName : TSyntax ``binderIdent → CoreM (Name × Syntax)
-  | `(binderIdent| $name:ident) => pure (name.getId, name)
-  | stx => return (← mkFreshUserName `h, stx)
-
 partial def sIntroCore
     (goal : SGoal) (proofs : Array Expr) (idents : List (TSyntax ``binderIdent)) :
     MetaM (SGoal × Array Expr) := do
@@ -27,7 +23,7 @@ partial def sIntroCore
       sIntroCore newGoal (proofs.push proof) idents
     else
       let proof := mkApp4 (mkConst ``SProp.imp_intro) σs goal.hyps p q
-      let newGoal := { goal with hyps := mkAnd σs goal.hyps p, target := q }
+      let newGoal := { goal with hyps := mkAnd! σs goal.hyps p, target := q }
       sIntroCore newGoal (proofs.push proof) idents
 
 -- elab "sintro" pats:(colGt icasesPat)* : tactic => do

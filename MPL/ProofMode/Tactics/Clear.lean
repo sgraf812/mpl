@@ -6,7 +6,7 @@ Authors: Lars König, Mario Carneiro
 import MPL.ProofMode.SGoal
 import MPL.ProofMode.Focus
 
-namespace MPL.ProofMode
+namespace MPL.ProofMode.Tactics
 open Lean Elab Tactic Meta
 
 theorem clear {σs : List Type} {P P' A Q : SProp σs}
@@ -19,8 +19,8 @@ elab "sclear" colGt hyp:ident : tactic => do
   let g ← instantiateMVars <| ← mvar.getType
   let some goal := parseSGoal? g | throwError "not in proof mode"
   let some res := goal.focusHyp hyp.getId | throwError "unknown identifier '{hyp}'"
-  let m ← mkFreshExprSyntheticOpaqueMVar res.restGoal.toExpr
+  let m ← mkFreshExprSyntheticOpaqueMVar (res.updateSGoal goal).toExpr
 
   mvar.assign (mkApp7 (mkConst ``clear) goal.σs goal.hyps
-    res.restGoal.hyps res.focusHyp goal.target res.proof m)
+    res.restHyps res.focusHyp goal.target res.proof m)
   replaceMainGoal [m.mvarId!]
