@@ -70,6 +70,7 @@ structure SGoal where
   σs : Expr -- Q(List Type)
   hyps : Expr -- A conjunction of hypotheses in `SProp σs`, each carrying a name and uniq as metadata (`parseHyp?`)
   target : Expr -- Q(SProp $σs)
+  deriving Inhabited
 
 def parseSGoal? (expr : Expr) : Option SGoal := do
   let .mdata ⟨[(sgoalAnnotation, .ofBool true)]⟩ e := expr | none
