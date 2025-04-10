@@ -32,7 +32,7 @@ partial def SGoal.focusHyp (goal : SGoal) (name : Name) : Option FocusResult := 
     go (e : Expr) : Option FocusResult := do
       if let some hyp := parseHyp? e then
         if hyp.name = name then
-          return ⟨hyp.p, emptyHyp goal.σs, mkApp2 (mkConst ``focus_this) goal.σs hyp.p⟩
+          return ⟨e, emptyHyp goal.σs, mkApp2 (mkConst ``focus_this) goal.σs e⟩
         else
           none
       else if let some (σs, lhs, rhs) := parseAnd? e then

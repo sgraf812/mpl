@@ -1,4 +1,3 @@
-import MPL
 import MPL.ProofMode
 
 open MPL
@@ -103,8 +102,8 @@ namespace specialize
 
 theorem simple (P Q : SProp σs) : P ⊢ₛ (P → Q) → Q := by
   sintro HP HPQ
-  sspecialize HPQ
-  sexact HQ
+  sspecialize HPQ HP
+  sexact HPQ
 
 end specialize
 
