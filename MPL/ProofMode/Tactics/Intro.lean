@@ -14,8 +14,7 @@ partial def sIntroCore
   | ident :: idents =>
     let mkApp3 (.const ``SProp.imp []) σs p q := goal.target | throwError "Target not an implication {goal.target}"
     let (name, _ref) ← getFreshHypName ident
-    let uniq ← mkFreshId
-    let hyp : Hyp := { name := name, uniq := uniq, p := p }
+    let hyp : Hyp := { name := name, p := p }
     let p := hyp.toExpr
     if let some _ := parseEmptyHyp? goal.hyps then
       let proof := mkApp3 (mkConst ``imp_intro_empty) σs p q

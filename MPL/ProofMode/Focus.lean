@@ -13,7 +13,7 @@ structure FocusResult where
   restHyps : Expr
   proof : Expr
 
-def FocusResult.updateSGoal (res : FocusResult) (goal : SGoal) : SGoal :=
+def FocusResult.restGoal (res : FocusResult) (goal : SGoal) : SGoal :=
   { goal with hyps := res.restHyps }
 
 theorem focus_this {σs : List Type} {P : SProp σs} : P ⊣⊢ₛ ⌜True⌝ ∧ P :=

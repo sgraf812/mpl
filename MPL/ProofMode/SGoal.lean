@@ -16,22 +16,23 @@ instance : PropAsEntails (P ⊢ₛ Q) sprop(P → Q) where
 theorem start_entails (φ : Prop) [PropAsEntails φ P] : (⊢ₛ P) → φ :=
   PropAsEntails.prop_as_entails.mpr
 
+/-- Tautology in `SProp` as a definition. -/
+abbrev _root_.MPL.SProp.tautological {σs : List Type} (Q : SProp σs) : Prop := ⊢ₛ Q
+
 @[match_pattern] def sgoalAnnotation := `sgoal
 @[match_pattern] def nameAnnotation := `name
-@[match_pattern] def uniqAnnotation := `uniq
 
 structure Hyp where
   name : Name
-  uniq : Name
   p : Expr
 
 def parseHyp? : Expr → Option Hyp
-  | .mdata ⟨[(nameAnnotation, .ofName name), (uniqAnnotation, .ofName uniq)]⟩ p =>
-    some ⟨name, uniq, p⟩ -- NB: mdatas are transparent to SubExpr; hence no pos.push
+  | .mdata ⟨[(nameAnnotation, .ofName name)]⟩ p =>
+    some ⟨name, p⟩ -- NB: mdatas are transparent to SubExpr; hence no pos.push
   | _ => none
 
 def Hyp.toExpr (hyp : Hyp) : Expr :=
-  .mdata ⟨[(nameAnnotation, .ofName hyp.name), (uniqAnnotation, .ofName hyp.uniq)]⟩ hyp.p
+  .mdata ⟨[(nameAnnotation, .ofName hyp.name)]⟩ hyp.p
 
 -- set_option pp.all true in
 -- #check ⌜True⌝
@@ -118,27 +119,3 @@ partial def SGoal.buildHypIndex (goal : SGoal) : Std.HashMap Name (SubExpr.Pos �
 def getFreshHypName : TSyntax ``binderIdent → CoreM (Name × Syntax)
   | `(binderIdent| $name:ident) => pure (name.getId, name)
   | stx => return (← mkFreshUserName `h, stx)
-
-/-- This is only used for display purposes, so that we can render context variables that appear
-to have type `A : PROP` even though `PROP` is not a type. -/
-def HypMarker {σs : List Type} (_A : SProp σs) : Prop := True
-
-def addLocalVarInfo (stx : Syntax) (lctx : LocalContext)
-    (expr : Expr) (expectedType? : Option Expr) (isBinder := false) : MetaM Unit := do
-  Elab.withInfoContext' (pure ())
-    (fun _ =>
-      return .inl <| .ofTermInfo
-        { elaborator := .anonymous, lctx, expr, stx, expectedType?, isBinder })
-    (return .ofPartialTermInfo { elaborator := .anonymous, lctx, stx, expectedType? })
-
-def addHypInfo (stx : Syntax) (name uniq : Name) (p : Expr /-Q(SProp $σs)-/)
-    (isBinder := false) : MetaM Unit := do
-  let lctx ← getLCtx
-  let .app (.const ``SProp []) σs ← inferType p | throwError "addHypInfo: expected an SProp {p}"
-  let p := mkApp2 (mkConst ``HypMarker) σs p
-  addLocalVarInfo stx (lctx.mkLocalDecl ⟨uniq⟩ name p) (.fvar ⟨uniq⟩) p isBinder
-
-def SGoal.findWithInfo (goal : SGoal) (name : Ident) : MetaM (SubExpr.Pos × Name) := do
-  let some (p, h) := goal.findHyp? name.getId | throwError "unknown hypothesis {name}"
-  addHypInfo name name.getId h.uniq h.p
-  pure (p, h.uniq)

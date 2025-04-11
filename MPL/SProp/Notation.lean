@@ -87,7 +87,6 @@ syntax "‹" term "›ₛ" : term
 /-- Use getter `t` in `SProp` idiom notation. -/
 syntax:max "#" term:max : term
 
-#check ∃ x, x = 0
 macro_rules
   | `($P ⊢ₛ $Q) => ``(SProp.entails sprop($P) sprop($Q))
   | `(sprop($P ∧ $Q)) => ``(SProp.and sprop($P) sprop($Q))

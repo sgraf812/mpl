@@ -23,14 +23,24 @@ partial def SGoal.assumption (goal : SGoal) : OptionT MetaM Expr := do
     <|>
     mkApp5 (mkConst ``assumption_r) σs lhs rhs goal.target <$> assumption { goal with hyps := rhs }
   else
-    failure
+    panic! s!"assumption: hypothesis without proper metadata: {goal.hyps}"
 
+theorem from_tautology {σs : List Type} {P T : SProp σs} (htaut : ⊢ₛ T) : P ⊢ₛ T :=
+  SProp.true_intro.trans htaut
+
+def SGoal.assumptionPure (goal : SGoal) : OptionT MetaM Expr := do
+  let fvarId ← OptionT.mk (findLocalDeclWithType? (mkApp2 (mkConst ``SProp.tautological) goal.σs goal.target))
+  return mkApp4 (mkConst ``from_tautology) goal.σs goal.hyps goal.target (.fvar fvarId)
+
+#check MVarId.assumption
 elab "sassumption" : tactic => do
   let mvar ← getMainGoal
   mvar.withContext do
   let g ← instantiateMVars <| ← mvar.getType
   let some goal := parseSGoal? g | throwError "not in proof mode"
 
-  let some proof ← liftMetaM goal.assumption | throwError "hypothesis not found"
+  let some proof ← liftMetaM <|
+    goal.assumption <|> goal.assumptionPure
+    | throwError "hypothesis not found"
   mvar.assign proof
   replaceMainGoal []

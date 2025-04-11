@@ -32,7 +32,7 @@ def spureCore (mvarId : MVarId) (goal : SGoal) (res : FocusResult) (name : Name)
   let σs := goal.σs
   let φ ← mkFreshExprMVar (mkSort .zero)
   let inst ← synthInstance (mkApp3 (mkConst ``IsPure) σs res.focusHyp φ)
-  let newGoalTy := mkForall name .default φ (res.updateSGoal goal).toExpr
+  let newGoalTy := mkForall name .default φ (res.restGoal goal).toExpr
   let newMVarId ← mkFreshExprSyntheticOpaqueMVar newGoalTy
   mvarId.assign <| mkApp9 (mkConst ``spure_thm) σs goal.hyps res.restHyps res.focusHyp goal.target φ inst res.proof newMVarId
   newMVarId.mvarId!.intro name

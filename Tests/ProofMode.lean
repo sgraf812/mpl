@@ -25,6 +25,10 @@ theorem assumption (P Q : SProp σs) : Q ⊢ₛ P → Q := by
   sintro _ _
   sassumption
 
+theorem assumption_pure (P Q : SProp σs) (hP : ⊢ₛ P): Q ⊢ₛ P := by
+  sintro _
+  sassumption
+
 namespace pure
 
 theorem move (Q : SProp σs) : ⌜φ⌝ ⊢ₛ Q → Q := by
@@ -128,9 +132,14 @@ theorem mixed (y : Nat) (P Q : SProp σs) (Ψ : Nat → SProp σs) (hP : ⊢ₛ 
 
 end specialize
 
+theorem rename (P : SProp σs) : P ⊢ₛ P := by
+  sintro HP
+  srename HP to HP'
+  sexact HP'
+
 /-
 TODO:
 - rcases
 - intro
-- specialize
+- exfalso?
 -/

@@ -46,13 +46,11 @@ def specializeImpPersistent (σs : Expr) (P : Expr) (QR : Expr) (arg : TSyntax `
 
   return ({ specHyp with p := R }.toExpr, proof)
 
-private def tautological (Q : SProp σs) : Prop := ⊢ₛ Q
-
 def specializeImpPure (_σs : Expr) (P : Expr) (QR : Expr) (arg : TSyntax `term) : OptionT TacticM (Expr × Expr) := do
   let some specHyp := parseHyp? QR | panic! "Precondition of specializeImpPure violated"
   let mkApp3 (.const ``SProp.imp []) σs Q R := specHyp.p | failure
   let (hQ, mvarIds) ← try
-    elabTermWithHoles arg.raw (mkApp2 (mkConst ``tautological) σs Q) `specialize (allowNaturalHoles := true)
+    elabTermWithHoles arg.raw (mkApp2 (mkConst ``SProp.tautological) σs Q) `specialize (allowNaturalHoles := true)
     catch _ => failure
   OptionT.mk do -- no OptionT failure after this point
   -- The goal is P ∧ (Q → R)
