@@ -28,14 +28,18 @@ theorem spure_thm {σs : List Type} {P P' Q R : SProp σs} {φ : Prop} [IsPure Q
         exact SProp.and_elim_l.trans (h hp)
     exact h₁.mp.trans h₂
 
-def spureCore (mvarId : MVarId) (goal : SGoal) (res : FocusResult) (name : Name) : MetaM (FVarId × MVarId) := do
+-- NB: We do not use MVarId.intro because that would mean we require all callers to supply an MVarId.
+def spureCore (goal : SGoal) (res : FocusResult) (name : TSyntax ``binderIdent)
+  (k : Expr /-φ:Prop-/ → Expr /-h:φ-/ → MetaM (α × Expr)) : MetaM (α × Expr) := do
   let σs := goal.σs
   let φ ← mkFreshExprMVar (mkSort .zero)
   let inst ← synthInstance (mkApp3 (mkConst ``IsPure) σs res.focusHyp φ)
-  let newGoalTy := mkForall name .default φ (res.restGoal goal).toExpr
-  let newMVarId ← mkFreshExprSyntheticOpaqueMVar newGoalTy
-  mvarId.assign <| mkApp9 (mkConst ``spure_thm) σs goal.hyps res.restHyps res.focusHyp goal.target φ inst res.proof newMVarId
-  newMVarId.mvarId!.intro name
+  let (name, ref) ← getFreshHypName name
+  withLocalDeclD name φ fun h => do
+    -- addLocalVarInfo ref (← getLCtx) h φ
+    let (a, prf) ← k φ h
+    let prf ← mkLambdaFVars #[h] prf
+    return (a, mkApp9 (mkConst ``spure_thm) σs goal.hyps res.restHyps res.focusHyp goal.target φ inst res.proof prf)
 
 elab "spure" colGt hyp:ident : tactic => do
   let mvar ← getMainGoal
@@ -43,8 +47,11 @@ elab "spure" colGt hyp:ident : tactic => do
   let g ← instantiateMVars <| ← mvar.getType
   let some goal := parseSGoal? g | throwError "not in proof mode"
   let some res := goal.focusHyp hyp.getId | throwError "unknown identifier '{hyp}'"
-  let (_fv, m) ← spureCore mvar goal res hyp.getId
-  replaceMainGoal [m]
+  let (m, prf) ← spureCore goal res (← `(binderIdent| $hyp:ident)) fun _ _ => do
+    let m ← mkFreshExprSyntheticOpaqueMVar (res.restGoal goal).toExpr
+    return (m, m)
+  mvar.assign prf
+  replaceMainGoal [m.mvarId!]
 
 /-- A generalization of `SProp.pure_intro` exploiting `IsPure`. -/
 theorem pure_intro {σs : List Type} {P Q : SProp σs} {φ : Prop} [IsPure Q φ] (hp : φ) : P ⊢ₛ Q :=
