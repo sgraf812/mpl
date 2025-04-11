@@ -6,83 +6,77 @@ namespace MPL.ProofMode.Tactics
 
 open Lean Elab Tactic Meta
 
-theorem specialize_imp_persistent {P P' Q R T : SProp σs}
-  (hrefocus : P ∧ (Q → R) ⊣⊢ₛ P' ∧ Q) (hgoal : P ∧ R ⊢ₛ T) : P ∧ (Q → R) ⊢ₛ T := by
+initialize registerTraceClass `mpl.tactics.specialize
+
+theorem specialize_imp_persistent {P P' Q R : SProp σs}
+  (hrefocus : P ∧ (Q → R) ⊣⊢ₛ P' ∧ Q) : P ∧ (Q → R) ⊢ₛ P ∧ R := by
   calc sprop(P ∧ (Q → R))
     _ ⊢ₛ (P' ∧ Q) ∧ (Q → R) := SProp.and_intro hrefocus.mp SProp.and_elim_r
     _ ⊢ₛ P' ∧ Q ∧ (Q → R) := SProp.and_assoc.mp
     _ ⊢ₛ P' ∧ Q ∧ R := SProp.and_mono_r (SProp.and_intro SProp.and_elim_l SProp.imp_elim_r)
     _ ⊢ₛ (P' ∧ Q) ∧ R := SProp.and_assoc.mpr
     _ ⊢ₛ P ∧ R := SProp.and_mono_l (hrefocus.mpr.trans SProp.and_elim_l)
-    _ ⊢ₛ T := hgoal
 
-theorem specialize_imp_pure {P Q R T : SProp σs}
-  (h : ⊢ₛ Q) (hgoal : P ∧ R ⊢ₛ T) : P ∧ (Q → R) ⊢ₛ T := by
+theorem specialize_imp_pure {P Q R : SProp σs}
+  (h : ⊢ₛ Q) : P ∧ (Q → R) ⊢ₛ P ∧ R := by
   calc sprop(P ∧ (Q → R))
     _ ⊢ₛ P ∧ (Q ∧ (Q → R)) := SProp.and_mono_r (SProp.and_intro (SProp.true_intro.trans h) .rfl)
     _ ⊢ₛ P ∧ R := SProp.and_mono_r (SProp.mp SProp.and_elim_r SProp.and_elim_l)
-    _ ⊢ₛ T := hgoal
 
-theorem specialize_forall {P P' Q : SProp σs} {ψ : α → SProp σs}
-  (hfocus : P ⊣⊢ₛ P' ∧ (∀ x, ψ x)) (a : α) (h : P' ∧ ψ a ⊢ₛ Q) : P ⊢ₛ Q := by
-  calc P
-    _ ⊢ₛ P' ∧ (∀ x, ψ x) := hfocus.mp
-    _ ⊢ₛ P' ∧ ψ a := SProp.and_mono_r (SProp.forall_elim a)
-    _ ⊢ₛ Q := h
+theorem specialize_forall {P : SProp σs} {ψ : α → SProp σs}
+  (a : α) : P ∧ (∀ x, ψ x) ⊢ₛ P ∧ ψ a := SProp.and_mono_r (SProp.forall_elim a)
 
-theorem imp_trans_helper {P P₁ P₂ Q R : SProp σs}
-  (h₁ : P ⊣⊢ₛ P₁ ∧ (Q → R)) (h₂ : P₁ ⊣⊢ₛ P₂ ∧ Q) : P ⊣⊢ₛ (P₂ ∧ Q) ∧ (Q → R) :=
-    h₁.trans (SProp.and_congr_l h₂)
-
-def specializeImpPersistent (mvar : MVarId) (goal : SGoal) (arg : TSyntax `term) : OptionT MetaM (SGoal × MVarId) := do
+def specializeImpPersistent (σs : Expr) (P : Expr) (QR : Expr) (arg : TSyntax `term) : OptionT TacticM (Expr × Expr) := do
   guard (arg.raw.isIdent)
-  let some arg := goal.focusHyp arg.raw.getId | failure
+  let some arg := focusHyp σs (mkAnd! σs P QR) arg.raw.getId | failure
   OptionT.mk do -- no OptionT failure after this point
-  -- P ∧ (Q → R) := goal.hyps, arg.proof : P ∧ (Q → R) ⊣⊢ₛ P' ∧ Q
-  -- logInfo m!"goal.hyps: {goal.hyps}"
-  -- logInfo m!"arg.proof : {← inferType arg.proof}"
-  let some (_, P, QR) := parseAnd? goal.hyps | panic! s!"Precondition of specializeImp violated: context did not contain multiple hypotheses {goal.hyps}"
-  let some hyp := parseHyp? QR | panic! "Precondition of specializeImp violated: right-most hyp not singleton"
-  let T := goal.target
-  let P':= arg.restHyps
-  let Q' := arg.focusHyp
+  -- The goal is P ∧ (Q → R)
+  -- arg.proof : P ∧ (Q → R) ⊣⊢ₛ P' ∧ Q
+  -- we want to return (R, (proof : P ∧ (Q → R) ⊢ₛ P ∧ R))
+  let some specHyp := parseHyp? QR | panic! "Precondition of specializeImpPersistent violated"
+  let P' := arg.restHyps
+  let Q := arg.focusHyp
   let hrefocus := arg.proof -- P ∧ (Q → R) ⊣⊢ₛ P' ∧ Q
-  let mkApp3 (.const ``SProp.imp []) σs Q R := hyp.p | throwError "Expected implication {QR}"
-  unless ← isDefEq Q Q' do
-    throwError "failed to specialize {hyp.p} with {Q'}"
-
-  -- Construct new goal (hgoal from `specialize_imp_persistent`):
-  let newGoal := { goal with hyps := mkAnd! σs P {hyp with p := R}.toExpr }
-  let newMvarId ← mkFreshExprSyntheticOpaqueMVar newGoal.toExpr
-  -- logInfo m!"newGoal: {← inferType newMvarId}"
-  -- Assign proof using `specialize_imp_persistent`
-  let proof := mkApp8 (mkConst ``specialize_imp_persistent) σs P P' Q R T hrefocus newMvarId
+  let mkApp3 (.const ``SProp.imp []) σs Q' R := specHyp.p | throwError "Expected implication {QR}"
+  let proof := mkApp6 (mkConst ``specialize_imp_persistent) σs P P' Q R hrefocus
   -- check proof
-  -- logInfo m!"proof: {← inferType proof}"
-  mvar.assign proof
-  return (newGoal, newMvarId.mvarId!)
+  trace[mpl.tactics.specialize] "Persistently specialize {specHyp.p} with {Q}. New Goal: {mkAnd! σs P R}"
+  unless ← isDefEq Q Q' do
+    throwError "failed to specialize {specHyp.p} with {Q}"
 
-def specializeImpPure (mvar : MVarId) (goal : SGoal) (arg : TSyntax `term) : OptionT MetaM (SGoal × MVarId) := do
-  let some (_, rest, hypToSpec) := parseAnd? goal.hyps | panic! s!"Precondition of specializeForall violated: context did not contain multiple hypotheses {goal.hyps}"
-  let some hyp := parseHyp? hypToSpec | panic! "Precondition of specializeForall violated"
-  let mkApp3 (.const ``SProp.imp []) _ Q R := hyp.p | failure
+  return ({ specHyp with p := R }.toExpr, proof)
+
+private def tautological (Q : SProp σs) : Prop := ⊢ₛ Q
+
+def specializeImpPure (_σs : Expr) (P : Expr) (QR : Expr) (arg : TSyntax `term) : OptionT TacticM (Expr × Expr) := do
+  let some specHyp := parseHyp? QR | panic! "Precondition of specializeImpPure violated"
+  let mkApp3 (.const ``SProp.imp []) σs Q R := specHyp.p | failure
+  let (hQ, mvarIds) ← try
+    elabTermWithHoles arg.raw (mkApp2 (mkConst ``tautological) σs Q) `specialize (allowNaturalHoles := true)
+    catch _ => failure
   OptionT.mk do -- no OptionT failure after this point
-  let arg ← liftMetaM <| elabTerm arg.raw Q
-  let newGoal := { goal with hyps := mkAnd! σs P {hyp with p := R}.toExpr }
-  let newMvarId ← mkFreshExprSyntheticOpaqueMVar newGoal.toExpr
-  let proof := mkApp8 (mkConst ``specialize_imp_pure) σs P Q R T h newMvarId
-  check proof
+  -- The goal is P ∧ (Q → R)
+  -- we want to return (R, (proof : P ∧ (Q → R) ⊢ₛ P ∧ R))
+  pushGoals mvarIds
+  let proof := mkApp5 (mkConst ``specialize_imp_pure) σs P Q R hQ
+  -- check proof
+  trace[mpl.tactics.specialize] "Purely specialize {specHyp.p} with {Q}. New Goal: {mkAnd! σs P R}"
   -- logInfo m!"proof: {← inferType proof}"
-  mvar.assign proof
-  return (newGoal, newMvarId.mvarId!)
-  return _
+  return ({ specHyp with p := R }.toExpr, proof)
 
-def specializeForall (mvar : MVarId) (goal : SGoal) (arg : TSyntax `term) : OptionT MetaM (SGoal × MVarId) := do
-  let some (_, rest, hypToSpec) := parseAnd? goal.hyps | panic! s!"Precondition of specializeForall violated: context did not contain multiple hypotheses {goal.hyps}"
-  let some hyp := parseHyp? hypToSpec | panic! "Precondition of specializeForall violated"
-  if let mkApp3 (.const ``SProp.imp []) _ Q R := hyp.p then
-    throwError "TODO"
-  else if let mkApp3 (.const ``SProp.forall []) _α _ Ψ := hyp.p then
+def specializeForall (_σs : Expr) (P : Expr) (Ψ : Expr) (arg : TSyntax `term) : OptionT TacticM (Expr × Expr) := do
+  let some specHyp := parseHyp? Ψ | panic! "Precondition of specializeForall violated"
+  let mkApp3 (.const ``SProp.forall [u]) α σs αR := specHyp.p | failure
+  let (a, mvarIds) ← try
+    elabTermWithHoles arg.raw α `specialize (allowNaturalHoles := true)
+    catch _ => failure
+  OptionT.mk do -- no OptionT failure after this point
+  pushGoals mvarIds
+  let proof := mkApp5 (mkConst ``specialize_forall [u]) σs α P αR a
+  let R := αR.beta #[a]
+  -- check proof
+  trace[mpl.tactics.specialize] "Instantiate {specHyp.p} with {a}. New Goal: {mkAnd! σs P R}"
+  return ({ specHyp with p := R }.toExpr, proof)
 
 theorem focus {P P' Q R : SProp σs} (hfocus : P ⊣⊢ₛ P' ∧ Q) (hnew : P' ∧ Q ⊢ₛ R) : P ⊢ₛ R :=
   hfocus.mp.trans hnew
@@ -90,34 +84,37 @@ theorem focus {P P' Q R : SProp σs} (hfocus : P ⊣⊢ₛ P' ∧ Q) (hnew : P' 
 elab "sspecialize" hyp:ident args:(colGt term:max)* : tactic => do
   let (mvar, goal) ← sstart (← getMainGoal)
   mvar.withContext do
-  let some res := goal.focusHyp hyp.getId | throwError "unknown identifier '{hyp}'"
 
-  -- Move the hypothesis down in the context, which is where the loop assumes it is:
-  let (hyps, proof) := mkAnd goal.σs res.restHyps res.focusHyp
-  let newGoal := { goal with hyps := hyps }
-  let newMvar ← mkFreshExprSyntheticOpaqueMVar newGoal.toExpr
-  let some _ := parseSGoal? newGoal.toExpr | throwError "Precondition of sspecialize violated"
-  let proof := mkApp7 (mkConst ``focus) goal.σs goal.hyps res.restHyps res.focusHyp goal.target proof newMvar
-  -- check proof
-  mvar.assign proof
-  let mut goal := newGoal
-  let mut mvar := newMvar.mvarId!
+  -- Want to prove goal P ⊢ T, where hyp occurs in P.
+  -- So we
+  -- 1. focus on hyp (referred to as H):  P ⊣⊢ₛ P' ∧ H. Prove P' ∧ H ⊢ₛ T
+  -- 2. Produce a (transitive chain of) proofs
+  --      P' ∧ H ⊢ P' ∧ H₁ ⊢ₛ P' ∧ H₂ ⊢ₛ ...
+  --    One for each arg; end up with goal P' ∧ H' ⊢ₛ T
+  -- 3. Recombine with mkAnd (NB: P' might be empty), compose with P' ∧ H' ⊣⊢ₛ mkAnd P' H'.
+  -- 4. Make a new MVar for goal `mkAnd P' H' ⊢ T` and assign the transitive chain.
+  let some specFocus := goal.focusHyp hyp.getId | throwError "unknown identifier '{hyp}'"
+  let σs := goal.σs
+  let P := specFocus.restHyps
+  let mut H := specFocus.focusHyp
+  let mut goal : SGoal := goal
+  -- invariant: proof (_ : goal.toExpr) fills the mvar
+  let mut proof : Expr → Expr :=
+    mkApp7 (mkConst ``focus) σs goal.hyps P H goal.target specFocus.proof
 
   for arg in args do
     let res? ← OptionT.run
-      (specializeImpPersistent mvar goal arg
-        <|> specializeImpPure mvar goal arg
-        <|> specializeForall mvar goal arg)
+      (specializeImpPersistent σs P H arg
+        <|> specializeImpPure σs P H arg
+        <|> specializeForall σs P H arg)
     match res? with
-    | some r =>
-      (goal, mvar) := r
+    | some (H', H2H') =>
+      -- logInfo m!"H: {H}, proof: {← inferType H2H'}"
+      proof := fun hgoal => proof (mkApp6 (mkConst ``SProp.entails.trans) σs (mkAnd! σs P H) (mkAnd! σs P H') goal.target H2H' hgoal)
+      H := H'
     | none =>
-      throwError "TODO"
+      throwError "Could not specialize {H} with {arg}"
 
-    let some (_, rest, hypToSpec) := parseAnd? goal.hyps | panic! "Invariant of sspecialize violated"
-    let some hyp := parseHyp? hypToSpec | panic! "Invariant of sspecialize violated"
-    if let mkApp3 (.const ``SProp.imp []) _ Q R := hyp.p then
-      throwError "TODO"
-    else if let mkApp3 (.const ``SProp.forall []) _α _ Ψ := hyp.p then
-      (goal, mvar) ← specializeForall mvar goal arg
-  replaceMainGoal [mvar]
+  let newMVar ← mkFreshExprSyntheticOpaqueMVar { goal with hyps := mkAnd! σs P H }.toExpr
+  mvar.assign (proof newMVar)
+  replaceMainGoal [newMVar.mvarId!]

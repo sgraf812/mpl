@@ -105,6 +105,27 @@ theorem simple (P Q : SProp σs) : P ⊢ₛ (P → Q) → Q := by
   sspecialize HPQ HP
   sexact HPQ
 
+theorem multiple (P Q R : SProp σs) : ⊢ₛ P → Q → (P → Q → R) → R := by
+  sintro HP HQ HPQR
+  sspecialize HPQR HP HQ
+  sexact HPQR
+
+theorem pure_imp (P Q R : SProp σs) : (⊢ₛ P) → ⊢ₛ Q → (P → Q → R) → R := by
+  intro HP
+  sintro HQ HPQR
+  sspecialize HPQR HP HQ
+  sexact HPQR
+
+theorem forall' (y : Nat) (Q : Nat → SProp σs) : ⊢ₛ (∀ x, Q x) → Q (y + 1) := by
+  sintro HQ
+  sspecialize HQ (y + 1)
+  sexact HQ
+
+theorem mixed (y : Nat) (P Q : SProp σs) (Ψ : Nat → SProp σs) (hP : ⊢ₛ P) : ⊢ₛ Q → (∀ x, P → Q → Ψ x) → Ψ (y + 1) := by
+  sintro HQ HΨ
+  sspecialize HΨ (y + 1) hP HQ
+  sexact HΨ
+
 end specialize
 
 /-

@@ -57,7 +57,7 @@ def attrIgnoreAuxDef (name : Name) (default : AttrM α) (x : AttrM α) : AttrM �
     -- Normal execution
     x
 
-initialize registerTraceClass `mpl
+initialize registerTraceClass `mpl (inherited := true)
 
 def getSpecKey (ty : Expr) : MetaM Expr := do
   let (_xs, _bis, body) ← forallMetaTelescope ty
