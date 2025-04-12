@@ -85,7 +85,6 @@ def SGoal.strip (goal : SGoal) : Expr := -- omits the .mdata wrapper
 def SGoal.toExpr (goal : SGoal) : Expr :=
   .mdata ⟨[(sgoalAnnotation, .ofBool true)]⟩ goal.strip
 
-/-- O(n), but shortcuts. -/
 partial def SGoal.findHyp? (goal : SGoal) (name : Name) : Option (SubExpr.Pos × Hyp) := go goal.hyps SubExpr.Pos.root
   where
     go (e : Expr) (p : SubExpr.Pos) : Option (SubExpr.Pos × Hyp) := do
@@ -101,21 +100,31 @@ partial def SGoal.findHyp? (goal : SGoal) (name : Name) : Option (SubExpr.Pos ×
       else
         panic! "SGoal.findHyp?: hypothesis without proper metadata: {e}"
 
-/-- O(n). Slower than a single `findHyp?`, but faster for multiple queries.
-Modifications of the hypotheses invalidate the index. -/
-partial def SGoal.buildHypIndex (goal : SGoal) : Std.HashMap Name (SubExpr.Pos × Hyp) :=
-  go goal.hyps SubExpr.Pos.root Std.HashMap.empty
-  where
-    go (e : Expr) (p : SubExpr.Pos) (acc : Std.HashMap Name (SubExpr.Pos × Hyp)) : Std.HashMap Name (SubExpr.Pos × Hyp) :=
-      if let some hyp := parseHyp? e then
-        acc.insert hyp.name (p, hyp)
-      else if let some (_, lhs, rhs) := parseAnd? e then
-        go lhs (pushLeftConjunct p) (go rhs (pushRightConjunct p) acc)
-      else if let some _ := parseEmptyHyp? e then
-        acc
-      else
-        panic! "SGoal.buildHypIndex: hypothesis without proper metadata: {e}"
-
 def getFreshHypName : TSyntax ``binderIdent → CoreM (Name × Syntax)
   | `(binderIdent| $name:ident) => pure (name.getId, name)
   | stx => return (← mkFreshUserName `h, stx)
+
+
+/-- An `MVarId` with an open `SGoal`. That is, if `hgoal : SGoal.toExpr`,
+then `mvar.assign (proof hgoal)` closes the goal.
+This structure is useful for accumulating a `proof` without
+having to allocate a new `MVarId` at each step. -/
+structure SGoalMVarId where
+  mvar : MVarId
+  goal : SGoal
+  proof : Option (Expr → Expr) -- none => proof is `id`
+
+/-- If `mvar.goal` is `P ⊢ₛ T` and `h : P' ⊢ₛ P`,
+then the new goal is `P' ⊢ₛ T`. -/
+def SGoalMVarId.weakenHyps (mvar : SGoalMVarId) (P' : Expr) (h : Expr) : SGoalMVarId :=
+  let { σs, hyps:=P, target:=T } := mvar.goal
+  let goal := { mvar.goal with hyps := P' }
+  let proof := fun hgoal => mvar.proof.getD id (mkApp6 (mkConst ``SProp.entails.trans) σs P' P T h hgoal)
+  { mvar := mvar.mvar, goal, proof }
+
+/-- If `mvar.goal` is `P ⊢ₛ T` and `h : P' ⊣⊢ₛ P`,
+then the new goal is `P' ⊢ₛ T`. -/
+def SGoalMVarId.weakenHypsBientails (mvar : SGoalMVarId) (P' : Expr) (h : Expr) : SGoalMVarId :=
+  let { σs, hyps:=P, target:=_ } := mvar.goal
+  let h := mkApp4 (mkConst ``SProp.bientails.mp) σs P P' h
+  weakenHyps mvar P' h

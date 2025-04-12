@@ -27,7 +27,6 @@ inductive SCasesPat
   | disjunction (args : List SCasesPat)
   | pure           (pat : SCasesPat)
   | intuitionistic (pat : SCasesPat)
-  | spatial        (pat : SCasesPat)
   deriving Repr, Inhabited
 
 partial def SCasesPat.parse (pat : TSyntax `scasesPat) : MacroM SCasesPat := do

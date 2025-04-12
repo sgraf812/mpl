@@ -132,14 +132,55 @@ theorem mixed (y : Nat) (P Q : SProp σs) (Ψ : Nat → SProp σs) (hP : ⊢ₛ 
 
 end specialize
 
+namespace cases
+
 theorem rename (P : SProp σs) : P ⊢ₛ P := by
   sintro HP
-  srename HP to HP'
+  scases HP with HP'
   sexact HP'
+
+theorem clear (P Q : SProp σs) : ⊢ₛ P → Q → P := by
+  sintro HP HQ
+  scases HQ with -
+  sexact HP
+
+theorem pure (P : SProp σs) (Q : Prop) : ⊢ₛ P → ⌜Q⌝ → P := by
+  sintro HP HQ
+  scases HQ with ⌜hQ⌝
+  sexact HP
+
+theorem riddle (P : SProp σs) (Q : Prop) (hqr : Q → ⊢ₛ R) : ⊢ₛ P → ⌜Q⌝ → R := by
+  sintro HP HQ
+  scases HQ with ⌜hQ⌝
+  have hr : ⊢ₛ R := hqr hQ
+  apply SProp.true_intro.trans hr
+
+theorem and (P Q R : SProp σs) : (P ∧ Q ∧ R) ⊢ₛ R := by
+  sintro HPQR
+  scases HPQR with ⟨HP, HQ, HR⟩
+  sexact HR
+
+theorem and_intuitionistic [BI PROP] (Q : PROP) : □ P ∧ Q ⊢ Q := by
+  iintro HPQ
+  icases HPQ with ⟨_HP, HQ⟩
+  iexact HQ
+
+theorem and_persistent_left [BI PROP] (Q : PROP) : <pers> Q ∧ <affine> P ⊢ Q := by
+  iintro HQP
+  icases HQP with ⟨□HQ, _HP⟩
+  iexact HQ
+
+theorem and_persistent_right [BI PROP] (Q : PROP) : Q ∧ <pers> P ⊢ Q := by
+  iintro HQP
+  icases HQP with ⟨HQ, _HP⟩
+  iexact HQ
+
+end cases
 
 /-
 TODO:
 - rcases
 - intro
 - exfalso?
+- sexact with pure hypothesis (SProp.true_intro.trans h)
 -/

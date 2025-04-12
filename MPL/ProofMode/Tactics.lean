@@ -7,3 +7,4 @@ import MPL.ProofMode.Tactics.Pure
 import MPL.ProofMode.Tactics.LeftRight
 import MPL.ProofMode.Tactics.Constructor
 import MPL.ProofMode.Tactics.Specialize
+import MPL.ProofMode.Tactics.Cases

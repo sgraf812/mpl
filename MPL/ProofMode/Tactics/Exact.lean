@@ -14,5 +14,7 @@ elab "sexact" colGt hyp:ident : tactic => do
   let some goal := parseSGoal? g | throwError "not in proof mode"
   let some focusRes := goal.focusHyp hyp.getId | throwError "hypothesis not found"
   let proof := mkApp5 (mkConst ``assumption) goal.σs goal.hyps focusRes.restHyps goal.target focusRes.proof
+  unless ← isDefEq focusRes.focusHyp goal.target do
+    throwError "sexact tactic failed, hypothesis is not definitionally equal to the goal"
   mvar.assign proof
   replaceMainGoal []
