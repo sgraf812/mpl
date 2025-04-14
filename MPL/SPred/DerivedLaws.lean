@@ -1,19 +1,19 @@
-import MPL.SProp.Laws
+import MPL.SPred.Laws
 
-namespace MPL.SProp
+namespace MPL.SPred
 
-variable {σs : List Type} {P P' Q Q' R R' : SProp σs} {φ φ₁ φ₂ : Prop}
+variable {σs : List Type} {P P' Q Q' R R' : SPred σs} {φ φ₁ φ₂ : Prop}
 
 /- Most of the laws below are derived from the laws in Laws.lean
 and should not need induction on σs. TODO: Realize this or move to Laws.lean. -/
 
-theorem entails.rfl {σs : List Type} {P : SProp σs} : P ⊢ₛ P := entails.refl P
+theorem entails.rfl {σs : List Type} {P : SPred σs} : P ⊢ₛ P := entails.refl P
 
-theorem bientails.rfl {σs : List Type} {P : SProp σs} : P ⊣⊢ₛ P := bientails.refl P
-theorem bientails.of_eq {σs : List Type} {P Q : SProp σs} (h : P = Q) : P ⊣⊢ₛ Q := h ▸ .rfl
+theorem bientails.rfl {σs : List Type} {P : SPred σs} : P ⊣⊢ₛ P := bientails.refl P
+theorem bientails.of_eq {σs : List Type} {P Q : SPred σs} (h : P = Q) : P ⊣⊢ₛ Q := h ▸ .rfl
 
-theorem bientails.mp {σs : List Type} {P Q : SProp σs} : (P ⊣⊢ₛ Q) → (P ⊢ₛ Q) := fun h => (bientails.iff.mp h).1
-theorem bientails.mpr {σs : List Type} {P Q : SProp σs} : (P ⊣⊢ₛ Q) → (Q ⊢ₛ P) := fun h => (bientails.iff.mp h).2
+theorem bientails.mp {σs : List Type} {P Q : SPred σs} : (P ⊣⊢ₛ Q) → (P ⊢ₛ Q) := fun h => (bientails.iff.mp h).1
+theorem bientails.mpr {σs : List Type} {P Q : SPred σs} : (P ⊣⊢ₛ Q) → (Q ⊢ₛ P) := fun h => (bientails.iff.mp h).2
 
 /-! # Connectives -/
 
@@ -30,7 +30,7 @@ theorem imp_elim_l : (P → Q) ∧ P ⊢ₛ Q := imp_elim .rfl
 theorem imp_elim_r : P ∧ (P → Q) ⊢ₛ Q := imp_elim' .rfl
 theorem false_elim : ⌜False⌝ ⊢ₛ P := pure_elim' False.elim
 theorem true_intro : P ⊢ₛ ⌜True⌝ := pure_intro trivial
-theorem exists_intro' {Ψ : α → SProp σs} (a : α) (h : P ⊢ₛ Ψ a) : P ⊢ₛ ∃ a, Ψ a := h.trans (exists_intro a)
+theorem exists_intro' {Ψ : α → SPred σs} (a : α) (h : P ⊢ₛ Ψ a) : P ⊢ₛ ∃ a, Ψ a := h.trans (exists_intro a)
 
 /-! # Monotonicity and congruence -/
 
@@ -52,10 +52,10 @@ theorem imp_mono_r (h : Q ⊢ₛ Q') : (P → Q) ⊢ₛ (P → Q') := imp_mono .
 theorem imp_congr (h1 : P ⊣⊢ₛ Q) (h2 : P' ⊣⊢ₛ Q') : (P → P') ⊣⊢ₛ (Q → Q') := bientails.iff.mpr ⟨imp_mono h1.mpr h2.mp, imp_mono h1.mp h2.mpr⟩
 theorem imp_congr_l (h : P ⊣⊢ₛ P') : (P → Q) ⊣⊢ₛ (P' → Q) := imp_congr h .rfl
 theorem imp_congr_r (h : Q ⊣⊢ₛ Q') : (P → Q) ⊣⊢ₛ (P → Q') := imp_congr .rfl h
-theorem forall_mono {Φ Ψ : α → SProp σs} (h : ∀ a, Φ a ⊢ₛ Ψ a) : (∀ a, Φ a) ⊢ₛ ∀ a, Ψ a := forall_intro fun a => (forall_elim a).trans (h a)
-theorem forall_congr {Φ Ψ : α → SProp σs} (h : ∀ a, Φ a ⊣⊢ₛ Ψ a) : (∀ a, Φ a) ⊣⊢ₛ ∀ a, Ψ a := bientails.iff.mpr ⟨forall_mono fun a => (h a).mp, forall_mono fun a => (h a).mpr⟩
-theorem exists_mono {Φ Ψ : α → SProp σs} (h : ∀ a, Φ a ⊢ₛ Ψ a) : (∃ a, Φ a) ⊢ₛ ∃ a, Ψ a := exists_elim fun a => (h a).trans (exists_intro a)
-theorem exists_congr {Φ Ψ : α → SProp σs} (h : ∀ a, Φ a ⊣⊢ₛ Ψ a) : (∃ a, Φ a) ⊣⊢ₛ ∃ a, Ψ a := bientails.iff.mpr ⟨exists_mono fun a => (h a).mp, exists_mono fun a => (h a).mpr⟩
+theorem forall_mono {Φ Ψ : α → SPred σs} (h : ∀ a, Φ a ⊢ₛ Ψ a) : (∀ a, Φ a) ⊢ₛ ∀ a, Ψ a := forall_intro fun a => (forall_elim a).trans (h a)
+theorem forall_congr {Φ Ψ : α → SPred σs} (h : ∀ a, Φ a ⊣⊢ₛ Ψ a) : (∀ a, Φ a) ⊣⊢ₛ ∀ a, Ψ a := bientails.iff.mpr ⟨forall_mono fun a => (h a).mp, forall_mono fun a => (h a).mpr⟩
+theorem exists_mono {Φ Ψ : α → SPred σs} (h : ∀ a, Φ a ⊢ₛ Ψ a) : (∃ a, Φ a) ⊢ₛ ∃ a, Ψ a := exists_elim fun a => (h a).trans (exists_intro a)
+theorem exists_congr {Φ Ψ : α → SPred σs} (h : ∀ a, Φ a ⊣⊢ₛ Ψ a) : (∃ a, Φ a) ⊣⊢ₛ ∃ a, Ψ a := bientails.iff.mpr ⟨exists_mono fun a => (h a).mp, exists_mono fun a => (h a).mpr⟩
 
 /-! # Boolean algebra -/
 
@@ -86,30 +86,30 @@ theorem pure_elim {φ : Prop} (h1 : Q ⊢ₛ ⌜φ⌝) (h2 : φ → Q ⊢ₛ R) 
   and_self.mpr.trans <| imp_elim <| h1.trans <| pure_elim' fun h =>
     imp_intro' <| and_elim_l.trans (h2 h)
 
-theorem pure_mono {φ₁ φ₂ : Prop} (h : φ₁ → φ₂) : ⌜φ₁⌝ ⊢ₛ (⌜φ₂⌝ : SProp σs) := pure_elim' <| pure_intro ∘ h
-theorem pure_congr {φ₁ φ₂ : Prop} (h : φ₁ ↔ φ₂) : ⌜φ₁⌝ ⊣⊢ₛ (⌜φ₂⌝ : SProp σs) := bientails.iff.mpr ⟨pure_mono h.1, pure_mono h.2⟩
+theorem pure_mono {φ₁ φ₂ : Prop} (h : φ₁ → φ₂) : ⌜φ₁⌝ ⊢ₛ (⌜φ₂⌝ : SPred σs) := pure_elim' <| pure_intro ∘ h
+theorem pure_congr {φ₁ φ₂ : Prop} (h : φ₁ ↔ φ₂) : ⌜φ₁⌝ ⊣⊢ₛ (⌜φ₂⌝ : SPred σs) := bientails.iff.mpr ⟨pure_mono h.1, pure_mono h.2⟩
 
 theorem pure_elim_l {φ : Prop} (h : φ → Q ⊢ₛ R) : ⌜φ⌝ ∧ Q ⊢ₛ R := pure_elim and_elim_l <| and_elim_r' ∘ h
 theorem pure_elim_r {φ : Prop} (h : φ → Q ⊢ₛ R) : Q ∧ ⌜φ⌝ ⊢ₛ R := and_comm.mp.trans (pure_elim_l h)
-theorem pure_true {φ : Prop} (h : φ) : ⌜φ⌝ ⊣⊢ₛ (⌜True⌝ : SProp σs) := eq_true h ▸ .rfl
-theorem pure_and {φ₁ φ₂ : Prop} : ⌜φ₁⌝ ∧ (⌜φ₂⌝ : SProp σs) ⊣⊢ₛ ⌜φ₁ ∧ φ₂⌝ := bientails.iff.mpr ⟨pure_elim and_elim_l fun h => and_elim_r' <| pure_mono <| And.intro h, and_intro (pure_mono And.left) (pure_mono And.right)⟩
-theorem pure_or {φ₁ φ₂ : Prop} : ⌜φ₁⌝ ∨ (⌜φ₂⌝ : SProp σs) ⊣⊢ₛ ⌜φ₁ ∨ φ₂⌝ := bientails.iff.mpr ⟨or_elim (pure_mono Or.inl) (pure_mono Or.inr), pure_elim' (·.elim (or_intro_l' ∘ pure_intro) (or_intro_r' ∘ pure_intro))⟩
-theorem pure_imp_2 {φ₁ φ₂ : Prop} : ⌜φ₁ → φ₂⌝ ⊢ₛ (⌜φ₁⌝ → ⌜φ₂⌝ : SProp σs) := imp_intro <| pure_and.mp.trans <| pure_mono (And.elim id)
-theorem pure_imp {φ₁ φ₂ : Prop} : (⌜φ₁⌝ → ⌜φ₂⌝ : SProp σs) ⊣⊢ₛ ⌜φ₁ → φ₂⌝ := by
+theorem pure_true {φ : Prop} (h : φ) : ⌜φ⌝ ⊣⊢ₛ (⌜True⌝ : SPred σs) := eq_true h ▸ .rfl
+theorem pure_and {φ₁ φ₂ : Prop} : ⌜φ₁⌝ ∧ (⌜φ₂⌝ : SPred σs) ⊣⊢ₛ ⌜φ₁ ∧ φ₂⌝ := bientails.iff.mpr ⟨pure_elim and_elim_l fun h => and_elim_r' <| pure_mono <| And.intro h, and_intro (pure_mono And.left) (pure_mono And.right)⟩
+theorem pure_or {φ₁ φ₂ : Prop} : ⌜φ₁⌝ ∨ (⌜φ₂⌝ : SPred σs) ⊣⊢ₛ ⌜φ₁ ∨ φ₂⌝ := bientails.iff.mpr ⟨or_elim (pure_mono Or.inl) (pure_mono Or.inr), pure_elim' (·.elim (or_intro_l' ∘ pure_intro) (or_intro_r' ∘ pure_intro))⟩
+theorem pure_imp_2 {φ₁ φ₂ : Prop} : ⌜φ₁ → φ₂⌝ ⊢ₛ (⌜φ₁⌝ → ⌜φ₂⌝ : SPred σs) := imp_intro <| pure_and.mp.trans <| pure_mono (And.elim id)
+theorem pure_imp {φ₁ φ₂ : Prop} : (⌜φ₁⌝ → ⌜φ₂⌝ : SPred σs) ⊣⊢ₛ ⌜φ₁ → φ₂⌝ := by
   refine bientails.iff.mpr ⟨?_, pure_imp_2⟩
   by_cases h : φ₁
   · exact (mp .rfl (pure_intro h)).trans (pure_mono fun h _ => h)
   · exact pure_intro h.elim
 
-theorem pure_forall_2 {φ : α → Prop} : ⌜∀ x, φ x⌝ ⊢ₛ ∀ x, (⌜φ x⌝ : SProp σs) := forall_intro fun _ => pure_mono (· _)
-theorem pure_forall {φ : α → Prop} : (∀ x, (⌜φ x⌝ : SProp σs)) ⊣⊢ₛ ⌜∀ x, φ x⌝ := by
+theorem pure_forall_2 {φ : α → Prop} : ⌜∀ x, φ x⌝ ⊢ₛ ∀ x, (⌜φ x⌝ : SPred σs) := forall_intro fun _ => pure_mono (· _)
+theorem pure_forall {φ : α → Prop} : (∀ x, (⌜φ x⌝ : SPred σs)) ⊣⊢ₛ ⌜∀ x, φ x⌝ := by
   refine bientails.iff.mpr ⟨?_, pure_forall_2⟩
   by_cases h : ∃ x, ¬φ x
   · let ⟨x, h⟩ := h
     exact (forall_elim x).trans (pure_mono h.elim)
   · exact pure_intro fun x => Classical.not_not.1 <| mt (⟨x, ·⟩) h
 
-theorem pure_exists {φ : α → Prop} : (∃ x, ⌜φ x⌝ : SProp σs) ⊣⊢ₛ ⌜∃ x, φ x⌝ := bientails.iff.mpr ⟨exists_elim fun a => pure_mono (⟨a, ·⟩), pure_elim' fun ⟨x, h⟩ => (pure_intro h).trans (exists_intro' x .rfl)⟩
+theorem pure_exists {φ : α → Prop} : (∃ x, ⌜φ x⌝ : SPred σs) ⊣⊢ₛ ⌜∃ x, φ x⌝ := bientails.iff.mpr ⟨exists_elim fun a => pure_mono (⟨a, ·⟩), pure_elim' fun ⟨x, h⟩ => (pure_intro h).trans (exists_intro' x .rfl)⟩
 
 /-! # Miscellaneous -/
 
@@ -124,7 +124,7 @@ theorem entails_pure_intro {σs : List Type} (P Q : Prop) (h : P → Q) : ⌜P�
 theorem entails_pure_elim {σ : Type} {σs : List Type} [Inhabited σ] (P Q : Prop) : ⌜P⌝.entails (σs := σ::σs) ⌜Q⌝ ↔ ⌜P⌝.entails (σs := σs) ⌜Q⌝:= by simp only [entails, idiom_cons, forall_const]
 
 @[simp]
-theorem entails_true_intro {σs : List Type} (P Q : SProp σs) : ⌜True⌝ ⊢ₛ P → Q ↔ P ⊢ₛ Q := by
+theorem entails_true_intro {σs : List Type} (P Q : SPred σs) : ⌜True⌝ ⊢ₛ P → Q ↔ P ⊢ₛ Q := by
   induction σs
   case nil => simp only [pure, idiom_nil, imp_nil, entails_nil, forall_const]
   case cons σ σs ih => simp only [entails, idiom_cons, imp, ih]

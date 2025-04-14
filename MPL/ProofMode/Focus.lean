@@ -14,16 +14,16 @@ structure FocusResult where
   proof : Expr
   deriving Inhabited
 
-theorem focus_this {σs : List Type} {P : SProp σs} : P ⊣⊢ₛ ⌜True⌝ ∧ P :=
-  SProp.true_and.symm
+theorem focus_this {σs : List Type} {P : SPred σs} : P ⊣⊢ₛ ⌜True⌝ ∧ P :=
+  SPred.true_and.symm
 
-theorem focus_l {σs : List Type} {P P' Q C R : SProp σs} (h₁ : P ⊣⊢ₛ P' ∧ R) (h₂ : P' ∧ Q ⊣⊢ₛ C) :
+theorem focus_l {σs : List Type} {P P' Q C R : SPred σs} (h₁ : P ⊣⊢ₛ P' ∧ R) (h₂ : P' ∧ Q ⊣⊢ₛ C) :
     P ∧ Q ⊣⊢ₛ C ∧ R :=
-  (SProp.and_congr_l h₁).trans (SProp.and_right_comm.trans (SProp.and_congr_l h₂))
+  (SPred.and_congr_l h₁).trans (SPred.and_right_comm.trans (SPred.and_congr_l h₂))
 
-theorem focus_r {σs : List Type} {P Q Q' C R : SProp σs} (h₁ : Q ⊣⊢ₛ Q' ∧ R) (h₂ : P ∧ Q' ⊣⊢ₛ C) :
+theorem focus_r {σs : List Type} {P Q Q' C R : SPred σs} (h₁ : Q ⊣⊢ₛ Q' ∧ R) (h₂ : P ∧ Q' ⊣⊢ₛ C) :
     P ∧ Q ⊣⊢ₛ C ∧ R :=
-  (SProp.and_congr_r h₁).trans (SProp.and_assoc.symm.trans (SProp.and_congr_l h₂))
+  (SPred.and_congr_r h₁).trans (SPred.and_assoc.symm.trans (SPred.and_congr_l h₂))
 
 partial def focusHyp (σs : Expr) (e : Expr) (name : Name) : Option FocusResult := do
   if let some hyp := parseHyp? e then
@@ -49,7 +49,7 @@ partial def SGoal.focusHyp (goal : SGoal) (name : Name) : Option FocusResult :=
   MPL.ProofMode.focusHyp goal.σs goal.hyps name
 
 def FocusResult.refl (σs : Expr) (restHyps : Expr) (focusHyp : Expr) : FocusResult :=
-  let proof := mkApp2 (mkConst ``SProp.bientails.refl) σs (mkAnd! σs restHyps focusHyp)
+  let proof := mkApp2 (mkConst ``SPred.bientails.refl) σs (mkAnd! σs restHyps focusHyp)
   { restHyps, focusHyp, proof }
 
 def FocusResult.restGoal (res : FocusResult) (goal : SGoal) : SGoal :=
@@ -58,7 +58,7 @@ def FocusResult.restGoal (res : FocusResult) (goal : SGoal) : SGoal :=
 def FocusResult.recombineGoal (res : FocusResult) (goal : SGoal) : SGoal :=
   { goal with hyps := mkAnd! goal.σs res.restHyps res.focusHyp }
 
-theorem FocusResult.rewrite_hyps {σs} {P Q R : SProp σs} (hrw : P ⊣⊢ₛ Q) (hgoal : Q ⊢ₛ R) : P ⊢ₛ R :=
+theorem FocusResult.rewrite_hyps {σs} {P Q R : SPred σs} (hrw : P ⊣⊢ₛ Q) (hgoal : Q ⊢ₛ R) : P ⊢ₛ R :=
   hrw.mp.trans hgoal
 
 /-- Turn a proof for `(res.recombineGoal goal).toExpr` into one for `goal.toExpr`. -/

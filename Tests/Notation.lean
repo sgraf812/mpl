@@ -1,12 +1,12 @@
-import MPL.SProp.Notation
+import MPL.SPred.Notation
 
 open MPL
 
 variable
   (φ : Prop)
-  (P Q R : SProp [Nat,Char,Bool])
-  (Ψ : Nat → SProp [Nat, Char, Bool])
-  (Φ : Nat → Nat → SProp [Nat, Char, Bool])
+  (P Q R : SPred [Nat,Char,Bool])
+  (Ψ : Nat → SPred [Nat, Char, Bool])
+  (Φ : Nat → Nat → SPred [Nat, Char, Bool])
 
 /-- info: P ⊢ₛ Q : Prop -/
 #guard_msgs in
@@ -21,126 +21,126 @@ variable
 #check P ⊣⊢ₛ Q
 
 
-/-- info: ⌜φ⌝ : SProp ?m.716 -/
+/-- info: ⌜φ⌝ : SPred ?m.716 -/
 #guard_msgs in
 #check ⌜φ⌝
 
-/-- info: ⌜7 + ‹Nat›ₛ = if ‹Bool›ₛ = true then 13 else 7⌝ : SProp [Nat, Char, Bool] -/
+/-- info: ⌜7 + ‹Nat›ₛ = if ‹Bool›ₛ = true then 13 else 7⌝ : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check (⌜7 + ‹Nat›ₛ = if ‹Bool›ₛ then 13 else 7⌝ : SProp [Nat,Char,Bool])
+#check (⌜7 + ‹Nat›ₛ = if ‹Bool›ₛ then 13 else 7⌝ : SPred [Nat,Char,Bool])
 
 private abbrev theChar : SVal [Nat,Char,Bool] Char := fun _ c _ => c
-/-- info: ⌜#theChar = 'a'⌝ : SProp [Nat, Char, Bool] -/
+/-- info: ⌜#theChar = 'a'⌝ : SPred [Nat, Char, Bool] -/
 #guard_msgs in
 #check ⌜#theChar = 'a'⌝
 
 
-/-- info: sprop(P ∧ Q) : SProp [Nat, Char, Bool] -/
+/-- info: SPred(P ∧ Q) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check sprop(P ∧ Q)
+#check SPred(P ∧ Q)
 
-/-- info: sprop(P ∧ Q ∧ R) : SProp [Nat, Char, Bool] -/
+/-- info: SPred(P ∧ Q ∧ R) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check sprop(P ∧ (Q ∧ R))
+#check SPred(P ∧ (Q ∧ R))
 
-/-- info: sprop(P ∨ Q) : SProp [Nat, Char, Bool] -/
+/-- info: SPred(P ∨ Q) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check sprop(P ∨ Q)
+#check SPred(P ∨ Q)
 
-/-- info: sprop(P ∨ Q ∨ R) : SProp [Nat, Char, Bool] -/
+/-- info: SPred(P ∨ Q ∨ R) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check sprop(P ∨ (Q ∨ R))
+#check SPred(P ∨ (Q ∨ R))
 
-/-- info: sprop(¬P) : SProp [Nat, Char, Bool] -/
+/-- info: SPred(¬P) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check sprop(¬ P)
+#check SPred(¬ P)
 
-/-- info: sprop(¬(P ∨ Q)) : SProp [Nat, Char, Bool] -/
+/-- info: SPred(¬(P ∨ Q)) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check sprop(¬ (P ∨ Q))
+#check SPred(¬ (P ∨ Q))
 
 
-/-- info: sprop(P → Q) : SProp [Nat, Char, Bool] -/
+/-- info: SPred(P → Q) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check sprop(P → Q)
+#check SPred(P → Q)
 
-/-- info: sprop(P → Q → R) : SProp [Nat, Char, Bool] -/
+/-- info: SPred(P → Q → R) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check sprop(P → (Q → R))
+#check SPred(P → (Q → R))
 
-/-- info: sprop(P ∧ Q → R) : SProp [Nat, Char, Bool] -/
+/-- info: SPred(P ∧ Q → R) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check sprop((P ∧ Q) → R)
+#check SPred((P ∧ Q) → R)
 
-/-- info: sprop(P → Q ∧ R) : SProp [Nat, Char, Bool] -/
+/-- info: SPred(P → Q ∧ R) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check sprop(P → (Q ∧ R))
+#check SPred(P → (Q ∧ R))
 
 
-/-- info: sprop(P ↔ Q) : SProp [Nat, Char, Bool] -/
+/-- info: SPred(P ↔ Q) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check sprop(P ↔ Q)
+#check SPred(P ↔ Q)
 
-/-- info: sprop(P ∧ Q ↔ Q ∧ P) : SProp [Nat, Char, Bool] -/
+/-- info: SPred(P ∧ Q ↔ Q ∧ P) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check sprop((P ∧ Q) ↔ (Q ∧ P))
+#check SPred((P ∧ Q) ↔ (Q ∧ P))
 
 
 /-- info: ∀ (x : Nat), x = 0 : Prop -/
 #guard_msgs in
 #check ∀ (x : Nat), x = 0
 
-/-- info: sprop(∀ x, Ψ x) : SProp [Nat, Char, Bool] -/
+/-- info: SPred(∀ x, Ψ x) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check sprop(∀ x, Ψ x)
+#check SPred(∀ x, Ψ x)
 
-/-- info: sprop(∀ x, Ψ x) : SProp [Nat, Char, Bool] -/
+/-- info: SPred(∀ x, Ψ x) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check sprop(∀ (x : Nat), Ψ x)
+#check SPred(∀ (x : Nat), Ψ x)
 
-/-- info: sprop(∀ x, ∀ y, Φ x y) : SProp [Nat, Char, Bool] -/
+/-- info: SPred(∀ x, ∀ y, Φ x y) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check sprop(∀ x y, Φ x y)
+#check SPred(∀ x y, Φ x y)
 
-/-- info: sprop(∀ x, ∀ y, Φ x y) : SProp [Nat, Char, Bool] -/
+/-- info: SPred(∀ x, ∀ y, Φ x y) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check sprop(∀ (x : Nat) (y : Nat), Φ x y)
+#check SPred(∀ (x : Nat) (y : Nat), Φ x y)
 
-/-- info: sprop(∀ x, ∀ y, Φ x y) : SProp [Nat, Char, Bool] -/
+/-- info: SPred(∀ x, ∀ y, Φ x y) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check sprop(∀ (x y : Nat), Φ x y)
+#check SPred(∀ (x y : Nat), Φ x y)
 
 
-/-- info: sprop(∃ x, Ψ x) : SProp [Nat, Char, Bool] -/
+/-- info: SPred(∃ x, Ψ x) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check sprop(∃ x, Ψ x)
+#check SPred(∃ x, Ψ x)
 
-/-- info: sprop(∃ x, Ψ x) : SProp [Nat, Char, Bool] -/
+/-- info: SPred(∃ x, Ψ x) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check sprop(∃ (x : Nat), Ψ x)
+#check SPred(∃ (x : Nat), Ψ x)
 
-/-- info: sprop(∃ x, ∃ y, Φ x y) : SProp [Nat, Char, Bool] -/
+/-- info: SPred(∃ x, ∃ y, Φ x y) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check sprop(∃ x y, Φ x y)
+#check SPred(∃ x y, Φ x y)
 
-/-- info: sprop(∃ x, ∃ y, Φ x y) : SProp [Nat, Char, Bool] -/
+/-- info: SPred(∃ x, ∃ y, Φ x y) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check sprop(∃ (x : Nat) (y : Nat), Φ x y)
+#check SPred(∃ (x : Nat) (y : Nat), Φ x y)
 
-/-- info: sprop(∃ x, ∃ y, Φ x y) : SProp [Nat, Char, Bool] -/
+/-- info: SPred(∃ x, ∃ y, Φ x y) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check sprop(∃ (x y : Nat), Φ x y)
+#check SPred(∃ (x y : Nat), Φ x y)
 
 
 /--
 info: if true = true then
   match (1, 2) with
   | (x, y) => Φ x y
-else ⌜False⌝ : SProp [Nat, Char, Bool]
+else ⌜False⌝ : SPred [Nat, Char, Bool]
 -/
 #guard_msgs in
-#check sprop(if true then term(match (1,2) with | (x,y) => Φ x y) else ⌜False⌝)
+#check SPred(if true then term(match (1,2) with | (x,y) => Φ x y) else ⌜False⌝)
 
-/-- info: Ψ (1 + 1) : SProp [Nat, Char, Bool] -/
+/-- info: Ψ (1 + 1) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check sprop(Ψ (1 + 1))
+#check SPred(Ψ (1 + 1))

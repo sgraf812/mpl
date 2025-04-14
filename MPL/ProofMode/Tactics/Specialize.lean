@@ -8,23 +8,23 @@ open Lean Elab Tactic Meta
 
 initialize registerTraceClass `mpl.tactics.specialize
 
-theorem specialize_imp_persistent {P P' Q R : SProp σs}
+theorem specialize_imp_persistent {P P' Q R : SPred σs}
   (hrefocus : P ∧ (Q → R) ⊣⊢ₛ P' ∧ Q) : P ∧ (Q → R) ⊢ₛ P ∧ R := by
-  calc sprop(P ∧ (Q → R))
-    _ ⊢ₛ (P' ∧ Q) ∧ (Q → R) := SProp.and_intro hrefocus.mp SProp.and_elim_r
-    _ ⊢ₛ P' ∧ Q ∧ (Q → R) := SProp.and_assoc.mp
-    _ ⊢ₛ P' ∧ Q ∧ R := SProp.and_mono_r (SProp.and_intro SProp.and_elim_l SProp.imp_elim_r)
-    _ ⊢ₛ (P' ∧ Q) ∧ R := SProp.and_assoc.mpr
-    _ ⊢ₛ P ∧ R := SProp.and_mono_l (hrefocus.mpr.trans SProp.and_elim_l)
+  calc spred(P ∧ (Q → R))
+    _ ⊢ₛ (P' ∧ Q) ∧ (Q → R) := SPred.and_intro hrefocus.mp SPred.and_elim_r
+    _ ⊢ₛ P' ∧ Q ∧ (Q → R) := SPred.and_assoc.mp
+    _ ⊢ₛ P' ∧ Q ∧ R := SPred.and_mono_r (SPred.and_intro SPred.and_elim_l SPred.imp_elim_r)
+    _ ⊢ₛ (P' ∧ Q) ∧ R := SPred.and_assoc.mpr
+    _ ⊢ₛ P ∧ R := SPred.and_mono_l (hrefocus.mpr.trans SPred.and_elim_l)
 
-theorem specialize_imp_pure {P Q R : SProp σs}
+theorem specialize_imp_pure {P Q R : SPred σs}
   (h : ⊢ₛ Q) : P ∧ (Q → R) ⊢ₛ P ∧ R := by
-  calc sprop(P ∧ (Q → R))
-    _ ⊢ₛ P ∧ (Q ∧ (Q → R)) := SProp.and_mono_r (SProp.and_intro (SProp.true_intro.trans h) .rfl)
-    _ ⊢ₛ P ∧ R := SProp.and_mono_r (SProp.mp SProp.and_elim_r SProp.and_elim_l)
+  calc spred(P ∧ (Q → R))
+    _ ⊢ₛ P ∧ (Q ∧ (Q → R)) := SPred.and_mono_r (SPred.and_intro (SPred.true_intro.trans h) .rfl)
+    _ ⊢ₛ P ∧ R := SPred.and_mono_r (SPred.mp SPred.and_elim_r SPred.and_elim_l)
 
-theorem specialize_forall {P : SProp σs} {ψ : α → SProp σs}
-  (a : α) : P ∧ (∀ x, ψ x) ⊢ₛ P ∧ ψ a := SProp.and_mono_r (SProp.forall_elim a)
+theorem specialize_forall {P : SPred σs} {ψ : α → SPred σs}
+  (a : α) : P ∧ (∀ x, ψ x) ⊢ₛ P ∧ ψ a := SPred.and_mono_r (SPred.forall_elim a)
 
 def specializeImpPersistent (σs : Expr) (P : Expr) (QR : Expr) (arg : TSyntax `term) : OptionT TacticM (Expr × Expr) := do
   guard (arg.raw.isIdent)
@@ -37,7 +37,7 @@ def specializeImpPersistent (σs : Expr) (P : Expr) (QR : Expr) (arg : TSyntax `
   let P' := arg.restHyps
   let Q := arg.focusHyp
   let hrefocus := arg.proof -- P ∧ (Q → R) ⊣⊢ₛ P' ∧ Q
-  let mkApp3 (.const ``SProp.imp []) σs Q' R := specHyp.p | throwError "Expected implication {QR}"
+  let mkApp3 (.const ``SPred.imp []) σs Q' R := specHyp.p | throwError "Expected implication {QR}"
   let proof := mkApp6 (mkConst ``specialize_imp_persistent) σs P P' Q R hrefocus
   -- check proof
   trace[mpl.tactics.specialize] "Persistently specialize {specHyp.p} with {Q}. New Goal: {mkAnd! σs P R}"
@@ -48,9 +48,9 @@ def specializeImpPersistent (σs : Expr) (P : Expr) (QR : Expr) (arg : TSyntax `
 
 def specializeImpPure (_σs : Expr) (P : Expr) (QR : Expr) (arg : TSyntax `term) : OptionT TacticM (Expr × Expr) := do
   let some specHyp := parseHyp? QR | panic! "Precondition of specializeImpPure violated"
-  let mkApp3 (.const ``SProp.imp []) σs Q R := specHyp.p | failure
+  let mkApp3 (.const ``SPred.imp []) σs Q R := specHyp.p | failure
   let (hQ, mvarIds) ← try
-    elabTermWithHoles arg.raw (mkApp2 (mkConst ``SProp.tautological) σs Q) `specialize (allowNaturalHoles := true)
+    elabTermWithHoles arg.raw (mkApp2 (mkConst ``SPred.tautological) σs Q) `specialize (allowNaturalHoles := true)
     catch _ => failure
   OptionT.mk do -- no OptionT failure after this point
   -- The goal is P ∧ (Q → R)
@@ -64,7 +64,7 @@ def specializeImpPure (_σs : Expr) (P : Expr) (QR : Expr) (arg : TSyntax `term)
 
 def specializeForall (_σs : Expr) (P : Expr) (Ψ : Expr) (arg : TSyntax `term) : OptionT TacticM (Expr × Expr) := do
   let some specHyp := parseHyp? Ψ | panic! "Precondition of specializeForall violated"
-  let mkApp3 (.const ``SProp.forall [u]) α σs αR := specHyp.p | failure
+  let mkApp3 (.const ``SPred.forall [u]) α σs αR := specHyp.p | failure
   let (a, mvarIds) ← try
     elabTermWithHoles arg.raw α `specialize (allowNaturalHoles := true)
     catch _ => failure
@@ -76,7 +76,7 @@ def specializeForall (_σs : Expr) (P : Expr) (Ψ : Expr) (arg : TSyntax `term) 
   trace[mpl.tactics.specialize] "Instantiate {specHyp.p} with {a}. New Goal: {mkAnd! σs P R}"
   return ({ specHyp with p := R }.toExpr, proof)
 
-theorem focus {P P' Q R : SProp σs} (hfocus : P ⊣⊢ₛ P' ∧ Q) (hnew : P' ∧ Q ⊢ₛ R) : P ⊢ₛ R :=
+theorem focus {P P' Q R : SPred σs} (hfocus : P ⊣⊢ₛ P' ∧ Q) (hnew : P' ∧ Q ⊢ₛ R) : P ⊢ₛ R :=
   hfocus.mp.trans hnew
 
 elab "sspecialize" hyp:ident args:(colGt term:max)* : tactic => do
@@ -108,7 +108,7 @@ elab "sspecialize" hyp:ident args:(colGt term:max)* : tactic => do
     match res? with
     | some (H', H2H') =>
       -- logInfo m!"H: {H}, proof: {← inferType H2H'}"
-      proof := fun hgoal => proof (mkApp6 (mkConst ``SProp.entails.trans) σs (mkAnd! σs P H) (mkAnd! σs P H') goal.target H2H' hgoal)
+      proof := fun hgoal => proof (mkApp6 (mkConst ``SPred.entails.trans) σs (mkAnd! σs P H) (mkAnd! σs P H') goal.target H2H' hgoal)
       H := H'
     | none =>
       throwError "Could not specialize {H} with {arg}"

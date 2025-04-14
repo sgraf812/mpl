@@ -3,8 +3,8 @@ open Lean Elab Tactic Meta
 
 namespace MPL.ProofMode.Tactics
 
-theorem imp_intro_empty {σs : List Type} {P Q : SProp σs} (h : P ⊢ₛ Q) : ⊢ₛ P → Q :=
-  (SProp.entails_true_intro P Q).mpr h
+theorem imp_intro_empty {σs : List Type} {P Q : SPred σs} (h : P ⊢ₛ Q) : ⊢ₛ P → Q :=
+  (SPred.entails_true_intro P Q).mpr h
 
 partial def sIntroCore
     (goal : SGoal) (proofs : Array Expr) (idents : List (TSyntax ``binderIdent)) :
@@ -12,7 +12,7 @@ partial def sIntroCore
   match idents with
   | [] => pure (goal, proofs)
   | ident :: idents =>
-    let mkApp3 (.const ``SProp.imp []) σs p q := goal.target | throwError "Target not an implication {goal.target}"
+    let mkApp3 (.const ``SPred.imp []) σs p q := goal.target | throwError "Target not an implication {goal.target}"
     let (name, _ref) ← getFreshHypName ident
     let hyp : Hyp := { name := name, p := p }
     let p := hyp.toExpr
@@ -21,7 +21,7 @@ partial def sIntroCore
       let newGoal := { goal with hyps := p, target := q }
       sIntroCore newGoal (proofs.push proof) idents
     else
-      let proof := mkApp4 (mkConst ``SProp.imp_intro) σs goal.hyps p q
+      let proof := mkApp4 (mkConst ``SPred.imp_intro) σs goal.hyps p q
       let newGoal := { goal with hyps := mkAnd! σs goal.hyps p, target := q }
       sIntroCore newGoal (proofs.push proof) idents
 
@@ -39,7 +39,7 @@ elab "sintro" idents:(colGt binderIdent)* : tactic => do
   mvar.assign (proofs.foldr mkApp m)
   replaceMainGoal [m.mvarId!]
 
-example {σs : List Type} (Q : SProp σs) (H : Q ⊢ₛ Q) : Q ⊢ₛ Q := by
+example {σs : List Type} (Q : SPred σs) (H : Q ⊢ₛ Q) : Q ⊢ₛ Q := by
   sstart
   sintro HQ
   sstop

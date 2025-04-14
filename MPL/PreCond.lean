@@ -1,4 +1,4 @@
-import MPL.SProp
+import MPL.SPred
 
 namespace MPL
 
@@ -13,10 +13,10 @@ abbrev PredShape.args : PredShape → List Type
   | .arg σ s => σ :: PredShape.args s
   | .except ε s => PredShape.args s
 
-abbrev PreCond (ps : PredShape) : Type := SProp (PredShape.args ps)
+abbrev PreCond (ps : PredShape) : Type := SPred (PredShape.args ps)
 
 @[ext]
-theorem PreCond.ext {ps : PredShape} {P Q : PreCond (.arg σ ps)} : (∀ s, P s = Q s) → P = Q := SProp.ext
+theorem PreCond.ext {ps : PredShape} {P Q : PreCond (.arg σ ps)} : (∀ s, P s = Q s) → P = Q := SPred.ext
 
 abbrev PreCond.pure {ps : PredShape} (P : Prop) : PreCond ps := ⌜P⌝
 app_unexpand_rule PreCond.pure

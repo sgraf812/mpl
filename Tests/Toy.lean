@@ -395,7 +395,7 @@ def isValid : Nat → Char → Bool → String → Prop := sorry
 theorem op.spec :
   ⦃isValid⦄ op n ⦃⇓r => ⌜r > 42⌝ ∧ isValid⦄ := sorry
 
-theorem prog.spec : ⦃isValid⦄ prog n ⦃⇓r => ⌜r > 100⌝ ∧ isValid⦄ := by
+theorem prog.spec : ⦃isValid⦄  prog n ⦃⇓r => ⌜r > 100⌝ ∧ isValid⦄ := by
   unfold prog
   intro a b c d h
   xapp op.spec
@@ -405,13 +405,13 @@ theorem prog.spec : ⦃isValid⦄ prog n ⦃⇓r => ⌜r > 100⌝ ∧ isValid⦄
   xapp op.spec
   intro r₃ a b c d ⟨hr₃, h⟩
   xpure
-  simp_all only [SProp.idiom_cons, SProp.idiom_nil, SProp.and_cons, SProp.and_nil,
+  simp_all only [SPred.idiom_cons, SPred.idiom_nil, SPred.and_cons, SPred.and_nil,
     and_true, gt_iff_lt]
   omega
 
 private abbrev theNat : SVal [Nat, Bool] Nat := fun n b => n
 private def test (P Q : PreCond (.arg Nat (.arg Bool .pure))) : PreCond (.arg Char (.arg Nat (.arg Bool .pure))) :=
-  sprop(fun n => ((∀ y, if y = n then ⌜‹Nat›ₛ + #theNat = 4⌝ else Q) ∧ Q) → P → (∃ x, P → if (x : Bool) then Q else P))
+  spred(fun n => ((∀ y, if y = n then ⌜‹Nat›ₛ + #theNat = 4⌝ else Q) ∧ Q) → P → (∃ x, P → if (x : Bool) then Q else P))
 
 /-
 theorem prog.spec' : ⦃isValid⦄ prog n ⦃⇓r => ⌜r > 100⌝ ∧ isValid⦄ := by
@@ -424,7 +424,7 @@ theorem prog.spec' : ⦃isValid⦄ prog n ⦃⇓r => ⌜r > 100⌝ ∧ isValid�
   xapp op.spec
   xintro →r₃ ⟨⌜hr₃⌝, □h⟩
   xpure
-  simp_all only [SProp.idiom_apply, SProp.idiom, SProp.and, and_true, gt_iff_lt]
+  simp_all only [SPred.idiom_apply, SPred.idiom, SPred.and, and_true, gt_iff_lt]
   omega
 -/
 end WeNeedAProofMode

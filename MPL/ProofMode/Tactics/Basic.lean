@@ -17,7 +17,7 @@ def sstart (mvar : MVarId) : MetaM (MVarId × SGoal) := mvar.withContext do
 
   let listType := mkApp (mkConst ``List [.succ .zero]) (mkSort (.succ .zero))
   let σs ← mkFreshExprMVar listType
-  let P ← mkFreshExprMVar (mkApp (mkConst ``SProp) σs)
+  let P ← mkFreshExprMVar (mkApp (mkConst ``SPred) σs)
   let inst ← synthInstance (mkApp3 (mkConst ``PropAsEntails) goal σs P)
   let prf := mkApp4 (mkConst ``ProofMode.start_entails) σs P goal inst
 
@@ -42,7 +42,7 @@ elab "sstop" : tactic => do
   let some sGoal := parseSGoal? goal | throwError "not in proof mode"
   mvar.setType sGoal.strip
 
-example (P Q : SProp [Nat, Bool]) : P ⊢ₛ Q := by
+example (P Q : SPred [Nat, Bool]) : P ⊢ₛ Q := by
   sstart
   sstop
   admit

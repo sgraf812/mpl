@@ -20,7 +20,7 @@ partial def delabSGoal : Delab := do
   -- delaborate
   -- let σs ← delabσs goal.σs
   let (_, hyps) ← delabHypotheses goal.hyps ({}, #[])
-  let target ← unpackSprop (← delab goal.target)
+  let target ← SPred.Notation.unpack (← delab goal.target)
 
   -- build syntax
   return ⟨← `(sgoalStx| $hyps.reverse* ⊢ₛ $target:term)⟩
@@ -37,7 +37,7 @@ where
           (idx + 1, hyp.name.appendAfter <| if idx == 0 then "✝" else "✝" ++ idx.toSuperscriptString)
         else
           (0, hyp.name)
-      let stx ← `(sgoalHyp| $(mkIdent name') : $(← unpackSprop (← delab hyp.p)))
+      let stx ← `(sgoalHyp| $(mkIdent name') : $(← SPred.Notation.unpack (← delab hyp.p)))
       return (map.insert hyp.name idx, lines.push stx)
     if let some (_, lhs, rhs) := parseAnd? hyps then
       delabHypotheses lhs (← delabHypotheses rhs acc)

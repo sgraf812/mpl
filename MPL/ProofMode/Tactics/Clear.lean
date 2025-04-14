@@ -9,9 +9,9 @@ import MPL.ProofMode.Focus
 namespace MPL.ProofMode.Tactics
 open Lean Elab Tactic Meta
 
-theorem clear {σs : List Type} {P P' A Q : SProp σs}
+theorem clear {σs : List Type} {P P' A Q : SPred σs}
     (hfocus : P ⊣⊢ₛ P' ∧ A) (h : P' ⊢ₛ Q) : P ⊢ₛ Q :=
-    hfocus.mp.trans <| (SProp.and_mono_l h).trans SProp.and_elim_l
+    hfocus.mp.trans <| (SPred.and_mono_l h).trans SPred.and_elim_l
 
 elab "sclear" colGt hyp:ident : tactic => do
   let mvar ← getMainGoal

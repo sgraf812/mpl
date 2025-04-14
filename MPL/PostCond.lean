@@ -10,7 +10,7 @@ def FailConds : PredShape → Type
 abbrev FailConds.const {ps : PredShape} (p : Prop) : FailConds ps := match ps with
   | .pure => ()
   | .arg σ s => @FailConds.const s p
-  | .except ε s => (fun _ε => sprop(⌜p⌝), @FailConds.const s p)
+  | .except ε s => (fun _ε => spred(⌜p⌝), @FailConds.const s p)
 
 def FailConds.true : FailConds ps := FailConds.const True
 def FailConds.false : FailConds ps := FailConds.const False
@@ -31,7 +31,7 @@ theorem FailConds.entails_refl {ps : PredShape} (x : FailConds ps) : x ⊢ₑ x 
   induction ps
   case pure => simp[entails]
   case arg σ s ih => exact (ih x)
-  case except ε s ih => simp only [entails, PreCond, SProp.entails.refl, implies_true, ih,
+  case except ε s ih => simp only [entails, PreCond, SPred.entails.refl, implies_true, ih,
     and_self]
 
 @[simp]
@@ -76,20 +76,20 @@ open Lean Parser Term in
 def funArrow : Parser := unicodeSymbol " ↦" " =>"
 @[inherit_doc PostCond.total]
 macro "⇓" xs:Lean.Parser.Term.funBinder+ funArrow e:term : term =>
-  `(PostCond.total (fun $xs* => sprop($e)))
+  `(PostCond.total (fun $xs* => spred($e)))
 
 instance : Inhabited (PostCond α ps) where
   default := ⇓_ => default
 
 @[simp]
 abbrev PostCond.entails (p q : PostCond α ps) : Prop :=
-  (∀ a, SProp.entails (p.1 a) (q.1 a)) ∧ FailConds.entails p.2 q.2
+  (∀ a, SPred.entails (p.1 a) (q.1 a)) ∧ FailConds.entails p.2 q.2
 
 infixr:25 "⊢ₚ" => PostCond.entails
 
 @[refl,simp]
 abbrev PostCond.entails_refl (Q : PostCond α ps) : Q ⊢ₚ Q := by
-  simp only [entails, PreCond, SProp.entails.refl, implies_true, FailConds.entails_refl, and_self]
+  simp only [entails, PreCond, SPred.entails.refl, implies_true, FailConds.entails_refl, and_self]
 
 @[simp]
 theorem PostCond.total_def {p : α → PreCond ps} : (p, FailConds.false) = PostCond.total p := rfl

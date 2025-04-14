@@ -4,8 +4,8 @@ import MPL.ProofMode.Focus
 namespace MPL.ProofMode.Tactics
 open Lean Elab Tactic Meta
 
-theorem assumption {σs : List Type} {P P' A : SProp σs}
-  (h : P ⊣⊢ₛ P' ∧ A) : P ⊢ₛ A := h.mp.trans SProp.and_elim_r
+theorem assumption {σs : List Type} {P P' A : SPred σs}
+  (h : P ⊣⊢ₛ P' ∧ A) : P ⊢ₛ A := h.mp.trans SPred.and_elim_r
 
 elab "sexact" colGt hyp:ident : tactic => do
   let mvar ← getMainGoal

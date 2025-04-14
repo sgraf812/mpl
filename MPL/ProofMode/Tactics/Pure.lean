@@ -10,20 +10,20 @@ namespace MPL.ProofMode.Tactics
 
 open Lean Elab Tactic Meta
 
-class IsPure {σs : List Type} (P : SProp σs) (φ : outParam Prop) where to_pure : P ⊣⊢ₛ ⌜φ⌝
+class IsPure {σs : List Type} (P : SPred σs) (φ : outParam Prop) where to_pure : P ⊣⊢ₛ ⌜φ⌝
 instance (σs) : IsPure (σs:=σs) ⌜φ⌝ φ where to_pure := .rfl
-instance (σs) : IsPure (σs:=σs) sprop(⌜φ⌝ → ⌜ψ⌝) (φ → ψ) where to_pure := SProp.pure_imp
-instance (σs) : IsPure (σs:=σs) sprop(⌜φ⌝ ∧ ⌜ψ⌝) (φ ∧ ψ) where to_pure := SProp.pure_and
-instance (σs) : IsPure (σs:=σs) sprop(⌜φ⌝ ∨ ⌜ψ⌝) (φ ∨ ψ) where to_pure := SProp.pure_or
-instance (σs) (P : α → Prop) : IsPure (σs:=σs) sprop(∃ x, ⌜P x⌝) (∃ x, P x) where to_pure := SProp.pure_exists
-instance (σs) (P : α → Prop) : IsPure (σs:=σs) sprop(∀ x, ⌜P x⌝) (∀ x, P x) where to_pure := SProp.pure_forall
+instance (σs) : IsPure (σs:=σs) spred(⌜φ⌝ → ⌜ψ⌝) (φ → ψ) where to_pure := SPred.pure_imp
+instance (σs) : IsPure (σs:=σs) spred(⌜φ⌝ ∧ ⌜ψ⌝) (φ ∧ ψ) where to_pure := SPred.pure_and
+instance (σs) : IsPure (σs:=σs) spred(⌜φ⌝ ∨ ⌜ψ⌝) (φ ∨ ψ) where to_pure := SPred.pure_or
+instance (σs) (P : α → Prop) : IsPure (σs:=σs) spred(∃ x, ⌜P x⌝) (∃ x, P x) where to_pure := SPred.pure_exists
+instance (σs) (P : α → Prop) : IsPure (σs:=σs) spred(∀ x, ⌜P x⌝) (∀ x, P x) where to_pure := SPred.pure_forall
 
-theorem spure_thm {σs : List Type} {P Q T : SProp σs} {φ : Prop} [IsPure Q φ]
+theorem spure_thm {σs : List Type} {P Q T : SPred σs} {φ : Prop} [IsPure Q φ]
   (h : φ → P ⊢ₛ T) : P ∧ Q ⊢ₛ T := by
-    apply SProp.pure_elim
-    · exact SProp.and_elim_r.trans IsPure.to_pure.mp
+    apply SPred.pure_elim
+    · exact SPred.and_elim_r.trans IsPure.to_pure.mp
     · intro hp
-      exact SProp.and_elim_l.trans (h hp)
+      exact SPred.and_elim_l.trans (h hp)
 
 -- NB: We do not use MVarId.intro because that would mean we require all callers to supply an MVarId.
 -- This function only knows about the hypothesis H=⌜φ⌝ to destruct.
@@ -57,8 +57,8 @@ elab "spure" colGt hyp:ident : tactic => do
   mvar.assign prf
   replaceMainGoal [m.mvarId!]
 
-/-- A generalization of `SProp.pure_intro` exploiting `IsPure`. -/
-private theorem pure_intro {σs : List Type} {P Q : SProp σs} {φ : Prop} [IsPure Q φ] (hp : φ) : P ⊢ₛ Q :=
-  (SProp.pure_intro hp).trans IsPure.to_pure.mpr
+/-- A generalization of `SPred.pure_intro` exploiting `IsPure`. -/
+private theorem pure_intro {σs : List Type} {P Q : SPred σs} {φ : Prop} [IsPure Q φ] (hp : φ) : P ⊢ₛ Q :=
+  (SPred.pure_intro hp).trans IsPure.to_pure.mpr
 
 macro "spure_intro" : tactic => `(tactic| apply pure_intro)

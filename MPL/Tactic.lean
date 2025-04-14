@@ -15,8 +15,8 @@ namespace MPL
 open Lean Meta Elab Tactic
 
 theorem wp_apply_triple_conseq {m : Type → Type} {ps : PredShape} [WP m ps] {α} {x : m α} {P : PreCond ps} {Q Q' : PostCond α ps}
-  (h : ⦃P⦄ x ⦃Q⦄) (hpost : SProp.entails (wp⟦x⟧.apply Q) (wp⟦x⟧.apply Q')) :
-  P.entails (wp⟦x⟧.apply Q') := SProp.entails.trans h hpost
+  (h : ⦃P⦄ x ⦃Q⦄) (hpost : SPred.entails (wp⟦x⟧.apply Q) (wp⟦x⟧.apply Q')) :
+  P.entails (wp⟦x⟧.apply Q') := SPred.entails.trans h hpost
 
 theorem wp_apply_triple_conseq_mono {m : Type → Type} {ps : PredShape} [WP m ps] {α} {x : m α} {P : PreCond ps} {Q Q' : PostCond α ps}
   (h : ⦃P⦄ x ⦃Q⦄) (hpost : Q.entails Q') :
@@ -51,7 +51,7 @@ theorem ite_extrude_yield {c : Prop} [Decidable c] {x y : α} :
 
 attribute [wp_simp]
   eq_self
-  PostCond.entails FailConds.entails_false FailConds.entails_refl FailConds.entails_true FailConds.pure_def SProp.entails.refl
+  PostCond.entails FailConds.entails_false FailConds.entails_refl FailConds.entails_true FailConds.pure_def SPred.entails.refl
   -- Lawful monad normalization that we don't appear to be needing!
   -- bind_pure_comp map_pure id_map' ExceptT.map_throw bind_map bind_map_left bind_pure pure_bind bind_assoc
   -- MonadMorphism and basic if/then/else:
@@ -151,8 +151,8 @@ syntax "xapp" (ppSpace colGt term)? : tactic
 macro_rules
   | `(tactic| xapp_no_simp)       => `(tactic| ((try xbind); xapp_no_xbind))
   | `(tactic| xapp_no_simp $spec) => `(tactic| ((try xbind); xapp_no_xbind $spec))
-  | `(tactic| xapp)               => `(tactic| xapp_no_simp <;> try simp +contextual only [gt_iff_lt, Prod.mk_le_mk, le_refl, and_true, PostCond.entails, FailConds.entails_false, FailConds.entails_refl, FailConds.entails_true, FailConds.pure_def, SProp.entails.refl])
-  | `(tactic| xapp $spec)         => `(tactic| xapp_no_simp $spec <;> ((try simp +contextual only [gt_iff_lt, Prod.mk_le_mk, le_refl, and_true, PostCond.entails, FailConds.entails_false, FailConds.entails_refl, FailConds.entails_true, FailConds.pure_def, SProp.entails.refl]); try (guard_target = (_ : Prop); trivial)))
+  | `(tactic| xapp)               => `(tactic| xapp_no_simp <;> try simp +contextual only [gt_iff_lt, Prod.mk_le_mk, le_refl, and_true, PostCond.entails, FailConds.entails_false, FailConds.entails_refl, FailConds.entails_true, FailConds.pure_def, SPred.entails.refl])
+  | `(tactic| xapp $spec)         => `(tactic| xapp_no_simp $spec <;> ((try simp +contextual only [gt_iff_lt, Prod.mk_le_mk, le_refl, and_true, PostCond.entails, FailConds.entails_false, FailConds.entails_refl, FailConds.entails_true, FailConds.pure_def, SPred.entails.refl]); try (guard_target = (_ : Prop); trivial)))
 
 elab "xapp2_no_xbind" spec:optional(term) : tactic => withMainContext do
   xapp_n_no_xbind (← getMainGoal) spec ``wp_apply_triple_conseq

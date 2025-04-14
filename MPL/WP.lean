@@ -69,7 +69,7 @@ instance Except.instWP : WP (Except ε) (.except ε .pure) :=
   inferInstanceAs (WP (ExceptT ε Id) (.except ε .pure))
 
 theorem StateM.by_wp {α} {x : σ → α × σ} {prog : StateM σ α} (h : StateT.run prog = x) (P : α → σ → Prop) :
-  (SProp.entails (PreCond.pure True) ((wp prog).apply (PostCond.total P))) → (∀ s, P (x s).1 (x s).2) := by
+  (SPred.entails (PreCond.pure True) ((wp prog).apply (PostCond.total P))) → (∀ s, P (x s).1 (x s).2) := by
     intro hspec
     intro s
     have := hspec s .intro

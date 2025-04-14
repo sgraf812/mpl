@@ -6,26 +6,23 @@ import MPL.ProofMode.Tactics.Pure
 namespace MPL.ProofMode.Tactics
 open Lean Elab Tactic Meta
 
-theorem SCases.add_goal {σs} {P Q H T : SProp σs} (hand : Q ∧ H ⊣⊢ₛ P) (hgoal : P ⊢ₛ T) : Q ∧ H ⊢ₛ T :=
+theorem SCases.add_goal {σs} {P Q H T : SPred σs} (hand : Q ∧ H ⊣⊢ₛ P) (hgoal : P ⊢ₛ T) : Q ∧ H ⊢ₛ T :=
   hand.mp.trans hgoal
 
-theorem SCases.one {σs} {P Q H T : SProp σs} (hfocus : P ⊣⊢ₛ Q ∧ H) (hgoal : P ⊢ₛ T) : Q ∧ H ⊢ₛ T :=
-  hfocus.mpr.trans hgoal
+theorem SCases.clear {σs} {Q H T : SPred σs} (hgoal : Q ∧ ⌜True⌝ ⊢ₛ T) : Q ∧ H ⊢ₛ T :=
+  (SPred.and_mono_r SPred.true_intro).trans hgoal
 
-theorem SCases.clear {σs} {P Q H T : SProp σs} (hfocus : P ⊣⊢ₛ Q ∧ ⌜True⌝) (hgoal : P ⊢ₛ T) : Q ∧ H ⊢ₛ T :=
-  (SProp.and_mono_r SProp.true_intro).trans (hfocus.mpr.trans hgoal)
+theorem SCases.pure {σs} {Q T : SPred σs} (hgoal : Q ∧ ⌜True⌝ ⊢ₛ T) : Q ⊢ₛ T :=
+  (SPred.and_intro .rfl SPred.true_intro).trans hgoal
 
-theorem SCases.pure {σs} {P Q T : SProp σs} (hfocus : P ⊣⊢ₛ Q ∧ ⌜True⌝) (hgoal : P ⊢ₛ T) : Q ⊢ₛ T :=
-  (SProp.and_intro .rfl SProp.true_intro).trans (hfocus.mpr.trans hgoal)
+theorem SCases.and_1 {σs} {Q H₁' H₂' H₁₂' T : SPred σs} (hand : H₁' ∧ H₂' ⊣⊢ₛ H₁₂') (hgoal : Q ∧ H₁₂' ⊢ₛ T) : (Q ∧ H₁') ∧ H₂' ⊢ₛ T :=
+  ((SPred.and_congr_r hand.symm).trans SPred.and_assoc.symm).mpr.trans hgoal
 
-theorem SCases.and_1 {σs} {P' Q H₁' H₂' H₁₂' T : SProp σs} (hfocus : P' ⊣⊢ₛ Q ∧ H₁₂') (hand : H₁' ∧ H₂' ⊣⊢ₛ H₁₂') (hgoal : P' ⊢ₛ T) : (Q ∧ H₁') ∧ H₂' ⊢ₛ T :=
-  ((hfocus.trans (SProp.and_congr_r hand.symm)).trans SProp.and_assoc.symm).mpr.trans hgoal
+theorem SCases.and_2 {σs} {Q H₁' H₂ T : SPred σs} (hgoal : (Q ∧ H₁') ∧ H₂ ⊢ₛ T) : (Q ∧ H₂) ∧ H₁' ⊢ₛ T :=
+  SPred.and_right_comm.mp.trans hgoal
 
-theorem SCases.and_2 {σs} {Q H₁' H₂ T : SProp σs} (hgoal : (Q ∧ H₁') ∧ H₂ ⊢ₛ T) : (Q ∧ H₂) ∧ H₁' ⊢ₛ T :=
-  SProp.and_right_comm.mp.trans hgoal
-
-theorem SCases.and_3 {σs} {Q H₁ H₂ T : SProp σs} (hgoal : (Q ∧ H₂) ∧ H₁ ⊢ₛ T) : Q ∧ (H₁ ∧ H₂) ⊢ₛ T :=
-  SProp.and_assoc.mpr.trans (SProp.and_right_comm.mp.trans hgoal)
+theorem SCases.and_3 {σs} {Q H₁ H₂ T : SPred σs} (hgoal : (Q ∧ H₂) ∧ H₁ ⊢ₛ T) : Q ∧ (H₁ ∧ H₂) ⊢ₛ T :=
+  SPred.and_assoc.mpr.trans (SPred.and_right_comm.mp.trans hgoal)
 
 example (h : a ∧ b) : b := by
   rcases h with ⟨_, hb⟩
@@ -43,6 +40,10 @@ def sCasesAddGoal (goals : IO.Ref (Array MVarId)) (σs : Expr) (T : Expr) (Q : E
   let goal := { goal with hyps := mkAnd! σs Q H }
   return ((), goal, prf)
 
+private def getQH (goal : SGoal) : MetaM (Expr × Expr) := do
+  let some (_, Q, H) := parseAnd? goal.hyps | throwError m!"Hypotheses not a conjunction: {goal.hyps}"
+  return (Q, H)
+
 -- goal is P ⊢ₛ T
 -- The caller focuses on hypothesis H, P ⊣⊢ₛ Q ∧ H.
 -- scasesCore on H, pat and k builds H ⊢ₛ H' according to pat, then calls k with H'
@@ -53,29 +54,21 @@ def sCasesAddGoal (goals : IO.Ref (Array MVarId)) (σs : Expr) (T : Expr) (Q : E
 -- and finally the caller builds the proof for
 --   P ⊢ₛ Q ∧ H ⊢ₛ T
 -- by unfocussing.
-partial def sCasesCore (σs : Expr) (H : Expr) (pat : SCasesPat) (k : Expr → MetaM (α × SGoal × Expr × FocusResult)): MetaM (α × SGoal × Expr) := do
+partial def sCasesCore (σs : Expr) (H : Expr) (pat : SCasesPat) (k : Expr → MetaM (α × SGoal × Expr)): MetaM (α × SGoal × Expr) := do
   match pat with
   | .one name => do
     let (name, _ref) ← getFreshHypName name
     let H' := (Hyp.mk name H.consumeMData).toExpr
-    -- H = H', P = P'
-    let (a, goal, prf, res) ← k H'
-    -- res.proof : P' ⊣⊢ₛ Q ∧ H'
-    -- goal := P' ⊢ₛ T
-    -- prf : goal
-    -- Then Q ∧ H ⊢ₛ P' ⊢ₛ T by res.proof.mpr.trans prf
-    let prf := mkApp7 (mkConst ``SCases.one) σs goal.hyps res.restHyps H goal.target res.proof prf
-    let goal := { goal with hyps := mkAnd! σs res.restHyps H }
-    return (a, goal, prf)
+    k H'
+    -- prf : Q ∧ H' ⊢ₛ T, but H = H' so nothing to do.
   | .clear => do
     let H' := emptyHyp σs -- H' = ⌜True⌝
-    let (a, goal, prf, res) ← k H'
-    -- res.proof : P' ⊣⊢ₛ Q ∧ ⌜True⌝
-    -- goal := P' ⊢ₛ T
-    -- prf : goal
-    -- Then Q ∧ H ⊢ₛ Q ∧ ⌜True⌝ ⊢ₛ P' ⊢ₛ T
-    let prf := mkApp7 (mkConst ``SCases.clear) σs goal.hyps res.restHyps H goal.target res.proof prf
-    let goal := { goal with hyps := mkAnd! σs res.restHyps H }
+    let (a, goal, prf) ← k H'
+    let (Q, _H) ← getQH goal
+    -- prf : Q ∧ ⌜True⌝ ⊢ₛ T
+    -- Then Q ∧ H ⊢ₛ Q ∧ ⌜True⌝ ⊢ₛ T
+    let prf := mkApp5 (mkConst ``SCases.clear) σs Q H goal.target prf
+    let goal := { goal with hyps := mkAnd! σs Q H }
     return (a, goal, prf)
   | .pure arg => do
     let .one n := arg
@@ -84,13 +77,12 @@ partial def sCasesCore (σs : Expr) (H : Expr) (pat : SCasesPat) (k : Expr → M
       -- This case is very similar to the clear case, but we need to
       -- return Q ⊢ₛ T, not Q ∧ H ⊢ₛ T.
       let H' := emptyHyp σs -- H' = ⌜True⌝
-      let (a, goal, prf, res) ← k H'
-      -- res.proof : P' ⊣⊢ₛ Q ∧ ⌜True⌝
-      -- goal := P' ⊢ₛ T
-      -- prf : goal
-      -- Then Q ⊢ₛ Q ∧ ⌜True⌝ ⊢ₛ P' ⊢ₛ T
-      let prf := mkApp6 (mkConst ``SCases.pure) σs goal.hyps res.restHyps goal.target res.proof prf
-      let goal := res.restGoal goal -- Q ⊢ₛ T
+      let (a, goal, prf) ← k H'
+      let (Q, _H) ← getQH goal
+      -- prf : Q ∧ ⌜True⌝ ⊢ₛ T
+      -- Then Q ⊢ₛ Q ∧ ⌜True⌝ ⊢ₛ T
+      let prf := mkApp4 (mkConst ``SCases.pure) σs Q goal.target prf
+      let goal := { goal with hyps := Q }
       return (a, goal, prf)
     -- Now prf : Q ∧ H ⊢ₛ T (where H is ⌜φ⌝). Exactly what is needed.
     return (a, goal, prf)
@@ -110,27 +102,24 @@ partial def sCasesCore (σs : Expr) (H : Expr) (pat : SCasesPat) (k : Expr → M
     let ((a, Q), goal, prf) ← sCasesCore σs H₁ p fun H₁' => do
       let ((a, Q), goal, prf) ← sCasesCore σs H₂ (.conjunction ps) fun H₂' => do
         let (H₁₂', hand) := mkAnd σs H₁' H₂'
-        let (a, goal, prf, res) ← k H₁₂' -- (2)
+        let (a, goal, prf) ← k H₁₂' -- (2)
         -- (3) prf : P' ⊢ₛ T
         -- res.proof : P' ⊣⊢ₛ Q ∧ H₁₂'
         -- (4) refocus to
         -- res.proof : P' ⊣⊢ₛ (Q ∧ H₁') ∧ H₂'
-        let P' := goal.hyps
+        let (Q, _H) ← getQH goal
         let T := goal.target
-        let Q := res.restHyps
-        -- logInfo m!"P' := {P'}, T := {T}, Q := {Q}, H₁₂' := {H₁₂'}, H₁' := {H₁'}, H₂' := {H₂'}"
-        let prf := mkApp10 (mkConst ``SCases.and_1) σs P' Q H₁' H₂' H₁₂' T res.proof hand prf
+        let prf := mkApp8 (mkConst ``SCases.and_1) σs Q H₁' H₂' H₁₂' T hand prf
         -- check prf
         let QH₁' := mkAnd! σs Q H₁'
         let goal := { goal with hyps := mkAnd! σs QH₁' H₂' }
-        let res := FocusResult.refl σs QH₁' H₂'
-        return ((a, Q), goal, prf, res)
+        return ((a, Q), goal, prf)
       -- (5) prf : (Q ∧ H₁') ∧ H₂ ⊢ₛ T
       -- (6) refocus to prf : (Q ∧ H₂) ∧ H₁' ⊢ₛ T
       let prf := mkApp6 (mkConst ``SCases.and_2) σs Q H₁' H₂ goal.target prf
       let QH₂ := mkAnd! σs Q H₂
       let goal := { goal with hyps := mkAnd! σs QH₂ H₁' }
-      return ((a, Q), goal, prf, FocusResult.refl σs QH₂ H₁')
+      return ((a, Q), goal, prf)
     -- (7) prf : (Q ∧ H₂) ∧ H₁ ⊢ₛ T
     -- (8) rearrange to Q ∧ (H₁ ∧ H₂) ⊢ₛ T
     let prf := mkApp6 (mkConst ``SCases.and_3) σs Q H₁ H₂ goal.target prf
@@ -138,15 +127,15 @@ partial def sCasesCore (σs : Expr) (H : Expr) (pat : SCasesPat) (k : Expr → M
     return (a, goal, prf)
   | _ => throwError "not implemented"
 
-private theorem assembled_proof {σs} {P P' Q H H' T : SProp σs}
+private theorem assembled_proof {σs} {P P' Q H H' T : SPred σs}
   (hfocus : P ⊣⊢ₛ Q ∧ H) (hcases : H ⊢ₛ H') (hand : Q ∧ H' ⊣⊢ₛ P') (hprf₃ : P' ⊢ₛ T) : P ⊢ₛ T :=
-  hfocus.mp.trans ((SProp.and_mono_r hcases).trans (hand.mp.trans hprf₃))
+  hfocus.mp.trans ((SPred.and_mono_r hcases).trans (hand.mp.trans hprf₃))
 
-private theorem blah2 {σs} {P Q H R : SProp σs}
+private theorem blah2 {σs} {P Q H R : SPred σs}
   (h₁ : P ⊣⊢ₛ Q ∧ H) (h₂ : Q ∧ H ⊢ₛ R) : P ⊢ₛ R :=
   h₁.mp.trans h₂
 
-private theorem blah3 {σs} {P Q H T : SProp σs}
+private theorem blah3 {σs} {P Q H T : SPred σs}
   (hand : Q ∧ H ⊣⊢ₛ P) (hgoal : P ⊢ₛ T) : Q ∧ H ⊢ₛ T :=
   hand.mp.trans hgoal
 
@@ -163,15 +152,6 @@ elab "scases" colGt hyp:ident "with" colGt pat:scasesPat : tactic => do
   let goals ← IO.mkRef #[]
   let (_, _new_goal, prf) ← sCasesCore goal.σs H pat (sCasesAddGoal goals goal.σs goal.target Q)
 
-  fun H' => do
-    let (P', hand) := mkAnd goal.σs Q H'
-    -- hand : Q ∧ H' ⊣⊢ₛ P'
-    -- Need to produce a proof that P' ⊢ₛ T and return res
-    let res : FocusResult := { restHyps := Q, focusHyp := H', proof := mkApp4 (mkConst ``SProp.bientails.symm) goal.σs (mkAnd! goal.σs Q H') P' hand }
-    let goal := { goal with hyps := P' }
-    let m ← mkFreshExprSyntheticOpaqueMVar goal.toExpr
-    goals.modify (·.push m.mvarId!)
-    return ((), goal, m, res)
   -- Now prf : Q ∧ H ⊢ₛ T. Prepend hfocus.mp, done.
   let prf := focus.rewriteHyps goal prf
   -- check prf

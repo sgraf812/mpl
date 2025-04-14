@@ -12,7 +12,7 @@ structure PredTrans (ps : PredShape) (α : Type) : Type where
   mono : PredTrans.Mono apply
 
 def PredTrans.const {ps : PredShape} {α : Type} (p : PreCond ps) : PredTrans ps α :=
-  ⟨fun _ => p, fun _ _ _ => SProp.entails.refl _⟩
+  ⟨fun _ => p, fun _ _ _ => SPred.entails.refl _⟩
 
 def PredTrans.le {ps : PredShape} {α : Type} (x y : PredTrans ps α) : Prop :=
   ∀ Q, (y.apply Q).entails (x.apply Q) -- the weaker the precondition, the smaller the PredTrans
