@@ -31,7 +31,7 @@ theorem spure_thm {σs : List Type} {P Q T : SProp σs} {φ : Prop} [IsPure Q φ
 -- if `k` produces a proof for Q ⊢ₛ T that may range over a pure proof h : φ.
 -- It calls `k` with the φ in H = ⌜φ⌝ and a proof `h : φ` thereof.
 def sPureCore (σs : Expr) (hyp : Expr) (name : TSyntax ``binderIdent)
-  (k : Expr /-φ:Prop-/ → Expr /-h:φ-/ → MetaM (α × SGoal × Expr)) : MetaM (α × Expr) := do
+  (k : Expr /-φ:Prop-/ → Expr /-h:φ-/ → MetaM (α × SGoal × Expr)) : MetaM (α × SGoal × Expr) := do
   let φ ← mkFreshExprMVar (mkSort .zero)
   let inst ← synthInstance (mkApp3 (mkConst ``IsPure) σs hyp φ)
   let (name, ref) ← getFreshHypName name
@@ -41,8 +41,12 @@ def sPureCore (σs : Expr) (hyp : Expr) (name : TSyntax ``binderIdent)
     check prf
     let prf ← mkLambdaFVars #[h] prf
     let prf := mkApp7 (mkConst ``spure_thm) σs goal.hyps hyp goal.target φ inst prf
+    let goal := { goal with hyps := mkAnd! σs goal.hyps hyp }
     check prf
-    return (a, prf)
+    let prf_type ← inferType prf
+    unless ← isDefEq goal.toExpr prf_type do
+      throwError "scases: the proof and its supposed type did not match. {prf_type} ≠ {goal.toExpr}"
+    return (a, goal, prf)
 
 elab "spure" colGt hyp:ident : tactic => do
   let mvar ← getMainGoal
@@ -50,10 +54,11 @@ elab "spure" colGt hyp:ident : tactic => do
   let g ← instantiateMVars <| ← mvar.getType
   let some goal := parseSGoal? g | throwError "not in proof mode"
   let some res := goal.focusHyp hyp.getId | throwError "unknown identifier '{hyp}'"
-  let (m, prf) ← sPureCore goal.σs res.focusHyp (← `(binderIdent| $hyp:ident)) fun _ _ => do
+  let (m, _new_goal, prf) ← sPureCore goal.σs res.focusHyp (← `(binderIdent| $hyp:ident)) fun _ _ => do
     let goal := res.restGoal goal
     let m ← mkFreshExprSyntheticOpaqueMVar goal.toExpr
     return (m, goal, m)
+  goal.checkProof prf
   let prf := res.rewriteHyps goal prf
   -- check prf
   mvar.assign prf
