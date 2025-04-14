@@ -25,8 +25,8 @@ inductive SCasesPat
   | clear
   | conjunction (args : List SCasesPat)
   | disjunction (args : List SCasesPat)
-  | pure           (pat : SCasesPat)
-  | intuitionistic (pat : SCasesPat)
+  | pure       (pat : SCasesPat)
+  | persistent (pat : SCasesPat)
   deriving Repr, Inhabited
 
 partial def SCasesPat.parse (pat : TSyntax `scasesPat) : MacroM SCasesPat := do
@@ -39,7 +39,7 @@ where
   | `(scasesPat| -) => some <| .clear
   | `(scasesPat| ⟨$[$args],*⟩) => args.mapM goAlts |>.map (.conjunction ·.toList)
   | `(scasesPat| ⌜$pat⌝) => go pat |>.map .pure
-  | `(scasesPat| □$pat) => go pat |>.map .intuitionistic
+  | `(scasesPat| □$pat) => go pat |>.map .persistent
   | `(scasesPat| ($pat)) => goAlts pat
   | _ => none
   goAlts : TSyntax ``scasesPatAlts → Option SCasesPat

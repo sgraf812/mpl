@@ -12,9 +12,13 @@ private theorem one {σs} {P Q H T : SProp σs} (hfocus : P ⊣⊢ₛ Q ∧ H) (
 private theorem clear {σs} {P Q H T : SProp σs} (hfocus : P ⊣⊢ₛ Q ∧ ⌜True⌝) (hgoal : P ⊢ₛ T) : Q ∧ H ⊢ₛ T :=
   (SProp.and_mono_r SProp.true_intro).trans (hfocus.mpr.trans hgoal)
 
+example (h : a ∧ b) : b := by
+  rcases h with ⟨_, hb⟩
+  exact hb
+
 -- goal is P ⊢ₛ T
 -- The caller focuses on hypothesis H, P ⊣⊢ₛ Q ∧ H.
--- scasesCore on H and k builds H ⊢ₛ H', then calls k with H'
+-- scasesCore on H, pat and k builds H ⊢ₛ H' according to pat, then calls k with H'
 -- k knows context Q and builds goal P' ⊢ₛ T, a proof of the goal, and a FocusResult for P' ⊣⊢ₛ Q ∧ H'.
 -- (k should not also apply H ⊢ₛ H' or unfocus because that does not work with spureCore which needs the see `P'` and not `Q ∧ _`.)
 -- then scasesCore builds a proof for Q ∧ H ⊢ₛ T from P' ⊢ₛ T:
@@ -45,7 +49,7 @@ partial def sCasesCore (σs : Expr) (H : Expr) (pat : SCasesPat) (k : Expr → M
   | .pure arg => do
     let .one n := arg
       | throwError "cannot further destruct a hypothesis after moving it to the Lean context"
-    let (_, prf) ← spureCore σs H n fun _ _hφ => do
+    let (_, prf) ← sPureCore σs H n fun _ _hφ => do
       let H' := emptyHyp σs
       let (goal, prf, _res) ← k H'
       -- res.proof : P' ⊣⊢ₛ Q ∧ ⌜True⌝
@@ -57,7 +61,17 @@ partial def sCasesCore (σs : Expr) (H : Expr) (pat : SCasesPat) (k : Expr → M
     -- check prf
     -- Now prf : Q ∧ H ⊢ₛ T (where H is ⌜φ⌝). Exactly what is needed.
     return prf
-  | _ => panic! "not implemented"
+  | .conjunction [] => sCasesCore σs H .clear k
+  | .conjunction [p] => sCasesCore σs H p k
+  | .conjunction (p :: ps) => do
+    let some (_, H₁, H₂) := parseAnd? H | throwError "Not a conjunction {H}"
+    -- goal is Q ∧ (H₁ ∧ H₂) ⊢ₛ T
+    -- we can recurse on H₁ to get Q ∧ H₁ ⊢ₛ T.
+    let (goal, prf, res) ← sCasesCore σs H₁ p fun H₁'
+    -- Goal is Q ∧ H₂ ⊢ₛ T
+    let (goal, prf, res) ← sCasesCore σs H₂ (.conjunction ps) k
+    return (mkApp4 (mkConst ``conjunction) σs goal.hyps res.restHyps goal.focusHyp goal.target)
+  | _ => throwError "not implemented"
 
 private theorem assembled_proof {σs} {P P' Q H H' T : SProp σs}
   (hfocus : P ⊣⊢ₛ Q ∧ H) (hcases : H ⊢ₛ H') (hand : Q ∧ H' ⊣⊢ₛ P') (hprf₃ : P' ⊢ₛ T) : P ⊢ₛ T :=

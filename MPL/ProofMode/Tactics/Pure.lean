@@ -30,7 +30,7 @@ theorem spure_thm {σs : List Type} {P Q T : SProp σs} {φ : Prop} [IsPure Q φ
 -- It will provide a proof for Q ∧ H ⊢ₛ T
 -- if `k` produces a proof for Q ⊢ₛ T that may range over a pure proof h : φ.
 -- It calls `k` with the φ in H = ⌜φ⌝ and a proof `h : φ` thereof.
-def spureCore (σs : Expr) (hyp : Expr) (name : TSyntax ``binderIdent)
+def sPureCore (σs : Expr) (hyp : Expr) (name : TSyntax ``binderIdent)
   (k : Expr /-φ:Prop-/ → Expr /-h:φ-/ → MetaM (α × SGoal × Expr)) : MetaM (α × Expr) := do
   let φ ← mkFreshExprMVar (mkSort .zero)
   let inst ← synthInstance (mkApp3 (mkConst ``IsPure) σs hyp φ)
@@ -50,7 +50,7 @@ elab "spure" colGt hyp:ident : tactic => do
   let g ← instantiateMVars <| ← mvar.getType
   let some goal := parseSGoal? g | throwError "not in proof mode"
   let some res := goal.focusHyp hyp.getId | throwError "unknown identifier '{hyp}'"
-  let (m, prf) ← spureCore goal.σs res.focusHyp (← `(binderIdent| $hyp:ident)) fun _ _ => do
+  let (m, prf) ← sPureCore goal.σs res.focusHyp (← `(binderIdent| $hyp:ident)) fun _ _ => do
     let goal := res.restGoal goal
     let m ← mkFreshExprSyntheticOpaqueMVar goal.toExpr
     return (m, goal, m)
