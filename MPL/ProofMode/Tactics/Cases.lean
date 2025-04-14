@@ -6,6 +6,9 @@ import MPL.ProofMode.Tactics.Pure
 namespace MPL.ProofMode.Tactics
 open Lean Elab Tactic Meta
 
+theorem SCases.add_goal {σs} {P Q H T : SProp σs} (hand : Q ∧ H ⊣⊢ₛ P) (hgoal : P ⊢ₛ T) : Q ∧ H ⊢ₛ T :=
+  hand.mp.trans hgoal
+
 theorem SCases.one {σs} {P Q H T : SProp σs} (hfocus : P ⊣⊢ₛ Q ∧ H) (hgoal : P ⊢ₛ T) : Q ∧ H ⊢ₛ T :=
   hfocus.mpr.trans hgoal
 
@@ -28,10 +31,22 @@ example (h : a ∧ b) : b := by
   rcases h with ⟨_, hb⟩
   exact hb
 
+-- Produce a proof for Q ∧ H ⊢ₛ T by opening a new goal P ⊢ₛ T, where P ⊣⊢ₛ Q ∧ H.
+def sCasesAddGoal (goals : IO.Ref (Array MVarId)) (σs : Expr) (T : Expr) (Q : Expr) (H : Expr) : MetaM (Unit × SGoal × Expr) := do
+  let (P, hand) := mkAnd σs Q H
+  -- hand : Q ∧ H ⊣⊢ₛ P
+  -- Need to produce a proof that P ⊢ₛ T and return res
+  let goal : SGoal := { σs := σs, hyps := P, target := T }
+  let m ← mkFreshExprSyntheticOpaqueMVar goal.toExpr
+  goals.modify (·.push m.mvarId!)
+  let prf := mkApp7 (mkConst ``SCases.add_goal) σs P Q H T hand m
+  let goal := { goal with hyps := mkAnd! σs Q H }
+  return ((), goal, prf)
+
 -- goal is P ⊢ₛ T
 -- The caller focuses on hypothesis H, P ⊣⊢ₛ Q ∧ H.
 -- scasesCore on H, pat and k builds H ⊢ₛ H' according to pat, then calls k with H'
--- k knows context Q and builds goal P' ⊢ₛ T, a proof of the goal, and a FocusResult for P' ⊣⊢ₛ Q ∧ H'.
+-- k knows context Q and builds goal Q ∧ H' ⊢ₛ T and a proof of the goal.
 -- (k should not also apply H ⊢ₛ H' or unfocus because that does not work with spureCore which needs the see `P'` and not `Q ∧ _`.)
 -- then scasesCore builds a proof for Q ∧ H ⊢ₛ T from P' ⊢ₛ T:
 --   Q ∧ H ⊢ₛ Q ∧ H' ⊢ₛ P' ⊢ₛ T
@@ -146,7 +161,9 @@ elab "scases" colGt hyp:ident "with" colGt pat:scasesPat : tactic => do
   let Q := focus.restHyps
   let H := focus.focusHyp
   let goals ← IO.mkRef #[]
-  let (_, _new_goal, prf) ← sCasesCore goal.σs H pat fun H' => do
+  let (_, _new_goal, prf) ← sCasesCore goal.σs H pat (sCasesAddGoal goals goal.σs goal.target Q)
+
+  fun H' => do
     let (P', hand) := mkAnd goal.σs Q H'
     -- hand : Q ∧ H' ⊣⊢ₛ P'
     -- Need to produce a proof that P' ⊢ₛ T and return res

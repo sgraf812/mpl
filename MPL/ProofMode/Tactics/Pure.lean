@@ -53,7 +53,6 @@ elab "spure" colGt hyp:ident : tactic => do
     let goal := res.restGoal goal
     let m ← mkFreshExprSyntheticOpaqueMVar goal.toExpr
     return (m, goal, m)
-  _new_goal.checkProof prf
   let prf := res.rewriteHyps goal prf
   mvar.assign prf
   replaceMainGoal [m.mvarId!]
