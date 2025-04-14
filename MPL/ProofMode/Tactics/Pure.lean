@@ -38,14 +38,9 @@ def sPureCore (σs : Expr) (hyp : Expr) (name : TSyntax ``binderIdent)
   withLocalDeclD name φ fun h => do
     -- addLocalVarInfo ref (← getLCtx) h φ
     let (a, goal, prf /- : goal.toExpr -/) ← k φ h
-    check prf
     let prf ← mkLambdaFVars #[h] prf
     let prf := mkApp7 (mkConst ``spure_thm) σs goal.hyps hyp goal.target φ inst prf
     let goal := { goal with hyps := mkAnd! σs goal.hyps hyp }
-    check prf
-    let prf_type ← inferType prf
-    unless ← isDefEq goal.toExpr prf_type do
-      throwError "scases: the proof and its supposed type did not match. {prf_type} ≠ {goal.toExpr}"
     return (a, goal, prf)
 
 elab "spure" colGt hyp:ident : tactic => do
@@ -58,9 +53,8 @@ elab "spure" colGt hyp:ident : tactic => do
     let goal := res.restGoal goal
     let m ← mkFreshExprSyntheticOpaqueMVar goal.toExpr
     return (m, goal, m)
-  goal.checkProof prf
+  _new_goal.checkProof prf
   let prf := res.rewriteHyps goal prf
-  -- check prf
   mvar.assign prf
   replaceMainGoal [m.mvarId!]
 

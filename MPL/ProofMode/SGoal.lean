@@ -100,11 +100,13 @@ partial def SGoal.findHyp? (goal : SGoal) (name : Name) : Option (SubExpr.Pos ×
       else
         panic! "SGoal.findHyp?: hypothesis without proper metadata: {e}"
 
-def SGoal.checkProof (goal : SGoal) (prf : Expr) : MetaM Unit := do
+def SGoal.checkProof (goal : SGoal) (prf : Expr) (suppressWarning : Bool := false) : MetaM Unit := do
   check prf
   let prf_type ← inferType prf
   unless ← isDefEq goal.toExpr prf_type do
     throwError "SGoal.checkProof: the proof and its supposed type did not match.\ngoal:  {goal.toExpr}\nproof: {prf_type}"
+  unless suppressWarning do
+    logWarning m!"stray SGoal.checkProof {prf_type} {goal.toExpr}"
 
 def getFreshHypName : TSyntax ``binderIdent → CoreM (Name × Syntax)
   | `(binderIdent| $name:ident) => pure (name.getId, name)

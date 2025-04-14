@@ -12,6 +12,7 @@ structure FocusResult where
   focusHyp : Expr
   restHyps : Expr
   proof : Expr
+  deriving Inhabited
 
 theorem focus_this {σs : List Type} {P : SProp σs} : P ⊣⊢ₛ ⌜True⌝ ∧ P :=
   SProp.true_and.symm
@@ -47,13 +48,17 @@ partial def focusHyp (σs : Expr) (e : Expr) (name : Name) : Option FocusResult 
 partial def SGoal.focusHyp (goal : SGoal) (name : Name) : Option FocusResult :=
   MPL.ProofMode.focusHyp goal.σs goal.hyps name
 
+def FocusResult.refl (σs : Expr) (restHyps : Expr) (focusHyp : Expr) : FocusResult :=
+  let proof := mkApp2 (mkConst ``SProp.bientails.refl) σs (mkAnd! σs restHyps focusHyp)
+  { restHyps, focusHyp, proof }
+
 def FocusResult.restGoal (res : FocusResult) (goal : SGoal) : SGoal :=
   { goal with hyps := res.restHyps }
 
 def FocusResult.recombineGoal (res : FocusResult) (goal : SGoal) : SGoal :=
   { goal with hyps := mkAnd! goal.σs res.restHyps res.focusHyp }
 
-private theorem rewrite_hyps {σs} {P Q R : SProp σs} (hrw : P ⊣⊢ₛ Q) (hgoal : Q ⊢ₛ R) : P ⊢ₛ R :=
+theorem FocusResult.rewrite_hyps {σs} {P Q R : SProp σs} (hrw : P ⊣⊢ₛ Q) (hgoal : Q ⊢ₛ R) : P ⊢ₛ R :=
   hrw.mp.trans hgoal
 
 /-- Turn a proof for `(res.recombineGoal goal).toExpr` into one for `goal.toExpr`. -/
