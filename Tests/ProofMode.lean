@@ -154,11 +154,10 @@ theorem pure (P : SPred σs) (Q : Prop) : φ → (⊢ₛ P → ⌜Q⌝ → P) :=
   scases HQ with ⌜hQ⌝
   sexact HP
 
-theorem riddle (P : SPred σs) (Q : Prop) (hqr : Q → ⊢ₛ R) : ⊢ₛ P → ⌜Q⌝ → R := by
+theorem pure_exact (P : SPred σs) (Q : Prop) (hqr : Q → ⊢ₛ R) : ⊢ₛ P → ⌜Q⌝ → R := by
   sintro HP HQ
   scases HQ with ⌜hQ⌝
-  have hr : ⊢ₛ R := hqr hQ
-  apply SPred.true_intro.trans hr
+  sexact hqr hQ
 
 theorem and (P Q R : SPred σs) : (P ∧ Q ∧ R) ⊢ₛ R := by
   sintro HPQR
