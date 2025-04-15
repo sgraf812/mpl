@@ -33,6 +33,7 @@ theorem true_intro : P ⊢ₛ ⌜True⌝ := pure_intro trivial
 theorem exists_intro' {Ψ : α → SPred σs} (a : α) (h : P ⊢ₛ Ψ a) : P ⊢ₛ ∃ a, Ψ a := h.trans (exists_intro a)
 theorem and_or_elim_l (hleft : P ∧ R ⊢ₛ T) (hright : Q ∧ R ⊢ₛ T) : (P ∨ Q) ∧ R ⊢ₛ T := imp_elim (or_elim (imp_intro hleft) (imp_intro hright))
 theorem and_or_elim_r (hleft : P ∧ Q ⊢ₛ T) (hright : P ∧ R ⊢ₛ T) : P ∧ (Q ∨ R) ⊢ₛ T := imp_elim' (or_elim (imp_intro (and_symm.trans hleft)) (imp_intro (and_symm.trans hright)))
+theorem exfalso (h : P ⊢ₛ ⌜False⌝) : P ⊢ₛ Q := h.trans false_elim
 
 /-! # Monotonicity and congruence -/
 

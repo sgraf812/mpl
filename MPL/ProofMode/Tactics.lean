@@ -8,3 +8,5 @@ import MPL.ProofMode.Tactics.LeftRight
 import MPL.ProofMode.Tactics.Constructor
 import MPL.ProofMode.Tactics.Specialize
 import MPL.ProofMode.Tactics.Cases
+import MPL.ProofMode.Tactics.Exfalso
+import MPL.ProofMode.Tactics.Have

@@ -136,6 +136,25 @@ theorem mixed (y : Nat) (P Q : SPred σs) (Ψ : Nat → SPred σs) (hP : ⊢ₛ 
 
 end specialize
 
+namespace havereplace
+
+theorem repl (P Q : SPred σs) : P ⊢ₛ (P → Q) → Q := by
+  sintro HP HPQ
+  sreplace HPQ := HPQ HP
+  sexact HPQ
+
+theorem shave (P Q : SPred σs) : P ⊢ₛ (P → Q) → Q := by
+  sintro HP HPQ
+  shave HQ := HPQ HP
+  sexact HQ
+
+theorem mixed (y : Nat) (P Q : SPred σs) (Ψ : Nat → SPred σs) (hP : ⊢ₛ P) : ⊢ₛ Q → (∀ x, P → Q → Ψ x) → Ψ (y + 1) := by
+  sintro HQ HΨ
+  shave H := HΨ (y + 1) hP HQ
+  sexact H
+
+end havereplace
+
 namespace cases
 
 theorem rename (P : SPred σs) : P ⊢ₛ P := by
@@ -198,7 +217,5 @@ theorem mosel1 {α : Type} (P : SPred σs) (Φ Ψ : α → SPred σs) :
 
 /-
 TODO:
-- exfalso?
-- shave, sreplace
 - srefine
 -/

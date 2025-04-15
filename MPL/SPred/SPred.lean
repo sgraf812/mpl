@@ -31,6 +31,8 @@ def entails {σs : List Type} (P Q : SPred σs) : Prop := match σs with
 
 -- Reducibility of entails must be semi-reducible so that entails_refl is useful for rfl
 
+/-- Equivalence relation on `SPred`.
+Coincides with `Eq` iff all types in `σs` are inhabited. -/
 def bientails {σs : List Type} (P Q : SPred σs) : Prop := match σs with
 | [] => P ↔ Q
 | σ :: _ => ∀ (s : σ), bientails (P s) (Q s)
