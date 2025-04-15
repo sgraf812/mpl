@@ -8,7 +8,7 @@ open Lean Elab Tactic Meta
 
 initialize registerTraceClass `mpl.tactics.specialize
 
-theorem specialize_imp_persistent {P P' Q R : SPred σs}
+theorem specialize_imp_stateful {P P' Q R : SPred σs}
   (hrefocus : P ∧ (Q → R) ⊣⊢ₛ P' ∧ Q) : P ∧ (Q → R) ⊢ₛ P ∧ R := by
   calc spred(P ∧ (Q → R))
     _ ⊢ₛ (P' ∧ Q) ∧ (Q → R) := SPred.and_intro hrefocus.mp SPred.and_elim_r
@@ -26,21 +26,21 @@ theorem specialize_imp_pure {P Q R : SPred σs}
 theorem specialize_forall {P : SPred σs} {ψ : α → SPred σs}
   (a : α) : P ∧ (∀ x, ψ x) ⊢ₛ P ∧ ψ a := SPred.and_mono_r (SPred.forall_elim a)
 
-def specializeImpPersistent (σs : Expr) (P : Expr) (QR : Expr) (arg : TSyntax `term) : OptionT TacticM (Expr × Expr) := do
+def specializeImpStateful (σs : Expr) (P : Expr) (QR : Expr) (arg : TSyntax `term) : OptionT TacticM (Expr × Expr) := do
   guard (arg.raw.isIdent)
   let some arg := focusHyp σs (mkAnd! σs P QR) arg.raw.getId | failure
   OptionT.mk do -- no OptionT failure after this point
   -- The goal is P ∧ (Q → R)
   -- arg.proof : P ∧ (Q → R) ⊣⊢ₛ P' ∧ Q
   -- we want to return (R, (proof : P ∧ (Q → R) ⊢ₛ P ∧ R))
-  let some specHyp := parseHyp? QR | panic! "Precondition of specializeImpPersistent violated"
+  let some specHyp := parseHyp? QR | panic! "Precondition of specializeImpStateful violated"
   let P' := arg.restHyps
   let Q := arg.focusHyp
   let hrefocus := arg.proof -- P ∧ (Q → R) ⊣⊢ₛ P' ∧ Q
   let mkApp3 (.const ``SPred.imp []) σs Q' R := specHyp.p | throwError "Expected implication {QR}"
-  let proof := mkApp6 (mkConst ``specialize_imp_persistent) σs P P' Q R hrefocus
+  let proof := mkApp6 (mkConst ``specialize_imp_stateful) σs P P' Q R hrefocus
   -- check proof
-  trace[mpl.tactics.specialize] "Persistently specialize {specHyp.p} with {Q}. New Goal: {mkAnd! σs P R}"
+  trace[mpl.tactics.specialize] "Statefully specialize {specHyp.p} with {Q}. New Goal: {mkAnd! σs P R}"
   unless ← isDefEq Q Q' do
     throwError "failed to specialize {specHyp.p} with {Q}"
 
@@ -102,7 +102,7 @@ elab "sspecialize" hyp:ident args:(colGt term:max)* : tactic => do
 
   for arg in args do
     let res? ← OptionT.run
-      (specializeImpPersistent σs P H arg
+      (specializeImpStateful σs P H arg
         <|> specializeImpPure σs P H arg
         <|> specializeForall σs P H arg)
     match res? with

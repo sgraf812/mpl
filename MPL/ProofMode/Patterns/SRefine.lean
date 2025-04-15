@@ -19,7 +19,7 @@ inductive SRefinePat
   | one (name : TSyntax ``binderIdent)
   | tuple (args : List SRefinePat)
   | pure       (h : TSyntax `term)
-  | persistent (h : TSyntax ``binderIdent)
+  | stateful (h : TSyntax ``binderIdent)
   | hole (name : TSyntax ``binderIdent)
   deriving Repr, Inhabited
 
@@ -33,6 +33,6 @@ where
   | `(srefinePat| ?$name) => some (.hole name)
   | `(srefinePat| ⟨$[$args],*⟩) => args.mapM go |>.map (.tuple ·.toList)
   | `(srefinePat| ⌜$h⌝) => some (.pure h)
-  | `(srefinePat| □$h) => some (.persistent h)
+  | `(srefinePat| □$h) => some (.stateful h)
   | `(srefinePat| ($pat)) => go pat
   | _ => none

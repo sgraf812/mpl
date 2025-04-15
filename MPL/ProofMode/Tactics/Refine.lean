@@ -18,7 +18,7 @@ def patAsTerm (pat : SRefinePat) (expected : Option Expr := none) : OptionT Tact
 
 partial def sRefineCore (goal : SGoal) (pat : SRefinePat) (k : SGoal → TSyntax ``binderIdent → TacticM Expr) : TacticM Expr := do
   match pat with
-  | .persistent name => liftMetaM do
+  | .stateful name => liftMetaM do
     match name with
     | `(binderIdent| $name:ident) => do
       let some prf ← goal.exact (← `($name)) | throwError "unknown hypothesis '{name}'"
@@ -30,9 +30,9 @@ partial def sRefineCore (goal : SGoal) (pat : SRefinePat) (k : SGoal → TSyntax
     goal.exactPure t
   | .one name =>
       if let `(binderIdent| $id:ident) := name then
-        sRefineCore goal (.pure (← `($id))) k <|> sRefineCore goal (.persistent name) k
+        sRefineCore goal (.pure (← `($id))) k <|> sRefineCore goal (.stateful name) k
       else
-        sRefineCore goal (.persistent name) k
+        sRefineCore goal (.stateful name) k
   | .hole name => k goal name
   | .tuple [] => throwUnsupportedSyntax
   | .tuple [p] => sRefineCore goal p k

@@ -233,3 +233,13 @@ theorem mosel1 {α : Type} (P : SPred σs) (Φ Ψ : α → SPred σs) :
   · sexists a
     sright
     srefine ⟨HP, HΨ⟩
+
+theorem mosel3 {α : Type} (P : SPred σs) (Φ Ψ : α → SPred σs) :
+  P ∧ (∃ a, Φ a ∨ Ψ a) ⊢ₛ ∃ a, Φ a ∨ (P ∧ P ∧ Ψ a) := by
+  sintro ⟨HP, ⟨a, ⟨HΦ | HΨ⟩⟩⟩
+  · sexists a
+    sleft
+    sexact HΦ
+  · sexists a
+    sright
+    srefine ⟨HP, HP, HΨ⟩

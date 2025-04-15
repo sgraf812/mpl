@@ -26,7 +26,7 @@ inductive SCasesPat
   | tuple (args : List SCasesPat)
   | alts (args : List SCasesPat)
   | pure       (h : TSyntax ``binderIdent)
-  | persistent (h : TSyntax ``binderIdent)
+  | stateful (h : TSyntax ``binderIdent)
   deriving Repr, Inhabited
 
 partial def SCasesPat.parse (pat : TSyntax `scasesPat) : MacroM SCasesPat := do
@@ -39,7 +39,7 @@ where
   | `(scasesPat| -) => some <| .clear
   | `(scasesPat| ⟨$[$args],*⟩) => args.mapM goAlts |>.map (.tuple ·.toList)
   | `(scasesPat| ⌜$h⌝) => some (.pure h)
-  | `(scasesPat| □$h) => some (.persistent h)
+  | `(scasesPat| □$h) => some (.stateful h)
   | `(scasesPat| ($pat)) => goAlts pat
   | _ => none
   goAlts : TSyntax ``scasesPatAlts → Option SCasesPat

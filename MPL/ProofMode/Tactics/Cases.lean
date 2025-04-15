@@ -89,7 +89,7 @@ partial def sCasesCore (σs : Expr) (H : Expr) (pat : SCasesPat) (k : Expr → M
     let prf := mkApp5 (mkConst ``SCases.clear) σs Q H goal.target prf
     let goal := { goal with hyps := mkAnd! σs Q H }
     return (a, goal, prf)
-  | .persistent name => do
+  | .stateful name => do
     let (name, _ref) ← getFreshHypName name
     let H' := (Hyp.mk name H.consumeMData).toExpr
     k H'
@@ -113,8 +113,8 @@ partial def sCasesCore (σs : Expr) (H : Expr) (pat : SCasesPat) (k : Expr → M
       let _ ← synthInstance (mkApp3 (mkConst ``IsPure) σs H φ)
       sCasesCore σs H (.pure name) k
     catch _ =>
-      -- Otherwise introduce it as a persistent hypothesis.
-      sCasesCore σs H (.persistent name) k
+      -- Otherwise introduce it as a stateful hypothesis.
+      sCasesCore σs H (.stateful name) k
   | .tuple [] => sCasesCore σs H .clear k
   | .tuple [p] => sCasesCore σs H p k
   | .tuple (p :: ps) => do
