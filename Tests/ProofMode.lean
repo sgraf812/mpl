@@ -15,6 +15,10 @@ theorem exact (Q : SPred σs) : Q ⊢ₛ Q := by
   sintro HQ
   sexact HQ
 
+theorem exact_pure (P Q : SPred σs) (hP : ⊢ₛ P): Q ⊢ₛ P := by
+  sintro _
+  sexact hP
+
 theorem clear (P Q : SPred σs) : P ⊢ₛ Q → Q := by
   sintro HP
   sintro HQ
@@ -196,6 +200,6 @@ theorem mosel1 {α : Type} (P : SPred σs) (Φ Ψ : α → SPred σs) :
 /-
 TODO:
 - exfalso?
+- shave, sreplace
 - srefine
-- sexact with pure hypothesis (SPred.true_intro.trans h)
 -/
