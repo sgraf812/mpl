@@ -1,10 +1,11 @@
 import MPL.ProofMode.Focus
-import MPL.ProofMode.SCasesPattern
+import MPL.ProofMode.Patterns.SCases
 import MPL.ProofMode.Tactics.Basic
 import MPL.ProofMode.Tactics.Pure
 import MPL.ProofMode.Tactics.Intro
 
 namespace MPL.ProofMode.Tactics
+open MPL.ProofMode.Patterns
 open Lean Elab Tactic Meta
 
 theorem SCases.add_goal {σs} {P Q H T : SPred σs} (hand : Q ∧ H ⊣⊢ₛ P) (hgoal : P ⊢ₛ T) : Q ∧ H ⊢ₛ T :=
@@ -77,7 +78,7 @@ def sCasesExists (H : Expr) (name : TSyntax ``binderIdent)
 -- and finally the caller builds the proof for
 --   P ⊢ₛ Q ∧ H ⊢ₛ T
 -- by unfocussing.
-partial def sCasesCore (σs : Expr) (H : Expr) (pat : SCasesPat) (k : Expr → MetaM (α × SGoal × Expr)): MetaM (α × SGoal × Expr) := do
+partial def sCasesCore (σs : Expr) (H : Expr) (pat : SCasesPat) (k : Expr → MetaM (α × SGoal × Expr)): MetaM (α × SGoal × Expr) :=
   match pat with
   | .clear => do
     let H' := emptyHyp σs -- H' = ⌜True⌝

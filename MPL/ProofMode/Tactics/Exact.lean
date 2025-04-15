@@ -23,7 +23,7 @@ def _root_.MPL.ProofMode.SGoal.exactPure (goal : SGoal) (hyp : TSyntax `term) : 
   let expected := mkApp2 (mkConst ``SPred.tautological) goal.σs T
   let prf ← try
     elabTerm hyp expected
-  catch _ => throwError "sexact tactic failed, {hyp} is not have type {expected}"
+  catch _ => throwError "sexact tactic failed, {hyp} does not have type {expected}"
   return mkApp4 (mkConst ``Exact.from_tautology) goal.σs goal.hyps goal.target prf
 
 elab "sexact" colGt hyp:term : tactic => do

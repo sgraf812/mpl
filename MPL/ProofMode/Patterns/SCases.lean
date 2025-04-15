@@ -5,7 +5,7 @@ Authors: Lars König
 -/
 import Lean.Data.Name
 
-namespace MPL.ProofMode
+namespace MPL.ProofMode.Patterns
 open Lean
 
 declare_syntax_cat scasesPat

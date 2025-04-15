@@ -1,5 +1,5 @@
 import MPL.ProofMode.Tactics.Basic
-import MPL.ProofMode.SCasesPattern
+import MPL.ProofMode.Patterns.SCases
 
 open Lean Elab Tactic Meta
 

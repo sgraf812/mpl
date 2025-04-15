@@ -208,14 +208,28 @@ theorem and_pure (P Q R : Prop) : (⌜P⌝ ∧ ⌜Q⌝ ∧ ⌜R⌝) ⊢ₛ (⌜R
 
 end cases
 
+namespace refine
+
+theorem and (P Q R : SPred σs) : (P ∧ Q ∧ R) ⊢ₛ P ∧ R := by
+  sintro ⟨HP, HQ, HR⟩
+  srefine ⟨HP, HR⟩
+
+theorem exists_1 (ψ : Nat → SPred σs) : ψ 42 ⊢ₛ ∃ x, ψ x := by
+  sintro H
+  srefine ⟨⌜42⌝, H⟩
+
+theorem exists_2 (ψ : Nat → SPred σs) : ψ 42 ⊢ₛ ∃ x, ψ x := by
+  sintro H
+  sexists 42
+
+end refine
+
 theorem mosel1 {α : Type} (P : SPred σs) (Φ Ψ : α → SPred σs) :
   P ∧ (∃ a, Φ a ∨ Ψ a) ⊢ₛ ∃ a, (P ∧ Φ a) ∨ (P ∧ Ψ a) := by
   sintro ⟨HP, ⟨a, ⟨HΦ | HΨ⟩⟩⟩
-  · apply SPred.exists_intro' a
-    sorry
-  sorry
-
-/-
-TODO:
-- srefine
--/
+  · sexists a
+    sleft
+    srefine ⟨HP, HΦ⟩
+  · sexists a
+    sright
+    srefine ⟨HP, HΨ⟩
