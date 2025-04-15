@@ -75,6 +75,15 @@ theorem with_proof (H : A → B) (P Q : SPred σs) : P ⊢ₛ Q → ⌜A⌝ → 
 
 end pureintro
 
+theorem revert (P Q R : SPred σs) : P ∧ Q ∧ R ⊢ₛ P → R := by
+  sintro ⟨HP, HQ, HR⟩
+  srevert HQ
+  srevert HR
+  sintro HQ'
+  sintro HR'
+  sintro HP'
+  sassumption
+
 namespace constructor
 
 theorem and (Q : SPred σs) : Q ⊢ₛ Q ∧ Q := by
