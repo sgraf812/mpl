@@ -161,20 +161,17 @@ theorem and (P Q R : SPred σs) : (P ∧ Q ∧ R) ⊢ₛ R := by
   scases HPQR with ⟨HP, HQ, HR⟩
   sexact HR
 
-theorem and_intuitionistic [BI PROP] (Q : PROP) : □ P ∧ Q ⊢ Q := by
-  iintro HPQ
-  icases HPQ with ⟨_HP, HQ⟩
-  iexact HQ
+theorem and_clear_pure (P Q R : SPred σs) (φ : Prop) : (P ∧ Q ∧ ⌜φ⌝ ∧ R) ⊢ₛ R := by
+  sintro HPQR
+  scases HPQR with ⟨_, -, ⌜hφ⌝, HR⟩
+  sexact HR
 
-theorem and_persistent_left [BI PROP] (Q : PROP) : <pers> Q ∧ <affine> P ⊢ Q := by
-  iintro HQP
-  icases HQP with ⟨□HQ, _HP⟩
-  iexact HQ
-
-theorem and_persistent_right [BI PROP] (Q : PROP) : Q ∧ <pers> P ⊢ Q := by
-  iintro HQP
-  icases HQP with ⟨HQ, _HP⟩
-  iexact HQ
+theorem or (P Q R : SPred σs) : P ∧ (Q ∨ R) ∧ (Q → R) ⊢ₛ R := by
+  sintro H
+  scases H with ⟨-, ⟨HQ | HR⟩, HQR⟩
+  · sspecialize HQR HQ
+    sexact HQR
+  · sexact HR
 
 end cases
 

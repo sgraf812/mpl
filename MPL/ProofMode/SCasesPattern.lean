@@ -23,8 +23,8 @@ macro "#" pat:scasesPat : scasesPat => `(scasesPat| □ $pat)
 inductive SCasesPat
   | one (name : TSyntax ``binderIdent)
   | clear
-  | conjunction (args : List SCasesPat)
-  | disjunction (args : List SCasesPat)
+  | tuple (args : List SCasesPat)
+  | alts (args : List SCasesPat)
   | pure       (pat : SCasesPat)
   | persistent (pat : SCasesPat)
   deriving Repr, Inhabited
@@ -37,7 +37,7 @@ where
   go : TSyntax `scasesPat → Option SCasesPat
   | `(scasesPat| $name:binderIdent) => some <| .one name
   | `(scasesPat| -) => some <| .clear
-  | `(scasesPat| ⟨$[$args],*⟩) => args.mapM goAlts |>.map (.conjunction ·.toList)
+  | `(scasesPat| ⟨$[$args],*⟩) => args.mapM goAlts |>.map (.tuple ·.toList)
   | `(scasesPat| ⌜$pat⌝) => go pat |>.map .pure
   | `(scasesPat| □$pat) => go pat |>.map .persistent
   | `(scasesPat| ($pat)) => goAlts pat
@@ -46,5 +46,5 @@ where
   | `(scasesPatAlts| $args|*) =>
     match args.getElems with
     | #[arg] => go arg
-    | args   => args.mapM go |>.map (.disjunction ·.toList)
+    | args   => args.mapM go |>.map (.alts ·.toList)
   | _ => none

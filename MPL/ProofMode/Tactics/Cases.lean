@@ -41,7 +41,7 @@ def sCasesAddGoal (goals : IO.Ref (Array MVarId)) (σs : Expr) (T : Expr) (Q : E
   return ((), goal, prf)
 
 private def getQH (goal : SGoal) : MetaM (Expr × Expr) := do
-  let some (_, Q, H) := parseAnd? goal.hyps | throwError m!"Hypotheses not a conjunction: {goal.hyps}"
+  let some (_, Q, H) := parseAnd? goal.hyps | throwError m!"Internal error: Hypotheses not a conjunction {goal.hyps}"
   return (Q, H)
 
 -- goal is P ⊢ₛ T
@@ -86,9 +86,10 @@ partial def sCasesCore (σs : Expr) (H : Expr) (pat : SCasesPat) (k : Expr → M
       return (a, goal, prf)
     -- Now prf : Q ∧ H ⊢ₛ T (where H is ⌜φ⌝). Exactly what is needed.
     return (a, goal, prf)
-  | .conjunction [] => sCasesCore σs H .clear k
-  | .conjunction [p] => sCasesCore σs H p k
-  | .conjunction (p :: ps) => do
+  | .persistent arg => sCasesCore σs H arg k
+  | .tuple [] => sCasesCore σs H .clear k
+  | .tuple [p] => sCasesCore σs H p k
+  | .tuple (p :: ps) => do
     let some (σs, H₁, H₂) := parseAnd? H.consumeMData | throwError "Not a conjunction {H}"
     -- goal is Q ∧ (H₁ ∧ H₂) ⊢ₛ T. Plan:
     -- 1. Recurse on H₁ and H₂.
@@ -100,13 +101,11 @@ partial def sCasesCore (σs : Expr) (H : Expr) (pat : SCasesPat) (k : Expr → M
     -- 7. The top-level receives (Q ∧ H₂) ∧ H₁ ⊢ₛ T
     -- 8. Reassociate to Q ∧ (H₁ ∧ H₂) ⊢ₛ T and return it.
     let ((a, Q), goal, prf) ← sCasesCore σs H₁ p fun H₁' => do
-      let ((a, Q), goal, prf) ← sCasesCore σs H₂ (.conjunction ps) fun H₂' => do
+      let ((a, Q), goal, prf) ← sCasesCore σs H₂ (.tuple ps) fun H₂' => do
         let (H₁₂', hand) := mkAnd σs H₁' H₂'
         let (a, goal, prf) ← k H₁₂' -- (2)
-        -- (3) prf : P' ⊢ₛ T
-        -- res.proof : P' ⊣⊢ₛ Q ∧ H₁₂'
-        -- (4) refocus to
-        -- res.proof : P' ⊣⊢ₛ (Q ∧ H₁') ∧ H₂'
+        -- (3) prf : Q ∧ H₁₂' ⊢ₛ T
+        -- (4) refocus to (Q ∧ H₁') ∧ H₂'
         let (Q, _H) ← getQH goal
         let T := goal.target
         let prf := mkApp8 (mkConst ``SCases.and_1) σs Q H₁' H₂' H₁₂' T hand prf
@@ -125,7 +124,20 @@ partial def sCasesCore (σs : Expr) (H : Expr) (pat : SCasesPat) (k : Expr → M
     let prf := mkApp6 (mkConst ``SCases.and_3) σs Q H₁ H₂ goal.target prf
     let goal := { goal with hyps := mkAnd! σs Q H }
     return (a, goal, prf)
-  | _ => throwError "not implemented"
+  | .alts [] => throwUnsupportedSyntax
+  | .alts [p] => sCasesCore σs H p k
+  | .alts (p :: ps) => do
+    let some (σs, H₁, H₂) := H.consumeMData.app3? ``SPred.or | throwError "Not a disjunction {H}"
+    -- goal is Q ∧ (H₁ ∨ H₂) ⊢ₛ T. Plan:
+    -- 1. Recurse on H₁ and H₂ with the same k.
+    -- 2. Receive proofs for Q ∧ H₁ ⊢ₛ T and Q ∧ H₂ ⊢ₛ T.
+    -- 3. Build a proof for Q ∧ (H₁ ∨ H₂) ⊢ₛ T from them.
+    let (_a, goal₁,  prf₁) ← sCasesCore σs H₁ p k
+    let (a,  _goal₂, prf₂) ← sCasesCore σs H₂ (.alts ps) k
+    let (Q, _H₁) ← getQH goal₁
+    let goal := { goal₁ with hyps := mkAnd! σs Q (mkApp3 (mkConst ``SPred.or) σs H₁ H₂) }
+    let prf := mkApp7 (mkConst ``SPred.and_or_elim_r) σs Q H₁ H₂ goal.target prf₁ prf₂
+    return (a, goal, prf)
 
 private theorem assembled_proof {σs} {P P' Q H H' T : SPred σs}
   (hfocus : P ⊣⊢ₛ Q ∧ H) (hcases : H ⊢ₛ H') (hand : Q ∧ H' ⊣⊢ₛ P') (hprf₃ : P' ⊢ₛ T) : P ⊢ₛ T :=

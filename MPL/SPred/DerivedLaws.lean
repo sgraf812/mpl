@@ -31,6 +31,8 @@ theorem imp_elim_r : P ∧ (P → Q) ⊢ₛ Q := imp_elim' .rfl
 theorem false_elim : ⌜False⌝ ⊢ₛ P := pure_elim' False.elim
 theorem true_intro : P ⊢ₛ ⌜True⌝ := pure_intro trivial
 theorem exists_intro' {Ψ : α → SPred σs} (a : α) (h : P ⊢ₛ Ψ a) : P ⊢ₛ ∃ a, Ψ a := h.trans (exists_intro a)
+theorem and_or_elim_l (hleft : P ∧ R ⊢ₛ T) (hright : Q ∧ R ⊢ₛ T) : (P ∨ Q) ∧ R ⊢ₛ T := imp_elim (or_elim (imp_intro hleft) (imp_intro hright))
+theorem and_or_elim_r (hleft : P ∧ Q ⊢ₛ T) (hright : P ∧ R ⊢ₛ T) : P ∧ (Q ∨ R) ⊢ₛ T := imp_elim' (or_elim (imp_intro (and_symm.trans hleft)) (imp_intro (and_symm.trans hright)))
 
 /-! # Monotonicity and congruence -/
 
@@ -57,6 +59,10 @@ theorem forall_congr {Φ Ψ : α → SPred σs} (h : ∀ a, Φ a ⊣⊢ₛ Ψ a)
 theorem exists_mono {Φ Ψ : α → SPred σs} (h : ∀ a, Φ a ⊢ₛ Ψ a) : (∃ a, Φ a) ⊢ₛ ∃ a, Ψ a := exists_elim fun a => (h a).trans (exists_intro a)
 theorem exists_congr {Φ Ψ : α → SPred σs} (h : ∀ a, Φ a ⊣⊢ₛ Ψ a) : (∃ a, Φ a) ⊣⊢ₛ ∃ a, Ψ a := bientails.iff.mpr ⟨exists_mono fun a => (h a).mp, exists_mono fun a => (h a).mpr⟩
 
+theorem and_imp (hp : P₁ ⊢ₛ P₂) (hq : Q₁ ⊢ₛ Q₂) : (P₁ ∧ Q₁) ⊢ₛ (P₂ ∧ Q₂) := and_intro (and_elim_l' hp) (and_elim_r' hq)
+theorem or_imp_left (hleft : P₁ ⊢ₛ P₂) : (P₁ ∨ Q) ⊢ₛ (P₂ ∨ Q) := or_elim (or_intro_l' hleft) or_intro_r
+theorem or_imp_right (hright : Q₁ ⊢ₛ Q₂) : (P ∨ Q₁) ⊢ₛ (P ∨ Q₂) := or_elim or_intro_l (or_intro_r' hright)
+
 /-! # Boolean algebra -/
 
 theorem and_self : P ∧ P ⊣⊢ₛ P := bientails.iff.mpr ⟨and_elim_l, and_intro .rfl .rfl⟩
@@ -65,6 +71,15 @@ theorem and_comm : P ∧ Q ⊣⊢ₛ Q ∧ P := bientails.iff.mpr ⟨and_symm, a
 theorem or_comm : P ∨ Q ⊣⊢ₛ Q ∨ P := bientails.iff.mpr ⟨or_symm, or_symm⟩
 theorem and_assoc : (P ∧ Q) ∧ R ⊣⊢ₛ P ∧ Q ∧ R := bientails.iff.mpr ⟨and_intro (and_elim_l' and_elim_l) (and_mono_l and_elim_r), and_intro (and_mono_r and_elim_l) (and_elim_r' and_elim_r)⟩
 theorem or_assoc : (P ∨ Q) ∨ R ⊣⊢ₛ P ∨ Q ∨ R := bientails.iff.mpr ⟨or_elim (or_mono_r or_intro_l) (or_intro_r' or_intro_r), or_elim (or_intro_l' or_intro_l) (or_mono_l or_intro_r)⟩
+
+theorem and_or_left : P ∧ (Q ∨ R) ⊣⊢ₛ (P ∧ Q) ∨ (P ∧ R) :=
+  bientails.iff.mpr ⟨and_or_elim_r or_intro_l or_intro_r,
+                     or_elim (and_intro and_elim_l (or_intro_l' and_elim_r)) (and_intro and_elim_l (or_intro_r' and_elim_r))⟩
+theorem or_and_left : P ∨ (Q ∧ R) ⊣⊢ₛ (P ∨ Q) ∧ (P ∨ R) :=
+  bientails.iff.mpr ⟨or_elim (and_intro or_intro_l or_intro_l) (and_imp or_intro_r or_intro_r),
+                     and_or_elim_l (or_intro_l' and_elim_l) (and_or_elim_r (or_intro_l' and_elim_r) or_intro_r)⟩
+theorem or_and_right : (P ∨ Q) ∧ R ⊣⊢ₛ (P ∧ R) ∨ (Q ∧ R) := and_comm.trans (and_or_left.trans (or_congr and_comm and_comm))
+theorem and_or_right : (P ∧ Q) ∨ R ⊣⊢ₛ (P ∨ R) ∧ (Q ∨ R) := or_comm.trans (or_and_left.trans (and_congr or_comm or_comm))
 
 theorem true_and : ⌜True⌝ ∧ P ⊣⊢ₛ P := bientails.iff.mpr ⟨and_elim_r, and_intro (pure_intro trivial) .rfl⟩
 theorem and_true : P ∧ ⌜True⌝ ⊣⊢ₛ P := and_comm.trans true_and
