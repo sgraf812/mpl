@@ -173,12 +173,29 @@ theorem or (P Q R : SPred σs) : P ∧ (Q ∨ R) ∧ (Q → R) ⊢ₛ R := by
     sexact HQR
   · sexact HR
 
+theorem and_persistent (P Q R : SPred σs) : (P ∧ Q ∧ R) ⊢ₛ R := by
+  sintro HPQR
+  scases HPQR with ⟨#HP, HQ, □HR⟩
+  sexact HR
+
+theorem and_pure (P Q R : Prop) : (⌜P⌝ ∧ ⌜Q⌝ ∧ ⌜R⌝) ⊢ₛ (⌜R⌝ : SPred σs) := by
+  sintro HPQR
+  scases HPQR with ⟨%HP, ⌜HQ⌝, HR⟩
+  spure_intro
+  exact HR
+
 end cases
+
+theorem mosel1 {α : Type} (P : SPred σs) (Φ Ψ : α → SPred σs) :
+  P ∧ (∃ a, Φ a ∨ Ψ a) ⊢ₛ ∃ a, (P ∧ Φ a) ∨ (P ∧ Ψ a) := by
+  sintro ⟨HP, ⟨a, ⟨HΦ | HΨ⟩⟩⟩
+  · apply SPred.exists_intro' a
+    sorry
+  sorry
 
 /-
 TODO:
-- rcases
-- intro
 - exfalso?
+- srefine
 - sexact with pure hypothesis (SPred.true_intro.trans h)
 -/

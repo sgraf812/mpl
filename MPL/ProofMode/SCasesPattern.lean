@@ -14,19 +14,19 @@ syntax binderIdent : scasesPat
 syntax "-" : scasesPat
 syntax "⟨" scasesPatAlts,* "⟩" : scasesPat
 syntax "(" scasesPatAlts ")" : scasesPat
-syntax "⌜" scasesPat "⌝" : scasesPat
-syntax "□" scasesPat : scasesPat
+syntax "⌜" binderIdent "⌝" : scasesPat
+syntax "□" binderIdent : scasesPat
 
-macro "%" pat:scasesPat : scasesPat => `(scasesPat| ⌜$pat⌝)
-macro "#" pat:scasesPat : scasesPat => `(scasesPat| □ $pat)
+macro "%" h:binderIdent : scasesPat => `(scasesPat| ⌜$h⌝)
+macro "#" h:binderIdent : scasesPat => `(scasesPat| □ $h)
 
 inductive SCasesPat
   | one (name : TSyntax ``binderIdent)
   | clear
   | tuple (args : List SCasesPat)
   | alts (args : List SCasesPat)
-  | pure       (pat : SCasesPat)
-  | persistent (pat : SCasesPat)
+  | pure       (h : TSyntax ``binderIdent)
+  | persistent (h : TSyntax ``binderIdent)
   deriving Repr, Inhabited
 
 partial def SCasesPat.parse (pat : TSyntax `scasesPat) : MacroM SCasesPat := do
@@ -38,8 +38,8 @@ where
   | `(scasesPat| $name:binderIdent) => some <| .one name
   | `(scasesPat| -) => some <| .clear
   | `(scasesPat| ⟨$[$args],*⟩) => args.mapM goAlts |>.map (.tuple ·.toList)
-  | `(scasesPat| ⌜$pat⌝) => go pat |>.map .pure
-  | `(scasesPat| □$pat) => go pat |>.map .persistent
+  | `(scasesPat| ⌜$h⌝) => some (.pure h)
+  | `(scasesPat| □$h) => some (.persistent h)
   | `(scasesPat| ($pat)) => goAlts pat
   | _ => none
   goAlts : TSyntax ``scasesPatAlts → Option SCasesPat
