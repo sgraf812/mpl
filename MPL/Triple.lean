@@ -1,4 +1,5 @@
 import MPL.WPMonad
+import MPL.SPred.Notation
 
 namespace MPL
 
@@ -8,24 +9,32 @@ variable {m : Type → Type u} {ps : PredShape} [WP m ps]
 def triple (x : m α) (P : PreCond ps) (Q : PostCond α ps) : Prop :=
   P ⊢ₛ wp⟦x⟧.apply Q
 
-syntax:lead "⦃" term "⦄ " term:lead " ⦃" term "⦄" : term
-open Lean Elab Meta Term
-elab_rules : term
-  | `(⦃$P⦄ $x:term ⦃$Q⦄) => do
-    -- In a simple world, this would just be a macro expanding to
-    -- `triple $x spred($P) spred($Q)`.
-    -- However, it appears that type inference for the
-    -- postcondition Q is better when implemented manually.
-    let x ← elabTerm x none
-    let ty ← inferType x
-    tryPostponeIfMVar ty
-    let .app m α := ty | throwError "Not a type application {ty}"
-    let some u ← Level.dec <$> getLevel ty | throwError "Wrong level 0 {ty}"
-    let ps ← mkFreshExprMVar (mkConst ``PredShape)
-    let inst ← synthInstance (mkApp2 (mkConst ``WP [u]) m ps)
-    let P ← elabTerm (← `(spred($P))) (mkApp (mkConst ``PreCond) ps)
-    let Q ← elabTerm (← `(spred($Q))) (mkApp2 (mkConst ``PostCond) α ps)
-    return mkApp7 (mkConst ``triple [u]) m ps inst α x P Q
+notation:lead "⦃" P "⦄ " x:lead " ⦃" Q "⦄" => triple x spred(P) spred(Q)
+-- For some strange reason, we need the following definition if we do not depend on Mathlib:
+-- syntax:lead "⦃" term "⦄ " term:lead " ⦃" term "⦄" : term
+-- open Lean Elab Meta Term in
+-- elab_rules : term
+--   | `(⦃$P⦄ $x:term ⦃$Q⦄) => do
+--     -- In a simple world, this would just be a macro expanding to
+--     -- `triple $x spred($P) spred($Q)`.
+--     -- However, it appears that type inference for the
+--     -- postcondition Q is better when implemented manually.
+--     let x ← elabTerm x none
+--     let ty ← inferType x
+--     tryPostponeIfMVar ty
+--     let .app m α := ty | throwError "Not a type application {ty}"
+--     let some u ← Level.dec <$> getLevel ty | throwError "Wrong level 0 {ty}"
+--     let ps ← mkFreshExprMVar (mkConst ``PredShape)
+--     let inst ← synthInstance (mkApp2 (mkConst ``WP [u]) m ps)
+--     let P ← elabTerm (← `(spred($P))) (mkApp (mkConst ``PreCond) ps)
+--     let Q ← elabTerm (← `(spred($Q))) (mkApp2 (mkConst ``PostCond) α ps)
+--     return mkApp7 (mkConst ``triple [u]) m ps inst α x P Q
+app_unexpand_rule triple
+  | `($_ $x $P $Q) => match Q with
+    | `(⇓ $xs* => $e) => do
+      `(⦃$(← SPred.Notation.unpack P)⦄ $x ⦃⇓ $xs* => $(← SPred.Notation.unpack e)⦄)
+    | _ => do
+      `(⦃$(← SPred.Notation.unpack P)⦄ $x ⦃$(← SPred.Notation.unpack Q)⦄)
 
 theorem triple_conseq {α} (x : m α) {P P' : PreCond ps} {Q Q' : PostCond α ps}
   (hp : P.entails P' := by simp) (hq : Q'.entails Q := by simp) (h : triple x P' Q') :

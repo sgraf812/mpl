@@ -394,8 +394,7 @@ partial def elab_newdecl : CommandElab := fun decl => do
 
 namespace Test
 
-@[reducible]
-def fib_spec : Nat → Nat
+abbrev fib_spec : Nat → Nat
 | 0 => 0
 | 1 => 1
 | n+2 => fib_spec n + fib_spec (n+1)
@@ -406,13 +405,14 @@ def fib_impl (n : Nat) : Idd Nat
   if n = 0 then return 0
   let mut a := 0
   let mut b := 1
-  assert => a = 0 ∧ b = 1
   invariant xs => a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)
   for _ in [1:n] do
     let a' := a
     a := b
     b := a' + b
   return b
+
+#check fib_impl.spec
 
 theorem fib_triple : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => ⌜r = fib_spec n⌝⦄ := by
   unfold fib_impl
@@ -430,7 +430,7 @@ theorem fib_triple : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => ⌜r = fib_spec n�
 theorem fib_correct {n} : (fib_impl n).run = fib_spec n := by
   generalize h : (fib_impl n).run = x
   apply Idd.by_wp h
-  apply fib_triple True.intro
+  apply fib_impl.spec n True.intro
 
 def fib_impl_strange (n : Nat) : Idd Nat
   ensures r => r = fib_spec n

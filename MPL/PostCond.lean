@@ -1,4 +1,5 @@
 import MPL.PreCond
+import MPL.Utils.UnexpandRule
 
 namespace MPL
 
@@ -73,10 +74,12 @@ abbrev PostCond.partial (p : α → PreCond ps) : PostCond α ps :=
   (p, FailConds.true)
 
 open Lean Parser Term in
-def funArrow : Parser := unicodeSymbol " ↦" " =>"
+def funArrow : Parser := unicodeSymbol " ↦ " " => "
 @[inherit_doc PostCond.total]
 macro "⇓" xs:Lean.Parser.Term.funBinder+ funArrow e:term : term =>
   `(PostCond.total (fun $xs* => spred($e)))
+app_unexpand_rule PostCond.total
+  | `($_ fun $xs* => $e) => do `(⇓ $xs* => $(← SPred.Notation.unpack e))
 
 instance : Inhabited (PostCond α ps) where
   default := ⇓_ => default
