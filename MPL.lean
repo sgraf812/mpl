@@ -8,3 +8,4 @@ import MPL.Specs
 import MPL.Tactic
 import MPL.IO
 import MPL.Idd
+import MPL.ProofMode

@@ -1,5 +1,6 @@
 import MPL.WPMonad
 import MPL.SPred.Notation
+import MPL.ProofMode.MGoal
 
 namespace MPL
 
@@ -35,6 +36,9 @@ app_unexpand_rule triple
       `(⦃$(← SPred.Notation.unpack P)⦄ $x ⦃⇓ $xs* => $(← SPred.Notation.unpack e)⦄)
     | _ => do
       `(⦃$(← SPred.Notation.unpack P)⦄ $x ⦃$(← SPred.Notation.unpack Q)⦄)
+
+instance [WP m ps] (x : m α) : ProofMode.PropAsEntails (triple x P Q) spred(P → wp⟦x⟧.apply Q) where
+  prop_as_entails := (SPred.entails_true_intro P (wp⟦x⟧.apply Q)).symm
 
 theorem triple_conseq {α} (x : m α) {P P' : PreCond ps} {Q Q' : PostCond α ps}
   (hp : P.entails P' := by simp) (hq : Q'.entails Q := by simp) (h : triple x P' Q') :

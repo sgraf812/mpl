@@ -25,7 +25,7 @@ def FailConds.entails {ps : PredShape} (x y : FailConds ps) : Prop :=
   | .arg _ ps => @entails ps x y
   | .except _ ps => (∀ e, x.1 e ⊢ₛ y.1 e) ∧ @entails ps x.2 y.2
 
-infixr:25 "⊢ₑ" => FailConds.entails
+infixr:25 " ⊢ₑ " => FailConds.entails
 
 @[simp, refl]
 theorem FailConds.entails_refl {ps : PredShape} (x : FailConds ps) : x ⊢ₑ x := by
@@ -88,7 +88,7 @@ instance : Inhabited (PostCond α ps) where
 abbrev PostCond.entails (p q : PostCond α ps) : Prop :=
   (∀ a, SPred.entails (p.1 a) (q.1 a)) ∧ FailConds.entails p.2 q.2
 
-infixr:25 "⊢ₚ" => PostCond.entails
+infixr:25 " ⊢ₚ " => PostCond.entails
 
 @[refl,simp]
 abbrev PostCond.entails_refl (Q : PostCond α ps) : Q ⊢ₚ Q := by

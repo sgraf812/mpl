@@ -382,6 +382,10 @@ section WeNeedAProofMode
 
 abbrev M := StateT Nat (StateT Char (StateT Bool (StateT String Idd)))
 
+private abbrev theNat : SVal [Nat, Bool] Nat := fun n b => n
+private def test (P Q : PreCond (.arg Nat (.arg Bool .pure))) : PreCond (.arg Char (.arg Nat (.arg Bool .pure))) :=
+  spred(fun n => ((∀ y, if y = n then ⌜‹Nat›ₛ + #theNat = 4⌝ else Q) ∧ Q) → P → (∃ x, P → if (x : Bool) then Q else P))
+
 def op : Nat → M Nat := sorry
 
 def prog (n : Nat) : M Nat := do
@@ -409,22 +413,18 @@ theorem prog.spec : ⦃isValid⦄  prog n ⦃⇓r => ⌜r > 100⌝ ∧ isValid�
     and_true, gt_iff_lt]
   omega
 
-private abbrev theNat : SVal [Nat, Bool] Nat := fun n b => n
-private def test (P Q : PreCond (.arg Nat (.arg Bool .pure))) : PreCond (.arg Char (.arg Nat (.arg Bool .pure))) :=
-  spred(fun n => ((∀ y, if y = n then ⌜‹Nat›ₛ + #theNat = 4⌝ else Q) ∧ Q) → P → (∃ x, P → if (x : Bool) then Q else P))
-
-/-
 theorem prog.spec' : ⦃isValid⦄ prog n ⦃⇓r => ⌜r > 100⌝ ∧ isValid⦄ := by
   unfold prog
-  xintro □h
-  xapp op.spec
-  xintro →r₁ ⟨⌜hr₁⌝, □h⟩
-  xapp op.spec
-  xintro →r₂ ⟨⌜hr₂⌝, □h⟩
-  xapp op.spec
-  xintro →r₃ ⟨⌜hr₃⌝, □h⟩
-  xpure
-  simp_all only [SPred.idiom_apply, SPred.idiom, SPred.and, and_true, gt_iff_lt]
+  mintro □h
+  mspec op.spec
+  mintro ⟨⌜hr₁⌝, □h⟩
+  mspec op.spec
+  mintro ⟨⌜hr₂⌝, □h⟩
+  mspec op.spec
+  mintro ⟨⌜hr₃⌝, □h⟩
+  mspec
+  mrefine ⟨?_, h⟩
+  mpure_intro
   omega
--/
+
 end WeNeedAProofMode
