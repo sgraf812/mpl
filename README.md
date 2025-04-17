@@ -1,6 +1,6 @@
 # `mpl`
 
-A lean library implementing a Monadic Program Logic.
+A Lean library implementing a Monadic Program Logic.
 That is, a Floyd-Hoare-style program logic for functional correctness proofs of programs written using Lean's `do` notation.
 It supports both automated and interactive proofs, intrinsic or extrinsic to the program syntax.
 Here is an example for an automated, intrinsic proof relating an imperative implementation `fib_impl` of the Fibonacci function to its recursive specification `fib_spec`, declaring postconditions and invariants using extended `def` syntax:
@@ -42,8 +42,8 @@ theorem fib_correct {n} : (fib_impl n).run = fib_spec n := by
 
 The proof can also be conducted extrinsically and interactively (TODO: Revisit example once the proof mode has been properly integrated and tactics have been renamed):
 
-```
-theorem fib_triple : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => ⌜r = fib_spec n⌝⦄ := by
+```lean
+theorem fib_triple : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ := by
   unfold fib_impl
   intro h
   xwp
