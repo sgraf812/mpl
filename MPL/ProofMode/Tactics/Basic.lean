@@ -1,15 +1,15 @@
 import Lean
-import MPL.ProofMode.SGoal
+import MPL.ProofMode.MGoal
 
 open Lean Elab.Tactic Meta
 
 namespace MPL.ProofMode.Tactics
 
-def mStart (mvar : MVarId) : MetaM (MVarId × SGoal) := mvar.withContext do
+def mStart (mvar : MVarId) : MetaM (MVarId × MGoal) := mvar.withContext do
   -- check if already in proof mode
   let goal ← instantiateMVars <| ← mvar.getType
-  if let some sGoal := parseSGoal? goal then
-    return (mvar, sGoal)
+  if let some mGoal := parseMGoal? goal then
+    return (mvar, mGoal)
 
   let prop := mkSort .zero
   unless ← isProp goal do
@@ -21,7 +21,7 @@ def mStart (mvar : MVarId) : MetaM (MVarId × SGoal) := mvar.withContext do
   let inst ← synthInstance (mkApp3 (mkConst ``PropAsEntails) goal σs P)
   let prf := mkApp4 (mkConst ``ProofMode.start_entails) σs P goal inst
 
-  let goal : SGoal := { σs,  hyps := emptyHyp σs, target := P }
+  let goal : MGoal := { σs,  hyps := emptyHyp σs, target := P }
   let subgoal /- : Quoted q(⊢ₛ $P)-/ ←
     mkFreshExprSyntheticOpaqueMVar goal.toExpr (← mvar.getTag)
   mvar.assign (mkApp prf subgoal)
@@ -39,5 +39,5 @@ elab "mstop" : tactic => do
   let goal ← instantiateMVars <| ← mvar.getType
 
   -- check if already in proof mode
-  let some sGoal := parseSGoal? goal | throwError "not in proof mode"
-  mvar.setType sGoal.strip
+  let some mGoal := parseMGoal? goal | throwError "not in proof mode"
+  mvar.setType mGoal.strip

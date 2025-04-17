@@ -4,14 +4,14 @@ import MPL.ProofMode.Tactics.Specialize
 namespace MPL.ProofMode.Tactics
 open Lean Elab Tactic Meta
 
-macro "sreplace" h₁:binderIdent " := " h₂:ident args:(colGt term:max)* : tactic =>
-  `(tactic| (sspecialize $h₂ $args*; scases $h₂ with $h₁:binderIdent))
+macro "mreplace" h₁:binderIdent " := " h₂:ident args:(colGt term:max)* : tactic =>
+  `(tactic| (mspecialize $h₂ $args*; mcases $h₂ with $h₁:binderIdent))
 
 def SDup.sdup {σs : List Type} {P Q H T : SPred σs} (hfoc : P ⊣⊢ₛ Q ∧ H) (hgoal : P ∧ H ⊢ₛ T) : P ⊢ₛ T :=
    (SPred.and_intro .rfl (hfoc.mp.trans SPred.and_elim_r)).trans hgoal
 
-elab "sdup" h:ident " => " h₂:ident : tactic => do
-  let (mvar, goal) ← sstart (← getMainGoal)
+elab "mdup" h:ident " => " h₂:ident : tactic => do
+  let (mvar, goal) ← mStart (← getMainGoal)
   mvar.withContext do
   let some res := goal.focusHyp h.raw.getId | throwError m!"Hypothesis {h} not found"
   let P := goal.hyps
@@ -24,5 +24,5 @@ elab "sdup" h:ident " => " h₂:ident : tactic => do
   mvar.assign (mkApp7 (mkConst ``SDup.sdup) goal.σs P Q H T res.proof m)
   replaceMainGoal [m.mvarId!]
 
-macro "shave" h₁:ident " := " h₂:ident args:(colGt term:max)* : tactic =>
-  `(tactic| (sdup $h₂ => $h₁; sspecialize $h₁ $args*))
+macro "mhave" h₁:ident " := " h₂:ident args:(colGt term:max)* : tactic =>
+  `(tactic| (mdup $h₂ => $h₁; mspecialize $h₁ $args*))

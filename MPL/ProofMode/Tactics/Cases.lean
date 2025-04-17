@@ -1,5 +1,5 @@
 import MPL.ProofMode.Focus
-import MPL.ProofMode.Patterns.SCases
+import MPL.ProofMode.Patterns.MCases
 import MPL.ProofMode.Tactics.Basic
 import MPL.ProofMode.Tactics.Pure
 import MPL.ProofMode.Tactics.Intro
@@ -7,6 +7,8 @@ import MPL.ProofMode.Tactics.Intro
 namespace MPL.ProofMode.Tactics
 open MPL.ProofMode.Patterns
 open Lean Elab Tactic Meta
+
+initialize registerTraceClass `mpl.tactics.cases
 
 theorem SCases.add_goal {σs} {P Q H T : SPred σs} (hand : Q ∧ H ⊣⊢ₛ P) (hgoal : P ⊢ₛ T) : Q ∧ H ⊢ₛ T :=
   hand.mp.trans hgoal
@@ -31,18 +33,18 @@ example (h : a ∧ b) : b := by
   exact hb
 
 -- Produce a proof for Q ∧ H ⊢ₛ T by opening a new goal P ⊢ₛ T, where P ⊣⊢ₛ Q ∧ H.
-def sCasesAddGoal (goals : IO.Ref (Array MVarId)) (σs : Expr) (T : Expr) (Q : Expr) (H : Expr) : MetaM (Unit × SGoal × Expr) := do
+def mCasesAddGoal (goals : IO.Ref (Array MVarId)) (σs : Expr) (T : Expr) (Q : Expr) (H : Expr) : MetaM (Unit × MGoal × Expr) := do
   let (P, hand) := mkAnd σs Q H
   -- hand : Q ∧ H ⊣⊢ₛ P
   -- Need to produce a proof that P ⊢ₛ T and return res
-  let goal : SGoal := { σs := σs, hyps := P, target := T }
+  let goal : MGoal := { σs := σs, hyps := P, target := T }
   let m ← mkFreshExprSyntheticOpaqueMVar goal.toExpr
   goals.modify (·.push m.mvarId!)
   let prf := mkApp7 (mkConst ``SCases.add_goal) σs P Q H T hand m
   let goal := { goal with hyps := mkAnd! σs Q H }
   return ((), goal, prf)
 
-private def getQH (goal : SGoal) : MetaM (Expr × Expr) := do
+private def getQH (goal : MGoal) : MetaM (Expr × Expr) := do
   let some (_, Q, H) := parseAnd? goal.hyps | throwError m!"Internal error: Hypotheses not a conjunction {goal.hyps}"
   return (Q, H)
 
@@ -55,8 +57,8 @@ theorem sexists_thm {σs : List Type} {Q : SPred σs} {ψ : α → SPred σs} {T
 -- It will provide a proof for Q ∧ H ⊢ₛ T
 -- if `k` produces a proof for Q ∧ ψ n ⊢ₛ T that may range over `name : α`.
 -- It calls `k` with name.
-def sCasesExists (H : Expr) (name : TSyntax ``binderIdent)
-  (k : Expr /-name:α-/ → MetaM (α × SGoal × Expr)) : MetaM (α × SGoal × Expr) := do
+def mCasesExists (H : Expr) (name : TSyntax ``binderIdent)
+  (k : Expr /-name:α-/ → MetaM (α × MGoal × Expr)) : MetaM (α × MGoal × Expr) := do
   let some (α, σs, ψ) := H.consumeMData.app3? ``SPred.exists | throwError "Not an existential quantifier {H}"
   let (name, ref) ← getFreshHypName name
   withLocalDeclD name α fun x => do
@@ -78,7 +80,7 @@ def sCasesExists (H : Expr) (name : TSyntax ``binderIdent)
 -- and finally the caller builds the proof for
 --   P ⊢ₛ Q ∧ H ⊢ₛ T
 -- by unfocussing.
-partial def sCasesCore (σs : Expr) (H : Expr) (pat : SCasesPat) (k : Expr → MetaM (α × SGoal × Expr)): MetaM (α × SGoal × Expr) :=
+partial def mCasesCore (σs : Expr) (H : Expr) (pat : MCasesPat) (k : Expr → MetaM (α × MGoal × Expr)): MetaM (α × MGoal × Expr) :=
   match pat with
   | .clear => do
     let H' := emptyHyp σs -- H' = ⌜True⌝
@@ -94,7 +96,7 @@ partial def sCasesCore (σs : Expr) (H : Expr) (pat : SCasesPat) (k : Expr → M
     let H' := (Hyp.mk name H.consumeMData).toExpr
     k H'
   | .pure name => do
-    sPureCore σs H name fun _ _hφ => do
+    mPureCore σs H name fun _ _hφ => do
       -- This case is very similar to the clear case, but we need to
       -- return Q ⊢ₛ T, not Q ∧ H ⊢ₛ T.
       let H' := emptyHyp σs -- H' = ⌜True⌝
@@ -111,12 +113,12 @@ partial def sCasesCore (σs : Expr) (H : Expr) (pat : SCasesPat) (k : Expr → M
       -- First try to see if H can be introduced as a pure hypothesis
       let φ ← mkFreshExprMVar (mkSort .zero)
       let _ ← synthInstance (mkApp3 (mkConst ``IsPure) σs H φ)
-      sCasesCore σs H (.pure name) k
+      mCasesCore σs H (.pure name) k
     catch _ =>
       -- Otherwise introduce it as a stateful hypothesis.
-      sCasesCore σs H (.stateful name) k
-  | .tuple [] => sCasesCore σs H .clear k
-  | .tuple [p] => sCasesCore σs H p k
+      mCasesCore σs H (.stateful name) k
+  | .tuple [] => mCasesCore σs H .clear k
+  | .tuple [p] => mCasesCore σs H p k
   | .tuple (p :: ps) => do
     if let some (σs, H₁, H₂) := parseAnd? H.consumeMData then
       -- goal is Q ∧ (H₁ ∧ H₂) ⊢ₛ T. Plan:
@@ -128,8 +130,8 @@ partial def sCasesCore (σs : Expr) (H : Expr) (pat : SCasesPat) (k : Expr → M
       -- 6. The outer callback reassociates and returns (Q ∧ H₂) ∧ H₁' ⊢ₛ T
       -- 7. The top-level receives (Q ∧ H₂) ∧ H₁ ⊢ₛ T
       -- 8. Reassociate to Q ∧ (H₁ ∧ H₂) ⊢ₛ T and return it.
-      let ((a, Q), goal, prf) ← sCasesCore σs H₁ p fun H₁' => do
-        let ((a, Q), goal, prf) ← sCasesCore σs H₂ (.tuple ps) fun H₂' => do
+      let ((a, Q), goal, prf) ← mCasesCore σs H₁ p fun H₁' => do
+        let ((a, Q), goal, prf) ← mCasesCore σs H₂ (.tuple ps) fun H₂' => do
           let (H₁₂', hand) := mkAnd σs H₁' H₂'
           let (a, goal, prf) ← k H₁₂' -- (2)
           -- (3) prf : Q ∧ H₁₂' ⊢ₛ T
@@ -159,18 +161,18 @@ partial def sCasesCore (σs : Expr) (H : Expr) (pat : SCasesPat) (k : Expr → M
       -- 1. Recurse on ψ n where (n : α) is named according to the head pattern p.
       -- 2. Receive a proof for Q ∧ ψ n ⊢ₛ T.
       -- 3. Build a proof for Q ∧ (∃ x, ψ x) ⊢ₛ T from it (in sCasesExists).
-      sCasesExists H n fun x => sCasesCore σs (ψ.betaRev #[x]) (.alts ps) k
+      mCasesExists H n fun x => mCasesCore σs (ψ.betaRev #[x]) (.alts ps) k
     else throwError "Neither a conjunction nor an existential quantifier {H}"
   | .alts [] => throwUnsupportedSyntax
-  | .alts [p] => sCasesCore σs H p k
+  | .alts [p] => mCasesCore σs H p k
   | .alts (p :: ps) => do
     let some (σs, H₁, H₂) := H.consumeMData.app3? ``SPred.or | throwError "Not a disjunction {H}"
     -- goal is Q ∧ (H₁ ∨ H₂) ⊢ₛ T. Plan:
     -- 1. Recurse on H₁ and H₂ with the same k.
     -- 2. Receive proofs for Q ∧ H₁ ⊢ₛ T and Q ∧ H₂ ⊢ₛ T.
     -- 3. Build a proof for Q ∧ (H₁ ∨ H₂) ⊢ₛ T from them.
-    let (_a, goal₁,  prf₁) ← sCasesCore σs H₁ p k
-    let (a,  _goal₂, prf₂) ← sCasesCore σs H₂ (.alts ps) k
+    let (_a, goal₁,  prf₁) ← mCasesCore σs H₁ p k
+    let (a,  _goal₂, prf₂) ← mCasesCore σs H₂ (.alts ps) k
     let (Q, _H₁) ← getQH goal₁
     let goal := { goal₁ with hyps := mkAnd! σs Q (mkApp3 (mkConst ``SPred.or) σs H₁ H₂) }
     let prf := mkApp7 (mkConst ``SPred.and_or_elim_r) σs Q H₁ H₂ goal.target prf₁ prf₂
@@ -189,9 +191,9 @@ private theorem blah3 {σs} {P Q H T : SPred σs}
   hand.mp.trans hgoal
 
 elab_rules : tactic
-  | `(tactic| scases $hyp:ident with $pat:scasesPat) => do
-  let pat ← liftMacroM <| SCasesPat.parse pat
-  let (mvar, goal) ← sstart (← getMainGoal)
+  | `(tactic| mcases $hyp:ident with $pat:mcasesPat) => do
+  let pat ← liftMacroM <| MCasesPat.parse pat
+  let (mvar, goal) ← mStart (← getMainGoal)
   mvar.withContext do
 
   let some focus := goal.focusHyp hyp.getId | throwError "unknown hypothesis '{hyp}'"
@@ -200,7 +202,7 @@ elab_rules : tactic
   let Q := focus.restHyps
   let H := focus.focusHyp
   let goals ← IO.mkRef #[]
-  let (_, _new_goal, prf) ← sCasesCore goal.σs H pat (sCasesAddGoal goals goal.σs goal.target Q)
+  let (_, _new_goal, prf) ← mCasesCore goal.σs H pat (mCasesAddGoal goals goal.σs goal.target Q)
 
   -- Now prf : Q ∧ H ⊢ₛ T. Prepend hfocus.mp, done.
   let prf := focus.rewriteHyps goal prf

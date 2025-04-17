@@ -10,7 +10,7 @@ theorem Assumption.assumption_l {σs : List Type} {P Q R : SPred σs} (h : P ⊢
 theorem Assumption.assumption_r {σs : List Type} {P Q R : SPred σs} (h : Q ⊢ₛ R) : P ∧ Q ⊢ₛ R :=
   SPred.and_elim_r.trans h
 
-partial def _root_.MPL.ProofMode.SGoal.assumption (goal : SGoal) : OptionT MetaM Expr := do
+partial def _root_.MPL.ProofMode.MGoal.assumption (goal : MGoal) : OptionT MetaM Expr := do
   if let some _ := parseEmptyHyp? goal.hyps then
     failure
   if let some hyp := parseHyp? goal.hyps then
@@ -23,15 +23,15 @@ partial def _root_.MPL.ProofMode.SGoal.assumption (goal : SGoal) : OptionT MetaM
   else
     panic! s!"assumption: hypothesis without proper metadata: {goal.hyps}"
 
-def _root_.MPL.ProofMode.SGoal.assumptionPure (goal : SGoal) : OptionT MetaM Expr := do
+def _root_.MPL.ProofMode.MGoal.assumptionPure (goal : MGoal) : OptionT MetaM Expr := do
   let fvarId ← OptionT.mk (findLocalDeclWithType? (mkApp2 (mkConst ``SPred.tautological) goal.σs goal.target))
   return mkApp4 (mkConst ``Exact.from_tautology) goal.σs goal.hyps goal.target (.fvar fvarId)
 
-elab "sassumption" : tactic => do
+elab "massumption" : tactic => do
   let mvar ← getMainGoal
   mvar.withContext do
   let g ← instantiateMVars <| ← mvar.getType
-  let some goal := parseSGoal? g | throwError "not in proof mode"
+  let some goal := parseMGoal? g | throwError "not in proof mode"
 
   let some proof ← liftMetaM <|
     goal.assumption <|> goal.assumptionPure

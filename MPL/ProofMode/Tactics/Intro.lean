@@ -1,5 +1,5 @@
 import MPL.ProofMode.Tactics.Basic
-import MPL.ProofMode.Patterns.SCases
+import MPL.ProofMode.Patterns.MCases
 
 open Lean Elab Tactic Meta
 
@@ -8,7 +8,7 @@ namespace MPL.ProofMode.Tactics
 theorem Intro.intro {σs : List Type} {P Q H T : SPred σs} (hand : Q ∧ H ⊣⊢ₛ P) (h : P ⊢ₛ T) : Q ⊢ₛ H → T :=
   SPred.imp_intro (hand.mp.trans h)
 
-partial def sIntroStep (goal : SGoal) (ident : TSyntax ``binderIdent) (k : SGoal → MetaM Expr) : MetaM Expr := do
+partial def mIntroStep (goal : MGoal) (ident : TSyntax ``binderIdent) (k : MGoal → MetaM Expr) : MetaM Expr := do
   let mkApp3 (.const ``SPred.imp []) σs H T := goal.target | throwError "Target not an implication {goal.target}"
   let (name, _ref) ← getFreshHypName ident
   let Q := goal.hyps
@@ -18,31 +18,31 @@ partial def sIntroStep (goal : SGoal) (ident : TSyntax ``binderIdent) (k : SGoal
   let prf := mkApp7 (mkConst ``Intro.intro) σs P Q H T hand prf
   return prf
 
-syntax (name := sintro) "sintro" (colGt scasesPat)+ : tactic
-syntax (name := scases) "scases" colGt ident "with" colGt scasesPat : tactic
+syntax (name := mintro) "mintro" (colGt mcasesPat)+ : tactic
+syntax (name := mcases) "mcases" colGt ident "with" colGt mcasesPat : tactic
 
 macro_rules
-  | `(tactic| sintro $pat₁ $pat₂ $pats:scasesPat*) => `(tactic| sintro $pat₁; sintro $pat₂ $pats*)
-  | `(tactic| sintro $pat:scasesPat) => do
+  | `(tactic| mintro $pat₁ $pat₂ $pats:mcasesPat*) => `(tactic| mintro $pat₁; mintro $pat₂ $pats*)
+  | `(tactic| mintro $pat:mcasesPat) => do
     match pat with
-    | `(scasesPat| $_:binderIdent) => Macro.throwUnsupported -- handled by the elaborator  e
-    | _ => `(tactic| sintro h; scases h with $pat)
+    | `(mcasesPat| $_:binderIdent) => Macro.throwUnsupported -- handled by the elaborator below
+    | _ => `(tactic| mintro h; mcases h with $pat)
 
 elab_rules : tactic
-  | `(tactic| sintro $ident:binderIdent) => do
+  | `(tactic| mintro $ident:binderIdent) => do
 
-  let (mvar, goal) ← sstart (← getMainGoal)
+  let (mvar, goal) ← mStart (← getMainGoal)
   mvar.withContext do
 
   let goals ← IO.mkRef []
-  mvar.assign (← sIntroStep goal ident fun newGoal => do
+  mvar.assign (← mIntroStep goal ident fun newGoal => do
     let m ← mkFreshExprSyntheticOpaqueMVar newGoal.toExpr
     goals.modify (m.mvarId! :: ·)
     return m)
   replaceMainGoal (← goals.get)
 
 example {σs : List Type} (Q : SPred σs) (H : Q ⊢ₛ Q) : Q ⊢ₛ Q := by
-  sstart
-  sintro HQ
-  sstop
+  mstart
+  mintro HQ
+  mstop
   exact H

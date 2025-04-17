@@ -3,7 +3,7 @@ Copyright (c) 2022 Lars König. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Lars König, Mario Carneiro
 -/
-import MPL.ProofMode.SGoal
+import MPL.ProofMode.MGoal
 import MPL.ProofMode.Focus
 
 namespace MPL.ProofMode.Tactics
@@ -18,7 +18,7 @@ instance (σs) : IsPure (σs:=σs) spred(⌜φ⌝ ∨ ⌜ψ⌝) (φ ∨ ψ) wher
 instance (σs) (P : α → Prop) : IsPure (σs:=σs) spred(∃ x, ⌜P x⌝) (∃ x, P x) where to_pure := SPred.pure_exists
 instance (σs) (P : α → Prop) : IsPure (σs:=σs) spred(∀ x, ⌜P x⌝) (∀ x, P x) where to_pure := SPred.pure_forall
 
-theorem spure_thm {σs : List Type} {P Q T : SPred σs} {φ : Prop} [IsPure Q φ]
+theorem Pure.thm {σs : List Type} {P Q T : SPred σs} {φ : Prop} [IsPure Q φ]
   (h : φ → P ⊢ₛ T) : P ∧ Q ⊢ₛ T := by
     apply SPred.pure_elim
     · exact SPred.and_elim_r.trans IsPure.to_pure.mp
@@ -30,8 +30,8 @@ theorem spure_thm {σs : List Type} {P Q T : SPred σs} {φ : Prop} [IsPure Q φ
 -- It will provide a proof for Q ∧ H ⊢ₛ T
 -- if `k` produces a proof for Q ⊢ₛ T that may range over a pure proof h : φ.
 -- It calls `k` with the φ in H = ⌜φ⌝ and a proof `h : φ` thereof.
-def sPureCore (σs : Expr) (hyp : Expr) (name : TSyntax ``binderIdent)
-  (k : Expr /-φ:Prop-/ → Expr /-h:φ-/ → MetaM (α × SGoal × Expr)) : MetaM (α × SGoal × Expr) := do
+def mPureCore (σs : Expr) (hyp : Expr) (name : TSyntax ``binderIdent)
+  (k : Expr /-φ:Prop-/ → Expr /-h:φ-/ → MetaM (α × MGoal × Expr)) : MetaM (α × MGoal × Expr) := do
   let φ ← mkFreshExprMVar (mkSort .zero)
   let inst ← synthInstance (mkApp3 (mkConst ``IsPure) σs hyp φ)
   let (name, ref) ← getFreshHypName name
@@ -39,17 +39,17 @@ def sPureCore (σs : Expr) (hyp : Expr) (name : TSyntax ``binderIdent)
     -- addLocalVarInfo ref (← getLCtx) h φ
     let (a, goal, prf /- : goal.toExpr -/) ← k φ h
     let prf ← mkLambdaFVars #[h] prf
-    let prf := mkApp7 (mkConst ``spure_thm) σs goal.hyps hyp goal.target φ inst prf
+    let prf := mkApp7 (mkConst ``Pure.thm) σs goal.hyps hyp goal.target φ inst prf
     let goal := { goal with hyps := mkAnd! σs goal.hyps hyp }
     return (a, goal, prf)
 
-elab "spure" colGt hyp:ident : tactic => do
+elab "mpure" colGt hyp:ident : tactic => do
   let mvar ← getMainGoal
   mvar.withContext do
   let g ← instantiateMVars <| ← mvar.getType
-  let some goal := parseSGoal? g | throwError "not in proof mode"
+  let some goal := parseMGoal? g | throwError "not in proof mode"
   let some res := goal.focusHyp hyp.getId | throwError "unknown identifier '{hyp}'"
-  let (m, _new_goal, prf) ← sPureCore goal.σs res.focusHyp (← `(binderIdent| $hyp:ident)) fun _ _ => do
+  let (m, _new_goal, prf) ← mPureCore goal.σs res.focusHyp (← `(binderIdent| $hyp:ident)) fun _ _ => do
     let goal := res.restGoal goal
     let m ← mkFreshExprSyntheticOpaqueMVar goal.toExpr
     return (m, goal, m)
@@ -58,7 +58,7 @@ elab "spure" colGt hyp:ident : tactic => do
   replaceMainGoal [m.mvarId!]
 
 /-- A generalization of `SPred.pure_intro` exploiting `IsPure`. -/
-private theorem pure_intro {σs : List Type} {P Q : SPred σs} {φ : Prop} [IsPure Q φ] (hp : φ) : P ⊢ₛ Q :=
+private theorem Pure.intro {σs : List Type} {P Q : SPred σs} {φ : Prop} [IsPure Q φ] (hp : φ) : P ⊢ₛ Q :=
   (SPred.pure_intro hp).trans IsPure.to_pure.mpr
 
-macro "spure_intro" : tactic => `(tactic| apply pure_intro)
+macro "mpure_intro" : tactic => `(tactic| apply Pure.intro)

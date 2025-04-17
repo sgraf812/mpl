@@ -19,7 +19,7 @@ theorem start_entails (φ : Prop) [PropAsEntails φ P] : (⊢ₛ P) → φ :=
 /-- Tautology in `SPred` as a definition. -/
 abbrev _root_.MPL.SPred.tautological {σs : List Type} (Q : SPred σs) : Prop := ⊢ₛ Q
 
-@[match_pattern] def sgoalAnnotation := `sgoal
+@[match_pattern] def mgoalAnnotation := `mgoal
 @[match_pattern] def nameAnnotation := `name
 
 structure Hyp where
@@ -67,25 +67,25 @@ def mkAnd (σs lhs rhs : Expr) : Expr × Expr :=
 def parseAnd? (e : Expr) : Option (Expr × Expr × Expr) :=
   e.app3? ``SPred.and
 
-structure SGoal where
+structure MGoal where
   σs : Expr -- Q(List Type)
   hyps : Expr -- A conjunction of hypotheses in `SPred σs`, each carrying a name and uniq as metadata (`parseHyp?`)
   target : Expr -- Q(SPred $σs)
   deriving Inhabited
 
-def parseSGoal? (expr : Expr) : Option SGoal := do
-  let .mdata ⟨[(sgoalAnnotation, .ofBool true)]⟩ e := expr | none
+def parseMGoal? (expr : Expr) : Option MGoal := do
+  let .mdata ⟨[(mgoalAnnotation, .ofBool true)]⟩ e := expr | none
   let some (σs, hyps, target) := e.app3? ``SPred.entails | none
   some { σs, hyps, target }
 
-def SGoal.strip (goal : SGoal) : Expr := -- omits the .mdata wrapper
+def MGoal.strip (goal : MGoal) : Expr := -- omits the .mdata wrapper
   mkApp3 (mkConst ``SPred.entails) goal.σs goal.hyps goal.target
 
-/-- Roundtrips with `parseSGoal?`. -/
-def SGoal.toExpr (goal : SGoal) : Expr :=
-  .mdata ⟨[(sgoalAnnotation, .ofBool true)]⟩ goal.strip
+/-- Roundtrips with `parseMGoal?`. -/
+def MGoal.toExpr (goal : MGoal) : Expr :=
+  .mdata ⟨[(mgoalAnnotation, .ofBool true)]⟩ goal.strip
 
-partial def SGoal.findHyp? (goal : SGoal) (name : Name) : Option (SubExpr.Pos × Hyp) := go goal.hyps SubExpr.Pos.root
+partial def MGoal.findHyp? (goal : MGoal) (name : Name) : Option (SubExpr.Pos × Hyp) := go goal.hyps SubExpr.Pos.root
   where
     go (e : Expr) (p : SubExpr.Pos) : Option (SubExpr.Pos × Hyp) := do
       if let some hyp := parseHyp? e then
@@ -98,41 +98,16 @@ partial def SGoal.findHyp? (goal : SGoal) (name : Name) : Option (SubExpr.Pos ×
       else if let some _ := parseEmptyHyp? e then
         none
       else
-        panic! "SGoal.findHyp?: hypothesis without proper metadata: {e}"
+        panic! "MGoal.findHyp?: hypothesis without proper metadata: {e}"
 
-def SGoal.checkProof (goal : SGoal) (prf : Expr) (suppressWarning : Bool := false) : MetaM Unit := do
+def MGoal.checkProof (goal : MGoal) (prf : Expr) (suppressWarning : Bool := false) : MetaM Unit := do
   check prf
   let prf_type ← inferType prf
   unless ← isDefEq goal.toExpr prf_type do
-    throwError "SGoal.checkProof: the proof and its supposed type did not match.\ngoal:  {goal.toExpr}\nproof: {prf_type}"
+    throwError "MGoal.checkProof: the proof and its supposed type did not match.\ngoal:  {goal.toExpr}\nproof: {prf_type}"
   unless suppressWarning do
-    logWarning m!"stray SGoal.checkProof {prf_type} {goal.toExpr}"
+    logWarning m!"stray MGoal.checkProof {prf_type} {goal.toExpr}"
 
 def getFreshHypName : TSyntax ``binderIdent → CoreM (Name × Syntax)
   | `(binderIdent| $name:ident) => pure (name.getId, name)
   | stx => return (← mkFreshUserName `h, stx)
-
-
-/-- An `MVarId` with an open `SGoal`. That is, if `hgoal : SGoal.toExpr`,
-then `mvar.assign (proof hgoal)` closes the goal.
-This structure is useful for accumulating a `proof` without
-having to allocate a new `MVarId` at each step. -/
-structure SGoalMVarId where
-  mvar : MVarId
-  goal : SGoal
-  proof : Option (Expr → Expr) -- none => proof is `id`
-
-/-- If `mvar.goal` is `P ⊢ₛ T` and `h : P' ⊢ₛ P`,
-then the new goal is `P' ⊢ₛ T`. -/
-def SGoalMVarId.weakenHyps (mvar : SGoalMVarId) (P' : Expr) (h : Expr) : SGoalMVarId :=
-  let { σs, hyps:=P, target:=T } := mvar.goal
-  let goal := { mvar.goal with hyps := P' }
-  let proof := fun hgoal => mvar.proof.getD id (mkApp6 (mkConst ``SPred.entails.trans) σs P' P T h hgoal)
-  { mvar := mvar.mvar, goal, proof }
-
-/-- If `mvar.goal` is `P ⊢ₛ T` and `h : P' ⊣⊢ₛ P`,
-then the new goal is `P' ⊢ₛ T`. -/
-def SGoalMVarId.weakenHypsBientails (mvar : SGoalMVarId) (P' : Expr) (h : Expr) : SGoalMVarId :=
-  let { σs, hyps:=P, target:=_ } := mvar.goal
-  let h := mkApp4 (mkConst ``SPred.bientails.mp) σs P P' h
-  weakenHyps mvar P' h

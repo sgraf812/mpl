@@ -414,7 +414,7 @@ def fib_impl (n : Nat) : Idd Nat
 
 #check fib_impl.spec
 
-theorem fib_triple : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => ⌜r = fib_spec n⌝⦄ := by
+theorem fib_triple : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ := by
   unfold fib_impl
   intro h
   xwp

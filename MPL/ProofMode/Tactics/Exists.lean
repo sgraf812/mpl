@@ -1,12 +1,12 @@
-import MPL.ProofMode.SGoal
+import MPL.ProofMode.MGoal
 
 namespace MPL.ProofMode.Tactics
 
 open Lean Elab Tactic Meta
 
-def sconstructorCore (mvar : MVarId) : MetaM (MVarId × MVarId) := do
+def mExistsCore (mvar : MVarId) : MetaM (MVarId × MVarId) := do
   let g ← instantiateMVars <| ← mvar.getType
-  let some goal := parseSGoal? g | throwError "not in proof mode"
+  let some goal := parseMGoal? g | throwError "not in proof mode"
 
   let mkApp3 (.const ``SPred.and []) σs L R := goal.target | throwError "target is not SPred.and"
 
@@ -15,8 +15,8 @@ def sconstructorCore (mvar : MVarId) : MetaM (MVarId × MVarId) := do
   mvar.assign (mkApp6 (mkConst ``SPred.and_intro) σs goal.hyps L R leftGoal rightGoal)
   return (leftGoal.mvarId!, rightGoal.mvarId!)
 
-elab "sconstructor" : tactic => do
+elab "mexists" : tactic => do
   let mvar ← getMainGoal
   mvar.withContext do
-  let (leftGoal, rightGoal) ← sconstructorCore mvar
+  let (leftGoal, rightGoal) ← mExistsCore mvar
   replaceMainGoal [leftGoal, rightGoal]

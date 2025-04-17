@@ -1,12 +1,12 @@
-import MPL.ProofMode.SGoal
+import MPL.ProofMode.MGoal
 
 namespace MPL.ProofMode.Tactics
 
 open Lean Elab Tactic Meta
 
-def sleftRightCore (right : Bool) (mvar : MVarId) : MetaM MVarId := do
+def mLeftRightCore (right : Bool) (mvar : MVarId) : MetaM MVarId := do
   let g ← instantiateMVars <| ← mvar.getType
-  let some goal := parseSGoal? g | throwError "not in proof mode"
+  let some goal := parseMGoal? g | throwError "not in proof mode"
 
   let mkApp3 (.const ``SPred.or []) σs L R := goal.target | throwError "target is not SPred.or"
 
@@ -16,14 +16,14 @@ def sleftRightCore (right : Bool) (mvar : MVarId) : MetaM MVarId := do
   mvar.assign (mkApp5 (mkConst thm) σs goal.hyps L R newGoal)
   return newGoal.mvarId!
 
-elab "sleft" : tactic => do
+elab "mleft" : tactic => do
   let mvar ← getMainGoal
   mvar.withContext do
-  let newGoal ← sleftRightCore (right := false) mvar
+  let newGoal ← mLeftRightCore (right := false) mvar
   replaceMainGoal [newGoal]
 
-elab "sright" : tactic => do
+elab "mright" : tactic => do
   let mvar ← getMainGoal
   mvar.withContext do
-  let newGoal ← sleftRightCore (right := true) mvar
+  let newGoal ← mLeftRightCore (right := true) mvar
   replaceMainGoal [newGoal]

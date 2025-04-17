@@ -5,214 +5,213 @@ open MPL
 variable (σs : List Type)
 
 theorem start_stop (Q : SPred σs) (H : Q ⊢ₛ Q) : Q ⊢ₛ Q := by
-  sstart
-  sintro HQ
-  sstop
+  mstart
+  mintro HQ
+  mstop
   exact H
 
 theorem exact (Q : SPred σs) : Q ⊢ₛ Q := by
-  sstart
-  sintro HQ
-  sexact HQ
+  mstart
+  mintro HQ
+  mexact HQ
 
 theorem exact_pure (P Q : SPred σs) (hP : ⊢ₛ P): Q ⊢ₛ P := by
-  sintro _
-  sexact hP
+  mintro _
+  mexact hP
 
 theorem clear (P Q : SPred σs) : P ⊢ₛ Q → Q := by
-  sintro HP
-  sintro HQ
-  sclear HP
-  sexact HQ
+  mintro HP
+  mintro HQ
+  mclear HP
+  mexact HQ
 
 theorem assumption (P Q : SPred σs) : Q ⊢ₛ P → Q := by
-  sintro _ _
-  sassumption
+  mintro _ _
+  massumption
 
 theorem assumption_pure (P Q : SPred σs) (hP : ⊢ₛ P): Q ⊢ₛ P := by
-  sintro _
-  sassumption
+  mintro _
+  massumption
 
 namespace pure
 
 theorem move (Q : SPred σs) : ⌜φ⌝ ⊢ₛ Q → Q := by
-  sintro Hφ
-  sintro HQ
-  spure Hφ
-  sexact HQ
+  mintro Hφ
+  mintro HQ
+  mpure Hφ
+  mexact HQ
 
 theorem move_multiple (Q : SPred σs) : ⌜φ₁⌝ ⊢ₛ ⌜φ₂⌝ → Q → Q := by
-  sintro Hφ1
-  sintro Hφ2
-  sintro HQ
-  spure Hφ1
-  spure Hφ2
-  sexact HQ
+  mintro Hφ1
+  mintro Hφ2
+  mintro HQ
+  mpure Hφ1
+  mpure Hφ2
+  mexact HQ
 
 theorem move_conjunction (Q : SPred σs) : (⌜φ₁⌝ ∧ ⌜φ₂⌝) ⊢ₛ Q → Q := by
-  sintro Hφ
-  sintro HQ
-  spure Hφ
-  sexact HQ
+  mintro Hφ
+  mintro HQ
+  mpure Hφ
+  mexact HQ
 
 end pure
 
 namespace pureintro
 
 theorem simple : ⊢ₛ (⌜True⌝ : SPred σs) := by
-  spure_intro
+  mpure_intro
   exact True.intro
 
 theorem or : ⊢ₛ ⌜True⌝ ∨ (⌜False⌝ : SPred σs) := by
-  spure_intro
+  mpure_intro
   left
   exact True.intro
 
 theorem with_proof (H : A → B) (P Q : SPred σs) : P ⊢ₛ Q → ⌜A⌝ → ⌜B⌝ := by
-  sintro _HP _HQ
-  spure_intro
+  mintro _HP _HQ
+  mpure_intro
   exact H
 
 end pureintro
 
 theorem revert (P Q R : SPred σs) : P ∧ Q ∧ R ⊢ₛ P → R := by
-  sintro ⟨HP, HQ, HR⟩
-  srevert HQ
-  srevert HR
-  sintro HQ'
-  sintro HR'
-  sintro HP'
-  sassumption
+  mintro ⟨HP, HQ, HR⟩
+  mrevert HQ
+  mrevert HR
+  mintro HQ'
+  mintro HR'
+  mintro HP'
+  massumption
 
 namespace constructor
 
 theorem and (Q : SPred σs) : Q ⊢ₛ Q ∧ Q := by
-  sintro HQ
-  sconstructor
-  <;> sexact HQ
+  mintro HQ
+  mconstructor <;> mexact HQ
 
 end constructor
 
 namespace leftright
 
 theorem left (P Q : SPred σs) : P ⊢ₛ P ∨ Q := by
-  sintro HP
-  sleft
-  sexact HP
+  mintro HP
+  mleft
+  mexact HP
 
 theorem right (P Q : SPred σs) : Q ⊢ₛ P ∨ Q := by
-  sintro HQ
-  sright
-  sexact HQ
+  mintro HQ
+  mright
+  mexact HQ
 
 theorem complex (P Q R : SPred σs) : ⊢ₛ P → Q → P ∧ (R ∨ Q ∨ R) := by
-  sintro HP HQ
-  sconstructor
-  · sassumption
-  sright
-  sleft
-  sexact HQ
+  mintro HP HQ
+  mconstructor
+  · massumption
+  mright
+  mleft
+  mexact HQ
 
 end leftright
 
 namespace specialize
 
 theorem simple (P Q : SPred σs) : P ⊢ₛ (P → Q) → Q := by
-  sintro HP HPQ
-  sspecialize HPQ HP
-  sexact HPQ
+  mintro HP HPQ
+  mspecialize HPQ HP
+  mexact HPQ
 
 theorem multiple (P Q R : SPred σs) : ⊢ₛ P → Q → (P → Q → R) → R := by
-  sintro HP HQ HPQR
-  sspecialize HPQR HP HQ
-  sexact HPQR
+  mintro HP HQ HPQR
+  mspecialize HPQR HP HQ
+  mexact HPQR
 
 theorem pure_imp (P Q R : SPred σs) : (⊢ₛ P) → ⊢ₛ Q → (P → Q → R) → R := by
   intro HP
-  sintro HQ HPQR
-  sspecialize HPQR HP HQ
-  sexact HPQR
+  mintro HQ HPQR
+  mspecialize HPQR HP HQ
+  mexact HPQR
 
 theorem forall' (y : Nat) (Q : Nat → SPred σs) : ⊢ₛ (∀ x, Q x) → Q (y + 1) := by
-  sintro HQ
-  sspecialize HQ (y + 1)
-  sexact HQ
+  mintro HQ
+  mspecialize HQ (y + 1)
+  mexact HQ
 
 theorem mixed (y : Nat) (P Q : SPred σs) (Ψ : Nat → SPred σs) (hP : ⊢ₛ P) : ⊢ₛ Q → (∀ x, P → Q → Ψ x) → Ψ (y + 1) := by
-  sintro HQ HΨ
-  sspecialize HΨ (y + 1) hP HQ
-  sexact HΨ
+  mintro HQ HΨ
+  mspecialize HΨ (y + 1) hP HQ
+  mexact HΨ
 
 end specialize
 
 namespace havereplace
 
 theorem repl (P Q : SPred σs) : P ⊢ₛ (P → Q) → Q := by
-  sintro HP HPQ
-  sreplace HPQ := HPQ HP
-  sexact HPQ
+  mintro HP HPQ
+  mreplace HPQ := HPQ HP
+  mexact HPQ
 
 theorem shave (P Q : SPred σs) : P ⊢ₛ (P → Q) → Q := by
-  sintro HP HPQ
-  shave HQ := HPQ HP
-  sexact HQ
+  mintro HP HPQ
+  mhave HQ := HPQ HP
+  mexact HQ
 
 theorem mixed (y : Nat) (P Q : SPred σs) (Ψ : Nat → SPred σs) (hP : ⊢ₛ P) : ⊢ₛ Q → (∀ x, P → Q → Ψ x) → Ψ (y + 1) := by
-  sintro HQ HΨ
-  shave H := HΨ (y + 1) hP HQ
-  sexact H
+  mintro HQ HΨ
+  mhave H := HΨ (y + 1) hP HQ
+  mexact H
 
 end havereplace
 
 namespace cases
 
 theorem rename (P : SPred σs) : P ⊢ₛ P := by
-  sintro HP
-  scases HP with HP'
-  sexact HP'
+  mintro HP
+  mcases HP with HP'
+  mexact HP'
 
 theorem clear (P Q : SPred σs) : ⊢ₛ P → Q → P := by
-  sintro HP HQ
-  scases HQ with -
-  sexact HP
+  mintro HP HQ
+  mcases HQ with -
+  mexact HP
 
 theorem pure (P : SPred σs) (Q : Prop) : φ → (⊢ₛ P → ⌜Q⌝ → P) := by
   intro hφ
-  sintro HP HQ
-  scases HQ with ⌜hQ⌝
-  sexact HP
+  mintro HP HQ
+  mcases HQ with ⌜hQ⌝
+  mexact HP
 
 theorem pure_exact (P : SPred σs) (Q : Prop) (hqr : Q → ⊢ₛ R) : ⊢ₛ P → ⌜Q⌝ → R := by
-  sintro HP HQ
-  scases HQ with ⌜hQ⌝
-  sexact hqr hQ
+  mintro HP HQ
+  mcases HQ with ⌜hQ⌝
+  mexact hqr hQ
 
 theorem and (P Q R : SPred σs) : (P ∧ Q ∧ R) ⊢ₛ R := by
-  sintro HPQR
-  scases HPQR with ⟨HP, HQ, HR⟩
-  sexact HR
+  mintro HPQR
+  mcases HPQR with ⟨HP, HQ, HR⟩
+  mexact HR
 
 theorem and_clear_pure (P Q R : SPred σs) (φ : Prop) : (P ∧ Q ∧ ⌜φ⌝ ∧ R) ⊢ₛ R := by
-  sintro HPQR
-  scases HPQR with ⟨_, -, ⌜hφ⌝, HR⟩
-  sexact HR
+  mintro HPQR
+  mcases HPQR with ⟨_, -, ⌜hφ⌝, HR⟩
+  mexact HR
 
 theorem or (P Q R : SPred σs) : P ∧ (Q ∨ R) ∧ (Q → R) ⊢ₛ R := by
-  sintro H
-  scases H with ⟨-, ⟨HQ | HR⟩, HQR⟩
-  · sspecialize HQR HQ
-    sexact HQR
-  · sexact HR
+  mintro H
+  mcases H with ⟨-, ⟨HQ | HR⟩, HQR⟩
+  · mspecialize HQR HQ
+    mexact HQR
+  · mexact HR
 
 theorem and_persistent (P Q R : SPred σs) : (P ∧ Q ∧ R) ⊢ₛ R := by
-  sintro HPQR
-  scases HPQR with ⟨#HP, HQ, □HR⟩
-  sexact HR
+  mintro HPQR
+  mcases HPQR with ⟨#HP, HQ, □HR⟩
+  mexact HR
 
 theorem and_pure (P Q R : Prop) : (⌜P⌝ ∧ ⌜Q⌝ ∧ ⌜R⌝) ⊢ₛ (⌜R⌝ : SPred σs) := by
-  sintro HPQR
-  scases HPQR with ⟨%HP, ⌜HQ⌝, HR⟩
-  spure_intro
+  mintro HPQR
+  mcases HPQR with ⟨%HP, ⌜HQ⌝, HR⟩
+  mpure_intro
   exact HR
 
 end cases
@@ -220,35 +219,35 @@ end cases
 namespace refine
 
 theorem and (P Q R : SPred σs) : (P ∧ Q ∧ R) ⊢ₛ P ∧ R := by
-  sintro ⟨HP, HQ, HR⟩
-  srefine ⟨HP, HR⟩
+  mintro ⟨HP, HQ, HR⟩
+  mrefine ⟨HP, HR⟩
 
 theorem exists_1 (ψ : Nat → SPred σs) : ψ 42 ⊢ₛ ∃ x, ψ x := by
-  sintro H
-  srefine ⟨⌜42⌝, H⟩
+  mintro H
+  mrefine ⟨⌜42⌝, H⟩
 
 theorem exists_2 (ψ : Nat → SPred σs) : ψ 42 ⊢ₛ ∃ x, ψ x := by
-  sintro H
-  sexists 42
+  mintro H
+  mexists 42
 
 end refine
 
 theorem mosel1 {α : Type} (P : SPred σs) (Φ Ψ : α → SPred σs) :
   P ∧ (∃ a, Φ a ∨ Ψ a) ⊢ₛ ∃ a, (P ∧ Φ a) ∨ (P ∧ Ψ a) := by
-  sintro ⟨HP, ⟨a, ⟨HΦ | HΨ⟩⟩⟩
-  · sexists a
-    sleft
-    srefine ⟨HP, HΦ⟩
-  · sexists a
-    sright
-    srefine ⟨HP, HΨ⟩
+  mintro ⟨HP, ⟨a, ⟨HΦ | HΨ⟩⟩⟩
+  · mexists a
+    mleft
+    mrefine ⟨HP, HΦ⟩
+  · mexists a
+    mright
+    mrefine ⟨HP, HΨ⟩
 
 theorem mosel3 {α : Type} (P : SPred σs) (Φ Ψ : α → SPred σs) :
   P ∧ (∃ a, Φ a ∨ Ψ a) ⊢ₛ ∃ a, Φ a ∨ (P ∧ P ∧ Ψ a) := by
-  sintro ⟨HP, ⟨a, ⟨HΦ | HΨ⟩⟩⟩
-  · sexists a
-    sleft
-    sexact HΦ
-  · sexists a
-    sright
-    srefine ⟨HP, HP, HΨ⟩
+  mintro ⟨HP, ⟨a, ⟨HΦ | HΨ⟩⟩⟩
+  · mexists a
+    mleft
+    mexact HΦ
+  · mexists a
+    mright
+    mrefine ⟨HP, HP, HΨ⟩

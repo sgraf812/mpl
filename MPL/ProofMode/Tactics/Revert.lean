@@ -8,7 +8,7 @@ namespace MPL.ProofMode.Tactics
 theorem Revert.revert {σs : List Type} {P Q H T : SPred σs} (hfoc : P ⊣⊢ₛ Q ∧ H) (h : Q ⊢ₛ H → T) : P ⊢ₛ T :=
   hfoc.mp.trans (SPred.imp_elim h)
 
-partial def sRevertStep (goal : SGoal) (ref : TSyntax `ident) (k : SGoal → MetaM Expr) : MetaM Expr := do
+partial def mRevertStep (goal : MGoal) (ref : TSyntax `ident) (k : MGoal → MetaM Expr) : MetaM Expr := do
   let name := ref.getId
   let some res := goal.focusHyp name | throwError "unknown hypothesis '{ref}'"
   let P := goal.hyps
@@ -19,14 +19,14 @@ partial def sRevertStep (goal : SGoal) (ref : TSyntax `ident) (k : SGoal → Met
   let prf := mkApp7 (mkConst ``Revert.revert) goal.σs P Q H T res.proof prf
   return prf
 
-syntax (name := srevert) "srevert" colGt ident : tactic
+syntax (name := mrevert) "mrevert" colGt ident : tactic
 
-elab "srevert" colGt h:ident : tactic => do
-  let (mvar, goal) ← sstart (← getMainGoal)
+elab "mrevert" colGt h:ident : tactic => do
+  let (mvar, goal) ← mStart (← getMainGoal)
   mvar.withContext do
 
   let goals ← IO.mkRef []
-  mvar.assign (← sRevertStep goal h fun newGoal => do
+  mvar.assign (← mRevertStep goal h fun newGoal => do
     let m ← mkFreshExprSyntheticOpaqueMVar newGoal.toExpr
     goals.modify (m.mvarId! :: ·)
     return m)

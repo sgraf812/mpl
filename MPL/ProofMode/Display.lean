@@ -1,21 +1,19 @@
-import MPL.ProofMode.SGoal
+import MPL.ProofMode.MGoal
 
 namespace MPL.ProofMode
 
--- syntax sgoalσ := term ".."?
--- syntax sgoalσs := ("∀ " sgoalσ+)?
-syntax sgoalHyp := ident " : " term
+syntax mgoalHyp := ident " : " term
 
-syntax sgoalStx := /-ppDedent(ppLine sgoalσs)-/ ppDedent(ppLine sgoalHyp)* ppDedent(ppLine "⊢ₛ " term)
+syntax mgoalStx := /-ppDedent(ppLine mgoalσs)-/ ppDedent(ppLine mgoalHyp)* ppDedent(ppLine "⊢ₛ " term)
 
 open Lean Expr Meta PrettyPrinter Delaborator SubExpr
 
-@[delab mdata.sgoal]
-partial def delabSGoal : Delab := do
+@[delab mdata.mgoal]
+partial def delabMGoal : Delab := do
   let expr ← instantiateMVars <| ← getExpr
 
   -- extract environment
-  let some goal := parseSGoal? expr | failure
+  let some goal := parseMGoal? expr | failure
 
   -- delaborate
   -- let σs ← delabσs goal.σs
@@ -23,11 +21,11 @@ partial def delabSGoal : Delab := do
   let target ← SPred.Notation.unpack (← delab goal.target)
 
   -- build syntax
-  return ⟨← `(sgoalStx| $hyps.reverse* ⊢ₛ $target:term)⟩
+  return ⟨← `(mgoalStx| $hyps.reverse* ⊢ₛ $target:term)⟩
 where
   delabHypotheses (hyps : Expr)
-      (acc : NameMap Nat × Array (TSyntax ``sgoalHyp)) :
-      DelabM (NameMap Nat × Array (TSyntax ``sgoalHyp)) := do
+      (acc : NameMap Nat × Array (TSyntax ``mgoalHyp)) :
+      DelabM (NameMap Nat × Array (TSyntax ``mgoalHyp)) := do
     if let some _ := parseEmptyHyp? hyps then
       return acc
     if let some hyp := parseHyp? hyps then
@@ -37,29 +35,29 @@ where
           (idx + 1, hyp.name.appendAfter <| if idx == 0 then "✝" else "✝" ++ idx.toSuperscriptString)
         else
           (0, hyp.name)
-      let stx ← `(sgoalHyp| $(mkIdent name') : $(← SPred.Notation.unpack (← delab hyp.p)))
+      let stx ← `(mgoalHyp| $(mkIdent name') : $(← SPred.Notation.unpack (← delab hyp.p)))
       return (map.insert hyp.name idx, lines.push stx)
     if let some (_, lhs, rhs) := parseAnd? hyps then
       delabHypotheses lhs (← delabHypotheses rhs acc)
     else
       failure
 /-
-  delabσs (σs : Expr) : DelabM (TSyntax ``sgoalσs) := do
+  delabσs (σs : Expr) : DelabM (TSyntax ``mgoalσs) := do
     if σs.isAppOf ``List.nil then
-      return ← `(sgoalσs|)
+      return ← `(mgoalσs|)
     let mut σs := σs
-    let mut stx : Array (TSyntax ``sgoalσ) := #[]
+    let mut stx : Array (TSyntax ``mgoalσ) := #[]
     repeat do
       if let some (_, σ, σs') := σs.app3? ``List.cons then
-        stx := stx.push (← `(sgoalσ| $(⟨← delab σ⟩)))
+        stx := stx.push (← `(mgoalσ| $(⟨← delab σ⟩)))
         σs := σs'
         continue
       else if σs.isAppOf ``List.nil then
         break
       else
-        stx := stx.push (← `(sgoalσ| $(⟨← delab σs⟩)..))
+        stx := stx.push (← `(mgoalσ| $(⟨← delab σs⟩)..))
         break
-    `(sgoalσs| ∀ $stx*)
+    `(mgoalσs| ∀ $stx*)
 -/
 
 -- @[delab app.Iris.ProofMode.HypMarker]
