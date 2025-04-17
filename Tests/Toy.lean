@@ -417,11 +417,11 @@ theorem prog.spec' : ⦃isValid⦄ prog n ⦃⇓r => ⌜r > 100⌝ ∧ isValid�
   unfold prog
   mintro □h
   mspec op.spec
-  mintro ⟨⌜hr₁⌝, □h⟩
+  mcases h with ⟨⌜hr₁⌝, □h⟩
   mspec op.spec
-  mintro ⟨⌜hr₂⌝, □h⟩
+  mcases h with ⟨⌜hr₂⌝, □h⟩
   mspec op.spec
-  mintro ⟨⌜hr₃⌝, □h⟩
+  mcases h with ⟨⌜hr₃⌝, □h⟩
   mspec
   mrefine ⟨?_, h⟩
   mpure_intro
