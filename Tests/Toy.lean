@@ -403,30 +403,6 @@ theorem prog.spec : ⦃isValid⦄  prog n ⦃⇓r => ⌜r > 100⌝ ∧ isValid�
   intro r₂ a b c d ⟨hr₂, h⟩
   xapp op.spec
   intro r₃ a b c d ⟨hr₃, h⟩
-  -- n a✝² : ℕ
-  -- b✝² : Char
-  -- c✝² : Bool
-  -- d✝² : String
-  -- h✝² : isValid a✝² b✝² c✝² d✝²
-  -- r₁ a✝¹ : ℕ
-  -- b✝¹ : Char
-  -- c✝¹ : Bool
-  -- d✝¹ : String
-  -- hr₁ : ⌜42 < r₁⌝ a✝¹ b✝¹ c✝¹ d✝¹
-  -- h✝¹ : isValid a✝¹ b✝¹ c✝¹ d✝¹
-  -- r₂ a✝ : ℕ
-  -- b✝ : Char
-  -- c✝ : Bool
-  -- d✝ : String
-  -- hr₂ : ⌜42 < r₂⌝ a✝ b✝ c✝ d✝
-  -- h✝ : isValid a✝ b✝ c✝ d✝
-  -- r₃ a : ℕ
-  -- b : Char
-  -- c : Bool
-  -- d : String
-  -- hr₃ : ⌜42 < r₃⌝ a b c d
-  -- h : isValid a b c d
-  -- ⊢ wp⟦pure (r₁ + r₂ + r₃)⟧.apply (⇓r => ⌜100 < r⌝ ∧ isValid) a b c d
   xpure
   simp_all only [SPred.idiom_cons, SPred.idiom_nil, SPred.and_cons, SPred.and_nil,
     and_true, gt_iff_lt]
