@@ -31,7 +31,7 @@ theorem Spec.entails_total {α} {ps : PredShape} (p : α → PreCond ps) (q : Po
 theorem Spec.entails_partial {α} {ps : PredShape} (p : PostCond α ps) (q : α → PreCond ps) :
   (∀ a, p.1 a ⊢ₛ q a) → p ⊢ₚ PostCond.partial q := (PostCond.entails_partial p q).mpr
 
-def mFindSpec (stx? : Option (TSyntax `term)) (u : Level) (m : Expr) (ps : Expr) (instWP : Expr) (α : Expr) (prog : Expr) : TacticM (Expr × Expr × Expr) := do
+def mFindSpec (stx? : Option (TSyntax `term)) (u : Level) (m : Expr) (ps : Expr) (instWP : Expr) (α : Expr) (prog : Expr) : TacticM (Expr × List MVarId × Expr × Expr) := do
   let stx ← stx?.getDM do
     unless prog.getAppFn'.isConst do throwError s!"not an application of a constant: {prog}"
     let specs ← specAttr.find? prog
@@ -39,7 +39,9 @@ def mFindSpec (stx? : Option (TSyntax `term)) (u : Level) (m : Expr) (ps : Expr)
     if specs.size > 1 then throwError s!"multiple specs found for {prog}: {specs}"
     return mkIdent specs[0]!
   trace[mpl.tactics.spec] "spec syntax: {stx}"
-  let spec ← elabTermForApply stx
+  -- The following line is basically elabTermWithHoles, but with mayPostpone := true.
+  -- We need to postpone until the `isDefEq` below, which will instantiate `ps` and `instWP`.
+  let (spec, mvarIds) ← withCollectingNewGoalsFrom (elabTermForApply stx (mayPostpone := true)) (← getMainTag) `mspec (allowNaturalHoles := true)
   trace[mpl.tactics.spec] "inferred spec, pre instantiate telescope: {spec}"
   let specTy ← inferType spec
   let (mvs, _bis, specTy) ← forallMetaTelescope specTy -- This could be done more efficiently without MVars
@@ -51,8 +53,12 @@ def mFindSpec (stx? : Option (TSyntax `term)) (u : Level) (m : Expr) (ps : Expr)
   -- part of the elaboration, but part of the tactic.
   unless (← withAssignableSyntheticOpaque <| isDefEq specTy expectedTy) do
     Term.throwTypeMismatchError none expectedTy specTy spec
-  trace[mpl.tactics.spec] "inferred spec, post check: {← instantiateMVars spec} : {← instantiateMVars specTy}"
-  return (spec, P, Q)
+  trace[mpl.tactics.spec] "{← instantiateMVars specTy}"
+  Term.synthesizeSyntheticMVarsNoPostponing
+
+  trace[mpl.tactics.spec] "inferred spec, post synthesis: {← instantiateMVars spec} : {← instantiateMVars specTy}"
+  let mvarIds ← (mvarIds ++ mvs.toList.map (·.mvarId!)).filterM (not <$> ·.isAssigned)
+  return (spec, mvarIds, P, Q)
 
 def mkProj' (n : Name) (i : Nat) (Q : Expr) : MetaM Expr := do
   return (← projectCore? Q i).getD (mkProj n i Q)
@@ -106,18 +112,18 @@ def dischargeMGoal (goal : MGoal) (goalTag : Name) (discharge : Expr → Name �
   let some prf ← goal.assumption | discharge goal.toExpr goalTag
   return prf
 
-def mSpec (goal : MGoal) (spec : Option (TSyntax `term)) (discharge : Expr → Name → MetaM Expr) (resultName := `r) : TacticM Expr := do
+def mSpec (goal : MGoal) (spec : Option (TSyntax `term)) (discharge : Expr → Name → MetaM Expr) (resultName := `r) : TacticM (Expr × List MVarId) := do
   -- Elaborate the spec, apply style
   let T := goal.target.consumeMData -- had the error below trigger in Lean4Lean for some reason
   let_expr PredTrans.apply _ps _α wp Q' := T | throwError "target not a PredTrans.apply application {T}"
   let_expr WP.wp m ps instWP α x := wp | throwError "target not a wp application {wp}"
   let [u] := wp.getAppFn'.constLevels! | throwError "Internal error: wrong number of levels in wp application"
-  let (spec, P, Q) ← mFindSpec spec u m ps instWP α x
+  let (spec, specHoles, P, Q) ← mFindSpec spec u m ps instWP α x
   -- apply the spec
   let postPrf ← dischargePostEntails α ps Q Q' `post resultName discharge
   let HPPrf ← dischargeMGoal { goal with target := P } `pre discharge
   let PTPrf := mkApp10 (mkConst ``Spec.apply_mono) m ps instWP α x P Q Q' spec postPrf
-  return mkApp6 (mkConst ``SPred.entails.trans) goal.σs goal.hyps P goal.target HPPrf PTPrf
+  return (mkApp6 (mkConst ``SPred.entails.trans) goal.σs goal.hyps P goal.target HPPrf PTPrf, specHoles)
 
 private def addMVar (mvars : IO.Ref (List MVarId)) (goal : Expr) (name : Name) : MetaM Expr := do
   let m ← mkFreshExprSyntheticOpaqueMVar goal (tag := name)
@@ -129,10 +135,11 @@ syntax "mspec_no_bind" (ppSpace colGt term)? : tactic
 elab "mspec_no_bind" spec:optional(term) : tactic => withMainContext do
   let (mvar, goal) ← mStart (← getMainGoal)
   let goals ← IO.mkRef []
-  mvar.assign (← mSpec goal spec (addMVar goals))
+  let (prf, specHoles) ← mSpec goal spec (addMVar goals)
+  mvar.assign prf
   let goals ← goals.get
   if let [mvar'] := goals then mvar'.setTag (← mvar.getTag)
-  replaceMainGoal goals
+  replaceMainGoal (goals ++ specHoles)
 
 syntax "mspec_no_simp" (ppSpace colGt term)? : tactic
 
@@ -140,7 +147,7 @@ syntax "mspec_no_simp" (ppSpace colGt term)? : tactic
 syntax "mspec" (ppSpace colGt term)? : tactic
 macro_rules
   | `(tactic| mspec_no_simp $[$spec]?) => `(tactic| ((try mspec_no_bind MPL.Specs.bind); mspec_no_bind $[$spec]?))
-  | `(tactic| mspec $[$spec]?)         => `(tactic| mspec_no_simp $[$spec]? <;> try simp +contextual only [gt_iff_lt, Prod.mk_le_mk, le_refl, and_true, PostCond.entails, FailConds.entails_false, FailConds.entails_refl, FailConds.entails_true, FailConds.pure_def, SPred.entails.refl])
+  | `(tactic| mspec $[$spec]?)         => `(tactic| mspec_no_simp $[$spec]? <;> try dsimp only)
 
 /-
 abbrev M := StateT Nat (StateT Char (StateT Bool (StateT String Idd)))

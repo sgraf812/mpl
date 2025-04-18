@@ -64,8 +64,11 @@ def mkAnd (σs lhs rhs : Expr) : Expr × Expr :=
     let result := mkAnd! σs lhs rhs
     (result, mkApp2 (mkConst ``SPred.bientails.refl) σs result)
 
+def σs.mkType : Expr := mkApp (mkConst ``List [.succ .zero]) (mkSort (.succ .zero))
+def σs.mkNil : Expr := mkApp (mkConst ``List.nil [.succ .zero]) (mkSort (.succ .zero))
+
 def parseAnd? (e : Expr) : Option (Expr × Expr × Expr) :=
-  e.app3? ``SPred.and
+  e.app3? ``SPred.and <|> (σs.mkNil, ·) <$> e.app2? ``And
 
 structure MGoal where
   σs : Expr -- Q(List Type)

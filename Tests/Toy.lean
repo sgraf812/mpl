@@ -12,58 +12,54 @@ theorem test_sum :
       x := x + i
     pure (f := Idd) x
   ⦃⇓r => r < 30⦄ := by
-  intro _
-  xwp
-  xapp (Specs.forIn_list (PostCond.total fun (r, xs) => (∀ x, x ∈ xs.suff → x ≤ 5) ∧ r + xs.suff.length * 5 ≤ 25) ?step)
+  mintro -
+  mvcgen
+  mspec (Specs.forIn_list (⇓ (r, xs) => (∀ x, x ∈ xs.suff → x ≤ 5) ∧ r + xs.suff.length * 5 ≤ 25) ?step)
   case step =>
     intro b pref x suff h
-    xwp
+    mintro ⌜h₁⌝
     -- grind -- does not work yet... Maybe in 4.17
-    simp +contextual
+    simp_all
     omega
-  intro s; simp; omega -- sgrind
+  all_goals simp; omega -- sgrind
 
 def mkFreshInt [Monad m] [MonadStateOf (Nat × Nat) m] : m Nat := do
   let n ← Prod.fst <$> get
   modify (fun s => (s.1 + 1, s.2))
   pure n
 
+private abbrev fst : SVal ((Nat × Nat)::σs) Nat := fun s => SVal.pure s.1
+private abbrev snd : SVal ((Nat × Nat)::σs) Nat := fun s => SVal.pure s.2
+
 @[spec]
 theorem mkFreshInt_spec [Monad m] [LawfulMonad m] [WPMonad m sh] :
-  ⦃fun s => ⌜s.1 = n ∧ s.2 = o⌝⦄
+  ⦃⌜#fst = n ∧ #snd = o⌝⦄
   (mkFreshInt : StateT (Nat × Nat) m Nat)
-  ⦃⇓ r => fun s => ⌜r = n ∧ s.1 = n + 1 ∧ s.2 = o⌝⦄ := by
+  ⦃⇓ r => ⌜r = n ∧ #fst = n + 1 ∧ #snd = o⌝⦄ := by
+  mintro _
   unfold mkFreshInt
-  xwp
-  intro s
+  mvcgen
+  mintro ∀s
   simp
 
 @[wp_simp]
 theorem StateT.mkFreshInt_apply [Monad m] [LawfulMonad m] [WPMonad m sh] :
   wp⟦(mkFreshInt : StateT (Nat × Nat) m Nat)⟧.apply Q = fun s => Q.1 s.1 (s.1 + 1, s.2) := by
-    unfold mkFreshInt; xwp
+    unfold mkFreshInt; wp_simp
 
 @[wp_simp]
 theorem MonadStateOf.mkFreshInt_apply [Monad m] [MonadStateOf (Nat × Nat) m] [Monad n] [LawfulMonad m] [LawfulMonad n] [WP m psm] [WPMonad n psn] [MonadLift m n] [MonadMorphism m n MonadLift.monadLift] :
   wp⟦mkFreshInt : n Nat⟧.apply Q = wp⟦MonadLift.monadLift (m:=m) mkFreshInt : n Nat⟧.apply Q := by
-    unfold mkFreshInt; xwp; rfl
+    unfold mkFreshInt; wp_simp; rfl
 
 @[spec]
 theorem mkFreshInt_lift_spec [Monad m] [LawfulMonad m] [WPMonad m sh] :
   ⦃fun _ s => ⌜s.1 = n ∧ s.2 = o⌝⦄
   (mkFreshInt : ExceptT Char (ReaderT Bool (StateT (Nat × Nat) m)) Nat)
   ⦃⇓ r _ s => ⌜r = n ∧ s.1 = n + 1 ∧ s.2 = o⌝⦄ := by
-  xwp
+  mintro _
+  mvcgen
   simp
-
-theorem mkFreshInt_spec_fail [Monad m] [LawfulMonad m] [WPMonad m sh] :
-  ⦃fun s => ⌜s.1 = n ∧ s.2 = o⌝⦄
-  (mkFreshInt : StateT (Nat × Nat) m Nat)
-  ⦃⇓ r s => ⌜r = n ∧ s.1 = n + 1 ∧ s.2 = o⌝⦄ := by
-  unfold mkFreshInt
-  intro s
-  fail_if_success xstart
-  admit
 
 theorem test_ex :
   ⦃fun s => s = 4⦄
@@ -76,7 +72,6 @@ theorem test_ex :
   ⦃(fun r s => False,
     fun e s => e = 42 ∧ s = 4,
     ())⦄ := by
-  xstart
   intro s hs
   xwp
   -- xbind -- optional
@@ -380,11 +375,11 @@ end KimsBabySteps
 
 section WeNeedAProofMode
 
-abbrev M := StateT Nat (StateT Char (StateT Bool (StateT String Idd)))
-
 private abbrev theNat : SVal [Nat, Bool] Nat := fun n b => n
 private def test (P Q : PreCond (.arg Nat (.arg Bool .pure))) : PreCond (.arg Char (.arg Nat (.arg Bool .pure))) :=
   spred(fun n => ((∀ y, if y = n then ⌜‹Nat›ₛ + #theNat = 4⌝ else Q) ∧ Q) → P → (∃ x, P → if (x : Bool) then Q else P))
+
+abbrev M := StateT Nat (StateT Char (StateT Bool (StateT String Idd)))
 
 def op : Nat → M Nat := sorry
 
@@ -408,6 +403,30 @@ theorem prog.spec : ⦃isValid⦄  prog n ⦃⇓r => ⌜r > 100⌝ ∧ isValid�
   intro r₂ a b c d ⟨hr₂, h⟩
   xapp op.spec
   intro r₃ a b c d ⟨hr₃, h⟩
+  -- n a✝² : ℕ
+  -- b✝² : Char
+  -- c✝² : Bool
+  -- d✝² : String
+  -- h✝² : isValid a✝² b✝² c✝² d✝²
+  -- r₁ a✝¹ : ℕ
+  -- b✝¹ : Char
+  -- c✝¹ : Bool
+  -- d✝¹ : String
+  -- hr₁ : ⌜42 < r₁⌝ a✝¹ b✝¹ c✝¹ d✝¹
+  -- h✝¹ : isValid a✝¹ b✝¹ c✝¹ d✝¹
+  -- r₂ a✝ : ℕ
+  -- b✝ : Char
+  -- c✝ : Bool
+  -- d✝ : String
+  -- hr₂ : ⌜42 < r₂⌝ a✝ b✝ c✝ d✝
+  -- h✝ : isValid a✝ b✝ c✝ d✝
+  -- r₃ a : ℕ
+  -- b : Char
+  -- c : Bool
+  -- d : String
+  -- hr₃ : ⌜42 < r₃⌝ a b c d
+  -- h : isValid a b c d
+  -- ⊢ wp⟦pure (r₁ + r₂ + r₃)⟧.apply (⇓r => ⌜100 < r⌝ ∧ isValid) a b c d
   xpure
   simp_all only [SPred.idiom_cons, SPred.idiom_nil, SPred.and_cons, SPred.and_nil,
     and_true, gt_iff_lt]

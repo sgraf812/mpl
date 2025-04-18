@@ -14,3 +14,4 @@ import MPL.ProofMode.Tactics.Have
 import MPL.ProofMode.Tactics.Refine
 
 import MPL.ProofMode.Tactics.Spec
+import MPL.ProofMode.Tactics.VCGen

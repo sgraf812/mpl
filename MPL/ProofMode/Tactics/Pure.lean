@@ -17,6 +17,7 @@ instance (σs) : IsPure (σs:=σs) spred(⌜φ⌝ ∧ ⌜ψ⌝) (φ ∧ ψ) wher
 instance (σs) : IsPure (σs:=σs) spred(⌜φ⌝ ∨ ⌜ψ⌝) (φ ∨ ψ) where to_pure := SPred.pure_or
 instance (σs) (P : α → Prop) : IsPure (σs:=σs) spred(∃ x, ⌜P x⌝) (∃ x, P x) where to_pure := SPred.pure_exists
 instance (σs) (P : α → Prop) : IsPure (σs:=σs) spred(∀ x, ⌜P x⌝) (∀ x, P x) where to_pure := SPred.pure_forall
+instance (P : Prop) : IsPure (σs:=[]) P P where to_pure := Iff.rfl
 
 theorem Pure.thm {σs : List Type} {P Q T : SPred σs} {φ : Prop} [IsPure Q φ]
   (h : φ → P ⊢ₛ T) : P ∧ Q ⊢ₛ T := by
