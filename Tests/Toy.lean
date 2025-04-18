@@ -381,18 +381,17 @@ private def test (P Q : PreCond (.arg Nat (.arg Bool .pure))) : PreCond (.arg Ch
 
 abbrev M := StateT Nat (StateT Char (StateT Bool (StateT String Idd)))
 
-def op : Nat → M Nat := sorry
+axiom op : Nat → M Nat
 
-def prog (n : Nat) : M Nat := do
+noncomputable def prog (n : Nat) : M Nat := do
   let a ← op n
   let b ← op a
   let c ← op b
   return (a + b + c)
 
-def isValid : Nat → Char → Bool → String → Prop := sorry
+axiom isValid : Nat → Char → Bool → String → Prop
 
-theorem op.spec :
-  ⦃isValid⦄ op n ⦃⇓r => ⌜r > 42⌝ ∧ isValid⦄ := sorry
+axiom op.spec {n} : ⦃isValid⦄ op n ⦃⇓r => ⌜r > 42⌝ ∧ isValid⦄
 
 theorem prog.spec : ⦃isValid⦄  prog n ⦃⇓r => ⌜r > 100⌝ ∧ isValid⦄ := by
   unfold prog
