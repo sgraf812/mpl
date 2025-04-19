@@ -8,7 +8,7 @@ open Lean Elab Tactic Meta
 -- set_option pp.all true in
 -- #check ⌜False⌝
 private def falseProp (σs : Expr) : Expr := -- ⌜False⌝ standing in for an empty conjunction of hypotheses
-  mkApp2 (mkConst ``SPred.idiom) σs <| mkLambda `escape .default (mkApp (mkConst ``SVal.EscapeFun) σs) (mkConst ``False)
+  mkApp3 (mkConst ``SVal.pure) (.sort .zero) σs (mkConst ``False)
 
 elab "mexfalso" : tactic => do
   let mvar ← getMainGoal

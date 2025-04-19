@@ -134,13 +134,13 @@ theorem and_right_comm : (P ∧ Q) ∧ R ⊣⊢ₛ (P ∧ R) ∧ Q := and_assoc.
 
 /-! # Working with entailment -/
 
-theorem entails_pure_intro {σs : List Type} (P Q : Prop) (h : P → Q) : ⌜P⌝.entails (σs := σs) ⌜Q⌝ := pure_elim' fun hp => pure_intro (h hp)
+theorem entails_pure_intro {σs : List Type} (P Q : Prop) (h : P → Q) : SPred.entails (σs := σs) ⌜P⌝ ⌜Q⌝ := pure_elim' fun hp => pure_intro (h hp)
 
 @[simp]
-theorem entails_pure_elim {σ : Type} {σs : List Type} [Inhabited σ] (P Q : Prop) : ⌜P⌝.entails (σs := σ::σs) ⌜Q⌝ ↔ ⌜P⌝.entails (σs := σs) ⌜Q⌝:= by simp only [entails, idiom_cons, forall_const]
+theorem entails_pure_elim {σ : Type} {σs : List Type} [Inhabited σ] (P Q : Prop) : SPred.entails (σs := σ::σs) ⌜P⌝ ⌜Q⌝ ↔ SPred.entails (σs := σs) ⌜P⌝ ⌜Q⌝ := by simp only [entails, SVal.pure_cons, forall_const]
 
 @[simp]
 theorem entails_true_intro {σs : List Type} (P Q : SPred σs) : ⌜True⌝ ⊢ₛ P → Q ↔ P ⊢ₛ Q := by
   induction σs
-  case nil => simp only [pure, idiom_nil, imp_nil, entails_nil, forall_const]
-  case cons σ σs ih => simp only [entails, idiom_cons, imp, ih]
+  case nil => simp only [SVal.pure_nil, imp_nil, entails_nil, forall_const]
+  case cons σ σs ih => simp only [entails, SVal.pure_cons, imp, ih]

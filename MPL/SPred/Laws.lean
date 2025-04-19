@@ -57,6 +57,11 @@ theorem pure_intro {σs : List Type} {φ : Prop} {P : SPred σs} : φ → P ⊢�
 theorem pure_elim' {σs : List Type} {φ : Prop} {P : SPred σs} : (φ → ⌜True⌝ ⊢ₛ P) → ⌜φ⌝ ⊢ₛ P := by
   induction σs <;> simp_all [entails]
 
+/-! # Idiom -/
+
+theorem idiom_intro {σs : List Type} {P : SPred σs} : P ⊢ₛ ⓈP := by simp
+theorem idiom_elim {σs : List Type} {P : SPred σs} : ⓈP ⊢ₛ P := by simp
+
 /-! # Conjunction -/
 
 theorem and_intro {σs : List Type} {P Q R : SPred σs} (h1 : P ⊢ₛ Q) (h2 : P ⊢ₛ R) : P ⊢ₛ Q ∧ R := by

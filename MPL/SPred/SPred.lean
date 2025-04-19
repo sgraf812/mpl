@@ -12,15 +12,6 @@ abbrev SPred (σs : List Type) : Type := SVal σs Prop
 
 namespace SPred
 
-def idiom {σs : List Type} (P : SVal.EscapeFun σs → Prop) : SPred σs := match σs with
-| [] => P SVal.EscapeFun.id
-| σ :: _ => fun (s : σ) => idiom (fun f => P (SVal.EscapeFun.cons s f))
-@[simp] theorem idiom_nil {P : SVal.EscapeFun [] → Prop} : idiom P = P SVal.EscapeFun.id := rfl
-@[simp] theorem idiom_cons {σs : List Type} {P : SVal.EscapeFun (σ::σs) → Prop} {s : σ} : idiom P s = idiom (fun f => P (SVal.EscapeFun.cons s f)) := rfl
-
-/-- A pure proposition `P : Prop` embedded into `SPred`. For internal use in this module only; prefer to use idiom bracket notation `⌜P⌝. -/
-private abbrev pure {σs : List Type} (P : Prop) : SPred σs := idiom (fun _ => P)
-
 @[ext]
 theorem ext {σs : List Type} {P Q : SPred (σ::σs)} : (∀ s, P s = Q s) → P = Q := funext
 
@@ -28,6 +19,7 @@ def entails {σs : List Type} (P Q : SPred σs) : Prop := match σs with
 | [] => P → Q
 | σ :: _ => ∀ (s : σ), entails (P s) (Q s)
 @[simp] theorem entails_nil {P Q : SPred []} : entails P Q = (P → Q) := rfl
+theorem entails_cons_intro {σs : List Type} {P Q : SPred (σ::σs)} : (∀ s, entails (P s) (Q s)) → entails P Q := by simp only [entails, imp_self]
 
 -- Reducibility of entails must be semi-reducible so that entails_refl is useful for rfl
 
@@ -82,9 +74,9 @@ def «forall» {α} {σs : List Type} (P : α → SPred σs) : SPred σs := matc
 @[simp] theorem forall_cons {σs : List Type} {α} {P : α → SPred (σ::σs)} : «forall» P s = «forall» (fun a => P a s) := rfl
 
 def conjunction {σs : List Type} (env : List (SPred σs)) : SPred σs := match env with
-| [] => pure True
+| [] => SVal.pure True
 | P::env => P.and (conjunction env)
-@[simp] theorem conjunction_nil {σs : List Type} : conjunction ([] : List (SPred σs)) = pure True := rfl
+@[simp] theorem conjunction_nil {σs : List Type} : conjunction ([] : List (SPred σs)) = SVal.pure True := rfl
 @[simp] theorem conjunction_cons {σs : List Type} {P : SPred σs} {env : List (SPred σs)} : conjunction (P::env) = P.and (conjunction env) := rfl
 @[simp] theorem conjunction_apply {σs : List Type} {env : List (SPred (σ::σs))} : conjunction env s = conjunction (env.map (· s)) := by
   induction env <;> simp[conjunction, *]

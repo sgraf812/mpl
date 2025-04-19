@@ -54,8 +54,8 @@ protected theorem ReaderT.wp_read [Monad m] [WPMonad m psm] :
       PredTrans.pushArg_apply, PredTrans.map_apply, PredTrans.get]
 
 theorem ReaderT.read_apply [Monad m] [WPMonad m psm] :
-  wp⟦MonadReaderOf.read : ReaderT ρ m ρ⟧.apply Q = fun r => Q.1 r r  := by
-    simp only [ReaderT.wp_read, PredTrans.get_apply]
+  wp⟦MonadReaderOf.read : ReaderT ρ m ρ⟧.apply Q = Ⓢ Q.1 ‹ρ›ₛ  := by
+    ext; simp[ReaderT.wp_read, PredTrans.get_apply]
 
 theorem MonadReaderOf.read_apply [MonadReaderOf ρ m] [MonadLift m n] [WP n _] :
   wp⟦MonadReaderOf.read : n ρ⟧.apply Q = wp⟦MonadLift.monadLift (MonadReader.read : m ρ) : n ρ⟧.apply Q := rfl
@@ -74,8 +74,8 @@ protected theorem StateT.wp_get [Monad m] [WPMonad m psm] :
       PredTrans.pushArg_apply, PredTrans.get]
 
 theorem StateT.get_apply [Monad m] [WPMonad m psm] :
-  wp⟦MonadStateOf.get : StateT σ m σ⟧.apply Q = fun s => Q.1 s s := by
-    simp only [StateT.wp_get, PredTrans.get_apply]
+  wp⟦MonadStateOf.get : StateT σ m σ⟧.apply Q = Ⓢ Q.1 ‹σ›ₛ := by
+    ext; simp[StateT.wp_get, PredTrans.get_apply]
 
 theorem MonadStateOf.get_apply [MonadStateOf σ m] [MonadLift m n] [WP n _] :
   wp⟦MonadStateOf.get : n σ⟧.apply Q = wp⟦MonadLift.monadLift (MonadStateOf.get : m σ) : n σ⟧.apply Q := rfl
