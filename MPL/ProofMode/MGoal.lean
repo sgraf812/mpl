@@ -37,10 +37,9 @@ def Hyp.toExpr (hyp : Hyp) : Expr :=
 -- set_option pp.all true in
 -- #check ⌜True⌝
 def emptyHyp (σs : Expr) : Expr := -- ⌜True⌝ standing in for an empty conjunction of hypotheses
-  mkApp3 (mkConst ``SVal.pure) (.sort .zero) σs (mkConst ``True)
---  mkApp2 (mkConst ``SPred.idiom) σs <| mkLambda `escape .default (mkApp (mkConst ``SVal.EscapeFun) σs) (mkConst ``True)
+  mkApp2 (mkConst ``SPred.idiom) σs <| mkLambda `escape .default (mkApp (mkConst ``SVal.EscapeFun) σs) (mkConst ``True)
 def parseEmptyHyp? : Expr → Option Expr
-  | mkApp3 (.const ``SVal.pure _) (.sort .zero) σs (.const ``True _) => some σs
+  | mkApp2 (.const ``SPred.idiom _) σs (.lam _ _ (.const ``True _) _) => some σs
   | _ => none
 
 def pushLeftConjunct (pos : SubExpr.Pos) : SubExpr.Pos :=

@@ -45,33 +45,21 @@ partial def unpack [Monad m] [MonadRef m] [MonadQuotation m] : Term → m Term
   | `(($P : $t))             => do ``(($(← unpack P) : $t))
   | `($t)                    => `($t)
 
--- `SVal` idiom notation.
-/-- Start an idiom notation block (`SVal.idiom`).
-This will capture the state tuple of the ambient `SVal`
-and makes it available in pure expressions through `#t` notation. -/
-syntax:lead "Ⓢ" term:lead : term
-/-- Syntax for `SVal.pure` to embed pure values into `SVal`. -/
-syntax "⌜" term "⌝" : term
-/-- Use state tuple selector `t` in `SVal` idiom notation.
-Implemented by `SVal.uncurry t (by assumption)`. -/
-syntax:max "#" term:max : term
-/-- Like ‹t› in `SVal`, but selects the state variable with
-corresponding type from the ambient state tuple. -/
-syntax "‹" term "›ₛ" : term
-
 -- Now the actual logic.
+/-- Embedding of pure Lean propositions into `SPred`. -/
+syntax "⌜" term "⌝" : term
 /-- Entailment in `SPred`. -/
 syntax:25 term:26 " ⊢ₛ " term:25 : term
 /-- Tautology in `SPred`. -/
 syntax:25 "⊢ₛ " term:25 : term
 /-- Bi-entailment in `SPred`. -/
 syntax:25 term:25 " ⊣⊢ₛ " term:25 : term
+/-- ‹t› in `SPred`. -/
+syntax "‹" term "›ₛ" : term
+/-- Use getter `t` in `SPred` idiom notation. -/
+syntax:max "#" term:max : term
 
 macro_rules
-  | `(Ⓢ $t) => ``(SVal.idiom (fun _ => spred($t)))
-  | `(⌜$t⌝) => ``(SVal.pure ($t))
-  | `(#$t) => `(SVal.uncurry $t (by assumption))
-  | `(‹$t›ₛ) => `(#(SVal.getThe $t))
   | `($P ⊢ₛ $Q) => ``(SPred.entails spred($P) spred($Q))
   | `(spred($P ∧ $Q)) => ``(SPred.and spred($P) spred($Q))
   | `(spred($P ∨ $Q)) => ``(SPred.or spred($P) spred($Q))
@@ -79,7 +67,10 @@ macro_rules
   | `(spred($P → $Q)) => ``(SPred.imp spred($P) spred($Q))
   | `(spred($P ↔ $Q)) => ``(SPred.iff spred($P) spred($Q))
   | `(spred(∃ $xs:explicitBinders, $P)) => do expandExplicitBinders ``SPred.exists xs (← `(spred($P)))
-  | `(⊢ₛ $P) => ``(⌜True⌝ ⊢ₛ $P)
+  | `(⌜$t⌝) => ``(SPred.idiom (fun escape => $t))
+  | `(#$t) => `(SVal.GetTy.applyEscape $t (by assumption))
+  | `(‹$t›ₛ) => `(#(SVal.getThe $t))
+  | `(⊢ₛ $P) => ``(SPred.entails ⌜True⌝ spred($P))
   | `($P ⊣⊢ₛ $Q) => ``(SPred.bientails spred($P) spred($Q))
   -- Sadly, ∀ does not resently use expandExplicitBinders...
   | `(spred(∀ _%$tk, $P)) => ``(SPred.forall (fun _%$tk => spred($P)))
@@ -94,10 +85,10 @@ macro_rules
 
 private abbrev theNat : SVal [Nat, Bool] Nat := fun n b => n
 example (P Q : SPred [Nat, Bool]): SPred [Char, Nat, Bool] :=
-  spred(fun c => ((∀ y, if y = 4 then Ⓢ⌜y = #theNat⌝ ∧ P else Q) ∧ Q) → (∃ x, P → if (x : Bool) then Q else P))
+  spred(fun c => ((∀ y, if y = 4 then ⌜y = #theNat⌝ ∧ P else Q) ∧ Q) → (∃ x, P → if (x : Bool) then Q else P))
 
 #check fun P Q => spred(fun n => ((∀ y, if y = n then P else Q) ∧ Q) → P → (∃ x, P → if (x : Bool) then Q else P))
-#check fun P Q => spred(fun n => ((∀ y, if y = n then Ⓢ⌜‹Nat›ₛ = 4⌝ else Q) ∧ Q) → P → (∃ x, P → if (x : Bool) then Q else P))
+#check fun P Q => spred(fun n => ((∀ y, if y = n then ⌜‹Nat›ₛ = 4⌝ else Q) ∧ Q) → P → (∃ x, P → if (x : Bool) then Q else P))
 
 app_unexpand_rule SPred.entails
   | `($_ $P $Q)  => do
@@ -109,14 +100,12 @@ app_unexpand_rule SPred.bientails
   | `($_ $P $Q)  => do
     let P ← unpack P; let Q ← unpack Q;
     ``($P ⊣⊢ₛ $Q)
-app_unexpand_rule SVal.pure
-  | `($_ $t $ts*) => if ts.isEmpty then ``(⌜$t⌝) else ``(⌜$t⌝ $ts*)
-app_unexpand_rule SVal.idiom
+app_unexpand_rule SPred.idiom
   | `($_ $t $ts*) => do
     match t with
-    | `(fun $_ => $e) => if ts.isEmpty then ``(Ⓢ$e) else ``((Ⓢ$e) $ts*)
+    | `(fun $_ => $e) => if ts.isEmpty then ``(⌜$e⌝) else ``(⌜$e⌝ $ts*)
     | _ => throw ()
-app_unexpand_rule SVal.uncurry
+app_unexpand_rule SVal.GetTy.applyEscape
   | `($_ $f $_) => do
     match f with
     | `(SVal.getThe $t) => ``(‹$t›ₛ)
@@ -157,6 +146,8 @@ app_unexpand_rule SPred.iff
     ``(spred($P ↔ $Q))
 
 #check fun P Q => spred(fun n => ((∀ y, if y = n then P else ⌜True⌝) ∧ Q) → P → (∃ x, P → if (x : Bool) then Q else P))
-#check fun P Q => spred(fun n => ((∀ y, if y = n then Ⓢ⌜‹Nat›ₛ + #theNat = 4⌝ else Q) ∧ Q) → P → (∃ x, P → if (x : Bool) then Q else P))
+#check fun P Q => spred(fun n => ((∀ y, if y = n then ⌜4 = ‹Nat›ₛ⌝ else Q) ∧ Q) → P → (∃ x, P → if (x : Bool) then Q else P))
+#check fun P Q => spred(fun n => ((∀ y, if y = n then ⌜‹Nat›ₛ + ‹Nat›ₛ = 4⌝ else Q) ∧ Q) → P → (∃ x, P → if (x : Bool) then Q else P))
+#check fun P Q => spred(fun n => ((∀ y, if y = n then ⌜‹Nat›ₛ + #theNat = 4⌝ else Q) ∧ Q) → P → (∃ x, P → if (x : Bool) then Q else P))
 -- Unexpansion should work irrespective of binder name for `f`/`escape`:
-#check ∀ (a b n o : Nat) (s : Nat × Nat), (SVal.idiom fun f => ⌜a = n ∧ b = o⌝) ⊢ₛ SVal.idiom fun f => ⌜s.1 = n ∧ a = n + 1 ∧ b = o⌝
+#check ∀ (a b n o : Nat) (s : Nat × Nat), (SPred.idiom fun f => a = n ∧ b = o) ⊢ₛ SPred.idiom fun f => s.1 = n ∧ a = n + 1 ∧ b = o
