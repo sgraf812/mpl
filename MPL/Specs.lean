@@ -65,7 +65,7 @@ theorem Zipper.atSuff_tail (l : List α) (h : hd::tl <:+ l): (Zipper.atSuff h).t
 
 end List
 
-theorem Specs.forIn_list {α : Type} {β : Type} ⦃m : Type → Type v⦄ {ps : PredShape}
+theorem Specs.forIn_list {α : Type} {β : Type} {m : Type → Type v} {ps : PredShape}
   [Monad m] [LawfulMonad m] [WPMonad m ps]
   {xs : List α} {init : β} {f : α → β → m (ForInStep β)}
   (inv : PostCond (β × List.Zipper xs) ps)
@@ -97,7 +97,7 @@ theorem Specs.forIn_list {α : Type} {β : Type} ⦃m : Type → Type v⦄ {ps :
 
 -- using the postcondition as a constant invariant:
 @[spec]
-theorem Specs.forIn_list_const_inv {α : Type} {β : Type} ⦃m : Type → Type v⦄ {ps : PredShape}
+theorem Specs.forIn_list_const_inv {α : Type} {β : Type} {m : Type → Type v} {ps : PredShape}
   [Monad m] [LawfulMonad m] [WPMonad m ps]
   {xs : List α} {init : β} {f : α → β → m (ForInStep β)}
   {inv : PostCond β ps}
@@ -108,7 +108,7 @@ theorem Specs.forIn_list_const_inv {α : Type} {β : Type} ⦃m : Type → Type 
   ⦃inv.1 init⦄ forIn xs init f ⦃inv⦄ :=
     Specs.forIn_list (fun p => inv.1 p.1, inv.2) (fun b _ hd _ _ => step hd b)
 
-theorem Specs.foldlM_list {α : Type} {β : Type} ⦃m : Type → Type v⦄ {ps : PredShape}
+theorem Specs.foldlM_list {α : Type} {β : Type} {m : Type → Type v} {ps : PredShape}
   [Monad m] [LawfulMonad m] [WPMonad m ps]
   {xs : List α} {init : β} {f : β → α → m β}
   (inv : PostCond (β × List.Zipper xs) ps)
@@ -126,7 +126,7 @@ theorem Specs.foldlM_list {α : Type} {β : Type} ⦃m : Type → Type v⦄ {ps 
 
 -- using the postcondition as a constant invariant:
 @[spec]
-theorem Specs.foldlM_list_const_inv {α : Type} {β : Type} ⦃m : Type → Type v⦄ {ps : PredShape}
+theorem Specs.foldlM_list_const_inv {α : Type} {β : Type} {m : Type → Type v} {ps : PredShape}
   [Monad m] [LawfulMonad m] [WPMonad m ps]
   {xs : List α} {init : β} {f : β → α → m β}
   {inv : PostCond β ps}
@@ -136,5 +136,47 @@ theorem Specs.foldlM_list_const_inv {α : Type} {β : Type} ⦃m : Type → Type
       ⦃(fun b' => inv.1 b', inv.2)⦄) :
   ⦃inv.1 init⦄ List.foldlM f init xs ⦃inv⦄ :=
     Specs.foldlM_list (fun p => inv.1 p.1, inv.2) (fun b _ hd _ _ => step hd b)
+
+theorem Specs.forIn_list' {α : Type} {β : Type} {m : Type → Type v} {ps : PredShape}
+  [Monad m] [LawfulMonad m] [WPMonad m ps]
+  {xs : List α} {init : β} {f : α → β → m (ForInStep β)}
+  (inv : PostCond (β × List.Zipper xs) ps)
+  (step : ∀ b rpref x suff (h : xs = rpref.reverse ++ x :: suff),
+      ⦃inv.1 (b, ⟨rpref, x::suff, by simp[h]⟩)⦄
+      f x b
+      ⦃(fun r => match r with
+                 | .yield b' => inv.1 (b', ⟨x::rpref, suff, by simp[h]⟩)
+                 | .done b' => inv.1 (b', ⟨xs.reverse, [], by simp⟩), inv.2)⦄) :
+  ⦃inv.1 (init, ⟨[], xs, by simp⟩)⦄ forIn xs init f ⦃(fun b => inv.1 (b, ⟨xs.reverse, [], by simp⟩), inv.2)⦄ := sorry
+
+/-
+open Lean Elab Term Command in
+elab "mycheck " "(" e:term " : " ty:term ")" : command => runTermElabM fun _ => Term.withDeclName `_check do
+  let ty ← elabTerm (← `(($e : $ty))) none
+  synthesizeSyntheticMVarsNoPostponing
+--  let e ← elabTermEnsuringType e ty
+  return
+
+mycheck (Specs.forIn_list' (ps := PredShape.arg Nat PredShape.pure)
+    (fun (r, xs) s => (r.1 = none ∧ r.2 = xs.rpref.sum ∧ r.2 ≤ 4 ∨ r.1 = some 42 ∧ r.2 > 4) ∧ s = 4, ()) sorry
+    :
+    ⦃_⦄ (@forIn (StateT Nat Idd) (List Nat) Nat _ (MProd (Option Nat) Nat) _ (List.range' 1 (4 - 1) 1)
+            ⟨none, 0⟩ fun i r =>
+            if r.snd + i > 4 then pure (ForInStep.done ⟨some 42, r.snd + i⟩)
+            else do
+              pure PUnit.unit
+              pure (ForInStep.yield ⟨none, r.snd + i⟩)) ⦃_⦄)
+-/
+
+#check (Specs.forIn_list' (ps := PredShape.arg Nat PredShape.pure)
+    (fun (r, xs) s => (r.1 = none ∧ r.2 = xs.rpref.sum ∧ r.2 ≤ 4 ∨ r.1 = some 42 ∧ r.2 > 4) ∧ s = 4, ()) sorry
+    :
+    ⦃_⦄ (@forIn (StateT Nat Idd) (List Nat) Nat _ (MProd (Option Nat) Nat) _ (List.range' 1 (4 - 1) 1)
+            ⟨none, 0⟩ fun i r =>
+            if r.snd + i > 4 then pure (ForInStep.done ⟨some 42, r.snd + i⟩)
+            else do
+              pure PUnit.unit
+              pure (ForInStep.yield ⟨none, r.snd + i⟩)) ⦃_⦄)
+
 
 end MPL

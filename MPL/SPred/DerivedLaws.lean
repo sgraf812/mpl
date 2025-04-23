@@ -24,7 +24,8 @@ theorem or_intro_r' (h : P ⊢ₛ R) : P ⊢ₛ Q ∨ R := h.trans or_intro_r
 theorem and_symm : P ∧ Q ⊢ₛ Q ∧ P := and_intro and_elim_r and_elim_l
 theorem or_symm : P ∨ Q ⊢ₛ Q ∨ P := or_elim or_intro_r or_intro_l
 theorem imp_intro' (h : Q ∧ P ⊢ₛ R) : P ⊢ₛ Q → R := imp_intro <| and_symm.trans h
-theorem mp (h1 : P ⊢ₛ Q → R) (h2 : P ⊢ₛ Q) : P ⊢ₛ R := (and_intro .rfl h2).trans (imp_elim h1)
+theorem entails.trans' (h₁ : P ⊢ₛ Q) (h₂ : P ∧ Q ⊢ₛ R) : P ⊢ₛ R := (and_intro .rfl h₁).trans h₂
+theorem mp (h₁ : P ⊢ₛ Q → R) (h₂ : P ⊢ₛ Q) : P ⊢ₛ R := entails.trans' h₂ (imp_elim h₁)
 theorem imp_elim' (h : Q ⊢ₛ P → R) : P ∧ Q ⊢ₛ R := and_symm.trans <| imp_elim h
 theorem imp_elim_l : (P → Q) ∧ P ⊢ₛ Q := imp_elim .rfl
 theorem imp_elim_r : P ∧ (P → Q) ⊢ₛ Q := imp_elim' .rfl
@@ -126,6 +127,9 @@ theorem pure_forall {φ : α → Prop} : (∀ x, (⌜φ x⌝ : SPred σs)) ⊣�
   · exact pure_intro fun x => Classical.not_not.1 <| mt (⟨x, ·⟩) h
 
 theorem pure_exists {φ : α → Prop} : (∃ x, ⌜φ x⌝ : SPred σs) ⊣⊢ₛ ⌜∃ x, φ x⌝ := bientails.iff.mpr ⟨exists_elim fun a => pure_mono (⟨a, ·⟩), pure_elim' fun ⟨x, h⟩ => (pure_intro h).trans (exists_intro' x .rfl)⟩
+
+theorem true_intro_simp : (Q ⊢ₛ ⌜True⌝) ↔ True := iff_true_intro SPred.true_intro
+theorem true_intro_simp_nil {Q : SPred []} : (Q ⊢ₛ True) ↔ True := SPred.true_intro_simp
 
 /-! # Miscellaneous -/
 

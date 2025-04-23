@@ -28,6 +28,8 @@ def entails {σs : List Type} (P Q : SPred σs) : Prop := match σs with
 | [] => P → Q
 | σ :: _ => ∀ (s : σ), entails (P s) (Q s)
 @[simp] theorem entails_nil {P Q : SPred []} : entails P Q = (P → Q) := rfl
+theorem entails_cons {σs : List Type} {P Q : SPred (σ::σs)} : entails P Q = (∀ s, entails (P s) (Q s)) := rfl
+theorem entails_cons_intro {σs : List Type} {P Q : SPred (σ::σs)} : (∀ s, entails (P s) (Q s)) → entails P Q := by simp only [entails, imp_self]
 
 -- Reducibility of entails must be semi-reducible so that entails_refl is useful for rfl
 
@@ -37,6 +39,7 @@ def bientails {σs : List Type} (P Q : SPred σs) : Prop := match σs with
 | [] => P ↔ Q
 | σ :: _ => ∀ (s : σ), bientails (P s) (Q s)
 @[simp] theorem bientails_nil {P Q : SPred []} : bientails P Q = (P ↔ Q) := rfl
+theorem bientails_cons {σs : List Type} {P Q : SPred (σ::σs)} : bientails P Q = (∀ s, bientails (P s) (Q s)) := rfl
 theorem bientails_cons_intro {σs : List Type} {P Q : SPred (σ::σs)} : (∀ s, bientails (P s) (Q s)) → bientails P Q := by simp only [bientails, imp_self]
 
 def and {σs : List Type} (P Q : SPred σs) : SPred σs := match σs with

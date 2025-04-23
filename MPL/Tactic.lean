@@ -14,6 +14,8 @@ namespace MPL
 
 open Lean Meta Elab Tactic
 
+theorem _root_.MPL.SPred.imp_self_simp : (Q ⊢ₛ P → P) ↔ True := iff_true_intro SPred.imp_self
+
 theorem wp_apply_triple_conseq {m : Type → Type} {ps : PredShape} [WP m ps] {α} {x : m α} {P : PreCond ps} {Q Q' : PostCond α ps}
   (h : ⦃P⦄ x ⦃Q⦄) (hpost : SPred.entails (wp⟦x⟧.apply Q) (wp⟦x⟧.apply Q')) :
   P.entails (wp⟦x⟧.apply Q') := SPred.entails.trans h hpost
@@ -51,6 +53,9 @@ theorem ite_extrude_yield {c : Prop} [Decidable c] {x y : α} :
 
 attribute [wp_simp]
   eq_self
+  SPred.imp_self_simp
+  SPred.true_intro_simp
+  SPred.true_intro_simp_nil
   PostCond.entails FailConds.entails_false FailConds.entails_refl FailConds.entails_true FailConds.pure_def SPred.entails.refl
   -- Lawful monad normalization that we don't appear to be needing!
   -- bind_pure_comp map_pure id_map' ExceptT.map_throw bind_map bind_map_left bind_pure pure_bind bind_assoc
@@ -151,8 +156,8 @@ syntax "xapp" (ppSpace colGt term)? : tactic
 macro_rules
   | `(tactic| xapp_no_simp)       => `(tactic| ((try xbind); xapp_no_xbind))
   | `(tactic| xapp_no_simp $spec) => `(tactic| ((try xbind); xapp_no_xbind $spec))
-  | `(tactic| xapp)               => `(tactic| xapp_no_simp <;> try simp +contextual only [gt_iff_lt, Prod.mk_le_mk, le_refl, and_true, PostCond.entails, FailConds.entails_false, FailConds.entails_refl, FailConds.entails_true, FailConds.pure_def, SPred.entails.refl])
-  | `(tactic| xapp $spec)         => `(tactic| xapp_no_simp $spec <;> ((try simp +contextual only [gt_iff_lt, Prod.mk_le_mk, le_refl, and_true, PostCond.entails, FailConds.entails_false, FailConds.entails_refl, FailConds.entails_true, FailConds.pure_def, SPred.entails.refl]); try (guard_target = (_ : Prop); trivial)))
+  | `(tactic| xapp)               => `(tactic| xapp_no_simp <;> try simp +contextual only [gt_iff_lt, Prod.mk_le_mk, le_refl, and_true, PostCond.entails, FailConds.entails_false, FailConds.entails_refl, FailConds.entails_true, FailConds.pure_def, SPred.entails.refl, *])
+  | `(tactic| xapp $spec)         => `(tactic| xapp_no_simp $spec <;> ((try simp +contextual only [gt_iff_lt, Prod.mk_le_mk, le_refl, and_true, PostCond.entails, FailConds.entails_false, FailConds.entails_refl, FailConds.entails_true, FailConds.pure_def, SPred.entails.refl, *]); try (guard_target = (_ : Prop); trivial)))
 
 elab "xapp2_no_xbind" spec:optional(term) : tactic => withMainContext do
   xapp_n_no_xbind (← getMainGoal) spec ``wp_apply_triple_conseq
@@ -177,15 +182,14 @@ example :
     for i in [1:s] do { x := x + i; if x > 4 then throw 42 }
     (set 1 : ExceptT Nat (StateT Nat Idd) PUnit)
     return x
-  ⦃(fun r s => False,
-    fun e s => e = 42 ∧ s = 4,
-    ())⦄ := by
+  ⦃⟨fun r s => False,
+    (fun e s => e = 42 ∧ s = 4,
+     ())⟩⦄ := by
   xstart
   intro s hs
   xwp
   -- xbind -- optional
-  xapp (Specs.forIn_list (fun (r, xs) s => r ≤ 4 ∧ s = 4 ∧ r + xs.suff.sum > 4, fun e s => e = 42 ∧ s = 4, ()) ?step)
-  case pre => simp only [hs]; conv in (List.sum _) => { whnf }; simp
+  xapp (Specs.forIn_list ⟨fun (r, xs) s => r ≤ 4 ∧ s = 4 ∧ r + xs.suff.sum > 4, (fun e s => e = 42 ∧ s = 4, ())⟩ ?step)
   case step =>
     intro b _rpref x suff _h
     xstart

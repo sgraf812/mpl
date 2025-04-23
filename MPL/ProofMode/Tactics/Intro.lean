@@ -23,11 +23,12 @@ partial def mIntroStep (goal : MGoal) (ident : TSyntax ``binderIdent) (k : MGoal
   let prf := mkApp7 (mkConst ``Intro.intro) σs P Q H T hand prf
   return prf
 
-private partial def betaRevPreservingHypNames (e : Expr) (args : Array Expr) : Expr :=
+private partial def betaRevPreservingHypNames (σs' e : Expr) (args : Array Expr) : Expr :=
   if let some hyp := parseHyp? e then
     { hyp with p := hyp.p.betaRev args }.toExpr
-  else if let some (σs, lhs, rhs) := parseAnd? e then
-    mkAnd! σs (betaRevPreservingHypNames lhs args) (betaRevPreservingHypNames rhs args)
+  else if let some (_σs, lhs, rhs) := parseAnd? e then
+    -- _σs = σ :: σs'
+    mkAnd! σs' (betaRevPreservingHypNames σs' lhs args) (betaRevPreservingHypNames σs' rhs args)
   else
     e.betaRev args
 
@@ -38,7 +39,7 @@ partial def mForallIntroStep (goal : MGoal) (ident : TSyntax ``binderIdent) (k :
   | `(binderIdent| $name:ident) => pure name.getId
   | `(binderIdent| $_) => mkFreshUserName `s
   withLocalDeclD name σ fun s => do
-    let H := betaRevPreservingHypNames goal.hyps #[s]
+    let H := betaRevPreservingHypNames σs' goal.hyps #[s]
     let T := goal.target.betaRev #[s]
     let prf ← mkLambdaFVars #[s] (← k { σs:=σs', hyps:=H, target:=T })
     return mkApp5 (mkConst ``SPred.entails_cons_intro) σ σs' goal.hyps goal.target prf

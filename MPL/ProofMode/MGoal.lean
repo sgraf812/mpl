@@ -13,6 +13,9 @@ instance : PropAsEntails (⊢ₛ P) P where
 instance : PropAsEntails (P ⊢ₛ Q) spred(P → Q) where
   prop_as_entails := (SPred.entails_true_intro P Q).symm
 
+instance : PropAsEntails (σs := []) φ φ where
+  prop_as_entails := true_imp_iff.symm
+
 theorem start_entails (φ : Prop) [PropAsEntails φ P] : (⊢ₛ P) → φ :=
   PropAsEntails.prop_as_entails.mpr
 

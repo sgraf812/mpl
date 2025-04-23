@@ -4,7 +4,7 @@ import MPL.PostCond
 namespace MPL
 
 def PredTrans.Mono {ps : PredShape} {α : Type} (x : PostCond α ps → PreCond ps) : Prop :=
-  ∀ Q₁ Q₂, Q₁.entails Q₂ → (x Q₁).entails (x Q₂)
+  ∀ Q₁ Q₂, (Q₁ ⊢ₚ Q₂) → (x Q₁) ⊢ₛ (x Q₂)
 
 @[ext]
 structure PredTrans (ps : PredShape) (α : Type) : Type where
@@ -15,7 +15,7 @@ def PredTrans.const {ps : PredShape} {α : Type} (p : PreCond ps) : PredTrans ps
   ⟨fun _ => p, fun _ _ _ => SPred.entails.refl _⟩
 
 def PredTrans.le {ps : PredShape} {α : Type} (x y : PredTrans ps α) : Prop :=
-  ∀ Q, (y.apply Q).entails (x.apply Q) -- the weaker the precondition, the smaller the PredTrans
+  ∀ Q, y.apply Q ⊢ₛ x.apply Q -- the weaker the precondition, the smaller the PredTrans
 instance : LE (PredTrans ps α) := ⟨PredTrans.le⟩
 
 def PredTrans.pure {ps : PredShape} {α : Type} (a : α) : PredTrans ps α :=
