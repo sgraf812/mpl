@@ -1,22 +1,19 @@
+/-
+Copyright (c) 2022 Lars König. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE.
+Authors: Lars König, Mario Carneiro, Sebastian Graf
+-/
 import MPL.ProofMode.Tactics.Basic
 import MPL.ProofMode.Tactics.Intro
 import MPL.ProofMode.Tactics.Pure
 import MPL.ProofMode.Tactics.Assumption
 import MPL.WP
-import MPL.SpecAttr
+import MPL.Specs -- important for MPL.Specs.bind
 
 namespace MPL.ProofMode.Tactics
 open Lean Elab Tactic Meta
 
 initialize registerTraceClass `mpl.tactics.spec
-
-@[spec]
-theorem _root_.MPL.Specs.pure {m : Type → Type} {ps : PredShape} [Monad m] [WPMonad m ps] {α} {a : α} {Q : PostCond α ps} :
-  ⦃Q.1 a⦄ (pure (f:=m) a) ⦃Q⦄ := triple_pure a .rfl
-
-@[spec]
-theorem _root_.MPL.Specs.bind {m : Type → Type} {ps : PredShape} [Monad m] [WPMonad m ps] {α β} {x : m α} {f : α → m β} {Q : PostCond β ps} :
-  ⦃wp⟦x⟧.apply (fun a => wp⟦f a⟧.apply Q, Q.2)⦄ (x >>= f) ⦃Q⦄ := triple_bind x f .rfl (fun _ => .rfl)
 
 theorem Spec.apply {m : Type → Type} {ps : PredShape} [WP m ps] {α} {x : m α} {P : PreCond ps} {Q Q' : PostCond α ps}
   (h : ⦃P⦄ x ⦃Q⦄) (hpost : SPred.entails (wp⟦x⟧.apply Q) (wp⟦x⟧.apply Q')) :

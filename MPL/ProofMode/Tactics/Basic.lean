@@ -1,3 +1,8 @@
+/-
+Copyright (c) 2022 Lars König. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE.
+Authors: Lars König, Mario Carneiro, Sebastian Graf
+-/
 import Lean
 import MPL.ProofMode.MGoal
 
@@ -22,7 +27,7 @@ def mStart (mvar : MVarId) : MetaM (MVarId × MGoal) := mvar.withContext do
   let prf := mkApp4 (mkConst ``ProofMode.start_entails) σs P goal inst
 
   let goal : MGoal := { σs,  hyps := emptyHyp σs, target := P }
-  let subgoal /- : Quoted q(⊢ₛ $P)-/ ←
+  let subgoal ←
     mkFreshExprSyntheticOpaqueMVar goal.toExpr (← mvar.getTag)
   mvar.assign (mkApp prf subgoal)
   let goal := { goal with target := ← instantiateMVars goal.target }

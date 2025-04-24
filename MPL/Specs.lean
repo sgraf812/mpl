@@ -1,3 +1,8 @@
+/-
+Copyright (c) 2025 Lean FRO LLC. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE.
+Authors: Sebastian Graf
+-/
 import MPL.Triple
 import MPL.SpecAttr
 
@@ -64,6 +69,14 @@ theorem Zipper.atSuff_tail (l : List α) (h : hd::tl <:+ l): (Zipper.atSuff h).t
   case cons hd' tl' ih => sorry -- later
 
 end List
+
+@[spec]
+theorem Specs.pure {m : Type → Type} {ps : PredShape} [Monad m] [WPMonad m ps] {α} {a : α} {Q : PostCond α ps} :
+  ⦃Q.1 a⦄ (pure (f:=m) a) ⦃Q⦄ := triple_pure a .rfl
+
+@[spec]
+theorem Specs.bind {m : Type → Type} {ps : PredShape} [Monad m] [WPMonad m ps] {α β} {x : m α} {f : α → m β} {Q : PostCond β ps} :
+  ⦃wp⟦x⟧.apply (fun a => wp⟦f a⟧.apply Q, Q.2)⦄ (x >>= f) ⦃Q⦄ := triple_bind x f .rfl (fun _ => .rfl)
 
 theorem Specs.forIn_list {α : Type} {β : Type} {m : Type → Type v} {ps : PredShape}
   [Monad m] [LawfulMonad m] [WPMonad m ps]

@@ -1,3 +1,8 @@
+/-
+Copyright (c) 2025 Lean FRO LLC. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE.
+Authors: Sebastian Graf
+-/
 namespace MPL
 
 class MonadMorphism (m : Type → Type u) (n : Type → Type v) [Monad m] [Monad n] (morph : ∀ {α}, m α → n α) where

@@ -1,5 +1,13 @@
+/-
+Copyright (c) 2025 Lean FRO LLC. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE.
+Authors: Son Ho, Sebastian Graf
+-/
 import Lean
 import MPL.Triple
+
+-- This file is based on
+-- https://github.com/AeneasVerif/aeneas/blob/6ff714176180068bd3873af759d26a7053f4a795/backends/lean/Aeneas/Progress/Init.lean
 
 namespace MPL
 
@@ -72,7 +80,7 @@ initialize specAttr : SpecAttr ← do
   let ext ← mkDiscrTreeExtension `specMap
   let attrImpl : AttributeImpl := {
     name := `spec
-    descr := "Marks theorems to use with the `xapp` tactic"
+    descr := "Marks theorems to use with the `mspec` tactic"
     add := fun thName stx attrKind => do
       Attribute.Builtin.ensureNoArgs stx
       -- TODO: use the attribute kind
