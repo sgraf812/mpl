@@ -44,21 +44,28 @@ partial def unpack [Monad m] [MonadRef m] [MonadQuotation m] : Term → m Term
   | `(($P : $t))             => do ``(($(← unpack P) : $t))
   | `($t)                    => `($t)
 
--- Now the actual logic.
-/-- Embedding of pure Lean propositions into `SPred`. -/
+-- Idiom notation
+
+/-- Embedding of pure Lean values into `SVal`. -/
 syntax "⌜" term "⌝" : term
-/-- Entailment in `SPred`. -/
-syntax:25 term:26 " ⊢ₛ " term:25 : term
-/-- Tautology in `SPred`. -/
-syntax:25 "⊢ₛ " term:25 : term
-/-- Bi-entailment in `SPred`. -/
-syntax:25 term:25 " ⊣⊢ₛ " term:25 : term
-/-- ‹t› in `SPred`. -/
+/-- ‹t› in `SVal`. -/
 syntax "‹" term "›ₛ" : term
-/-- Use getter `t` in `SPred` idiom notation. -/
+/-- Use getter `t` in `SVal` idiom notation. -/
 syntax:max "#" term:max : term
 
+-- Now the actual logic
+
+/-- Entailment in `SPred`; sugar for `SPred.entails`. -/
+syntax:25 term:26 " ⊢ₛ " term:25 : term
+/-- Tautology in `SPred`; sugar for `SPred.entails ⌜True⌝`. -/
+syntax:25 "⊢ₛ " term:25 : term
+/-- Bi-entailment in `SPred`; sugar for `SPred.bientails`. -/
+syntax:25 term:25 " ⊣⊢ₛ " term:25 : term
+
 macro_rules
+  | `(⌜$t⌝) => ``(SVal.curry (fun tuple => $t))
+  | `(#$t) => `(SVal.uncurry $t (by assumption))
+  | `(‹$t›ₛ) => `(#(SVal.getThe $t))
   | `($P ⊢ₛ $Q) => ``(SPred.entails spred($P) spred($Q))
   | `(spred($P ∧ $Q)) => ``(SPred.and spred($P) spred($Q))
   | `(spred($P ∨ $Q)) => ``(SPred.or spred($P) spred($Q))
@@ -66,9 +73,6 @@ macro_rules
   | `(spred($P → $Q)) => ``(SPred.imp spred($P) spred($Q))
   | `(spred($P ↔ $Q)) => ``(SPred.iff spred($P) spred($Q))
   | `(spred(∃ $xs:explicitBinders, $P)) => do expandExplicitBinders ``SPred.exists xs (← `(spred($P)))
-  | `(⌜$t⌝) => ``(SPred.idiom (fun escape => $t))
-  | `(#$t) => `(SVal.GetTy.applyEscape $t (by assumption))
-  | `(‹$t›ₛ) => `(#(SVal.getThe $t))
   | `(⊢ₛ $P) => ``(SPred.entails ⌜True⌝ spred($P))
   | `($P ⊣⊢ₛ $Q) => ``(SPred.bientails spred($P) spred($Q))
   -- Sadly, ∀ does not resently use expandExplicitBinders...
@@ -82,6 +86,16 @@ macro_rules
   | `(spred(∀ ($x:ident : $ty) $xs*, $P)) => ``(SPred.forall (fun $x : $ty => spred(∀ $xs*, $P)))
   | `(spred(∀ ($x:ident $xs* : $ty) $ys*, $P)) => ``(SPred.forall (fun $x : $ty => spred(∀ ($xs* : $ty) $ys*, $P)))
 
+app_unexpand_rule SVal.curry
+  | `($_ $t $ts*) => do
+    match t with
+    | `(fun $_ => $e) => if ts.isEmpty then ``(⌜$e⌝) else ``(⌜$e⌝ $ts*)
+    | _ => throw ()
+app_unexpand_rule SVal.uncurry
+  | `($_ $f $_ $ts*) => do
+    match f with
+    | `(SVal.getThe $t) => if ts.isEmpty then ``(‹$t›ₛ) else ``(‹$t›ₛ $ts*)
+    | t => if ts.isEmpty then ``(#$t) else ``(#$t $ts*)
 app_unexpand_rule SPred.entails
   | `($_ $P $Q)  => do
     let P ← unpack P; let Q ← unpack Q;
@@ -92,16 +106,6 @@ app_unexpand_rule SPred.bientails
   | `($_ $P $Q)  => do
     let P ← unpack P; let Q ← unpack Q;
     ``($P ⊣⊢ₛ $Q)
-app_unexpand_rule SPred.idiom
-  | `($_ $t $ts*) => do
-    match t with
-    | `(fun $_ => $e) => if ts.isEmpty then ``(⌜$e⌝) else ``(⌜$e⌝ $ts*)
-    | _ => throw ()
-app_unexpand_rule SVal.GetTy.applyEscape
-  | `($_ $f $_) => do
-    match f with
-    | `(SVal.getThe $t) => ``(‹$t›ₛ)
-    | t => ``(#$t)
 app_unexpand_rule SPred.and
   | `($_ $P $Q) => do
     let P ← unpack P; let Q ← unpack Q;

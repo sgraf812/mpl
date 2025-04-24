@@ -1,3 +1,8 @@
+/-
+Copyright (c) 2025 Lean FRO LLC. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE.
+Authors: Sebastian Graf
+-/
 import Lean
 import MPL.SPred
 open Lean Elab Meta
@@ -40,9 +45,9 @@ def Hyp.toExpr (hyp : Hyp) : Expr :=
 -- set_option pp.all true in
 -- #check ⌜True⌝
 def emptyHyp (σs : Expr) : Expr := -- ⌜True⌝ standing in for an empty conjunction of hypotheses
-  mkApp2 (mkConst ``SPred.idiom) σs <| mkLambda `escape .default (mkApp (mkConst ``SVal.EscapeFun) σs) (mkConst ``True)
+  mkApp3 (mkConst ``SVal.curry) (.sort .zero) σs <| mkLambda `escape .default (mkApp (mkConst ``SVal.StateTuple) σs) (mkConst ``True)
 def parseEmptyHyp? : Expr → Option Expr
-  | mkApp2 (.const ``SPred.idiom _) σs (.lam _ _ (.const ``True _) _) => some σs
+  | mkApp3 (.const ``SVal.curry _) (.sort .zero) σs (.lam _ _ (.const ``True _) _) => some σs
   | _ => none
 
 def pushLeftConjunct (pos : SubExpr.Pos) : SubExpr.Pos :=

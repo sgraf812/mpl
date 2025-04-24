@@ -150,7 +150,7 @@ example :
     simp_all only [List.sum_cons, List.sum_nil, ite_app]
     split
     · trivial
-    · simp_all only [PredShape.args, SPred.idiom_nil, true_and,
+    · simp_all only [PredShape.args, SVal.curry_nil, true_and,
       SPred.entails_nil, forall_const]; omega -- grind
   simp only [List.sum_nil]
   sorry -- grind -- needs 4.17 lemmas

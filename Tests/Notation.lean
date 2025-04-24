@@ -22,16 +22,16 @@ variable
 #check P ⊣⊢ₛ Q
 
 
-/-- info: ⌜φ⌝ : SPred ?m.716 -/
+/-- info: ⌜φ⌝ : SVal [Nat, Char, Bool] Prop -/
 #guard_msgs in
-#check ⌜φ⌝
+#check (⌜φ⌝ : SPred [Nat,Char,Bool])
 
-/-- info: ⌜7 + ‹Nat›ₛ = if ‹Bool›ₛ = true then 13 else 7⌝ : SPred [Nat, Char, Bool] -/
+/-- info: ⌜7 + ‹Nat›ₛ = if ‹Bool›ₛ = true then 13 else 7⌝ : SVal [Nat, Char, Bool] Prop -/
 #guard_msgs in
 #check (⌜7 + ‹Nat›ₛ = if ‹Bool›ₛ then 13 else 7⌝ : SPred [Nat,Char,Bool])
 
 private abbrev theChar : SVal [Nat,Char,Bool] Char := fun _ c _ => c
-/-- info: ⌜#MPL.Tests.Notation.theChar = 'a'⌝ : SPred [Nat, Char, Bool] -/
+/-- info: ⌜#MPL.Tests.Notation.theChar = 'a'⌝ : SVal [Nat, Char, Bool] Prop -/
 #guard_msgs in
 #check ⌜#theChar = 'a'⌝
 
@@ -137,7 +137,7 @@ private abbrev theChar : SVal [Nat,Char,Bool] Char := fun _ c _ => c
 info: if true = true then
   match (1, 2) with
   | (x, y) => Φ x y
-else ⌜False⌝ : SPred [Nat, Char, Bool]
+else ⌜False⌝ : SVal [Nat, Char, Bool] Prop
 -/
 #guard_msgs in
 #check spred(if true then term(match (1,2) with | (x,y) => Φ x y) else ⌜False⌝)
@@ -166,4 +166,4 @@ info: ∀ (a b n o : Nat) (s : Nat × Nat), ⌜a = n ∧ b = o⌝ ⊢ₛ ⌜s.fs
 -/
 #guard_msgs in
 set_option linter.unusedVariables false in
-#check ∀ (a b n o : Nat) (s : Nat × Nat), (SPred.idiom fun f => a = n ∧ b = o) ⊢ₛ SPred.idiom fun f => s.1 = n ∧ a = n + 1 ∧ b = o
+#check ∀ (a b n o : Nat) (s : Nat × Nat), (SVal.curry fun f => a = n ∧ b = o) ⊢ₛ SVal.curry fun f => s.1 = n ∧ a = n + 1 ∧ b = o
