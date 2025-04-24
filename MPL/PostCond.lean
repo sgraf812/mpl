@@ -73,11 +73,23 @@ abbrev PostCond.total (p : α → PreCond ps) : PostCond α ps :=
 abbrev PostCond.partial (p : α → PreCond ps) : PostCond α ps :=
   (p, FailConds.true)
 
+example : Unit × Unit := ⟨(), ()⟩
+open Lean Parser Term in
+def post_syntax := leading_parser
+  "post⟨" >> withoutPosition (withoutForbidden (sepBy termParser ", " (allowTrailingSep := true))) >> "⟩"
+syntax:max post_syntax : term
+macro_rules | `(post⟨$handlers,*⟩) => `(by exact ⟨$handlers,*, ()⟩)
+  -- NB: Postponement through by exact is the entire point of this macro
+  -- until https://github.com/leanprover/lean4/pull/8074 lands
+example : PostCond Nat .pure := post⟨fun s => True⟩
+example : PostCond (Nat × Nat) (PredShape.except Nat (PredShape.arg Nat PredShape.pure)) :=
+  post⟨fun (r, xs) s => r ≤ 4 ∧ s = 4 ∧ r + xs > 4, fun e s => e = 42 ∧ s = 4⟩
+
 open Lean Parser Term in
 def funArrow : Parser := unicodeSymbol " ↦ " " => "
 @[inherit_doc PostCond.total]
 macro "⇓" xs:Lean.Parser.Term.funBinder+ funArrow e:term : term =>
-  `(PostCond.total (fun $xs* => spred($e)))
+  `(PostCond.total (by exact (fun $xs* => spred($e)))) -- NB: Postponement through by exact
 app_unexpand_rule PostCond.total
   | `($_ fun $xs* => $e) => do `(⇓ $xs* => $(← SPred.Notation.unpack e))
 

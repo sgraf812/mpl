@@ -1,5 +1,6 @@
 import MPL.ProofMode.Tactics.Basic
 import MPL.ProofMode.Tactics.Intro
+import MPL.ProofMode.Tactics.Pure
 import MPL.ProofMode.Tactics.Assumption
 import MPL.WP
 import MPL.SpecAttr
@@ -189,7 +190,7 @@ syntax "mspec_no_simp" (ppSpace colGt term)? : tactic
 syntax "mspec" (ppSpace colGt term)? : tactic
 macro_rules
   | `(tactic| mspec_no_simp $[$spec]?) => `(tactic| ((try with_reducible mspec_no_bind MPL.Specs.bind); mspec_no_bind $[$spec]?))
-  | `(tactic| mspec $[$spec]?)         => `(tactic| mspec_no_simp $[$spec]?; all_goals try simp only [SPred.true_intro_simp, SPred.true_intro_simp_nil])
+  | `(tactic| mspec $[$spec]?)         => `(tactic| mspec_no_simp $[$spec]?; all_goals ((try simp only [SPred.true_intro_simp, SPred.true_intro_simp_nil]); (try mpure_intro; trivial)))
 
 example (Q : SPred []) : Q ⊢ₛ k%2 = k%2 := by simp only [SPred.true_intro_simp_nil]
 example (Q : SPred []) : Q ⊢ₛ ⌜k%2 = k%2⌝ := by simp only [SPred.true_intro_simp]

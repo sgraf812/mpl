@@ -1,5 +1,6 @@
 import MPL.ProofMode
 
+namespace MPL.Tests.ProofMode
 open MPL
 
 variable (σs : List Type)
@@ -215,6 +216,15 @@ theorem and_pure (P Q R : Prop) : (⌜P⌝ ∧ ⌜Q⌝ ∧ ⌜R⌝) ⊢ₛ (⌜R
   exact HR
 
 end cases
+
+namespace introforall
+
+theorem beta_conj (P Q R : SPred (Nat::σs)) (H : ∀ n, P n ∧ Q n ⊢ₛ R n) : P ∧ Q ⊢ₛ R := by
+  mintro ⟨HP, HQ⟩ ∀s
+  mstop
+  exact H s
+
+end introforall
 
 namespace refine
 

@@ -94,6 +94,7 @@ theorem or_false : P ∨ ⌜False⌝ ⊣⊢ₛ P := or_comm.trans false_or
 
 theorem true_imp : (⌜True⌝ → P) ⊣⊢ₛ P := bientails.iff.mpr ⟨and_true.mpr.trans imp_elim_l, imp_intro and_elim_l⟩
 theorem imp_self : Q ⊢ₛ P → P := imp_intro and_elim_r
+theorem imp_self_simp : (Q ⊢ₛ P → P) ↔ True := iff_true_intro SPred.imp_self
 theorem imp_trans : (P → Q) ∧ (Q → R) ⊢ₛ P → R := imp_intro' <| and_assoc.mpr.trans <| (and_mono_l imp_elim_r).trans imp_elim_r
 theorem false_imp : (⌜False⌝ → P) ⊣⊢ₛ ⌜True⌝ := bientails.iff.mpr ⟨true_intro, imp_intro <| and_elim_r.trans false_elim⟩
 

@@ -1,7 +1,9 @@
 import Lean
 import MPL.WPMonad
 import MPL.Triple
-import MPL.Tactic
+import MPL.Specs
+import MPL.ProofMode
+import MPL.Experimental.Tactic
 
 namespace MPL
 
@@ -80,14 +82,6 @@ def invariantGadget2.{u,v} (β : Type v) {m : Type → Type u} {ps : PredShape} 
 theorem assertGadget_apply {m : Type → Type u} {ps : PredShape} [Monad m] [WP m ps] {P : PreCond ps} {Q : PostCond Unit ps} : -- (h : Q.1 () ≤ P) :
   wp⟦assertGadget P : m Unit⟧.apply Q = wp⟦pure () : m Unit⟧.apply Q := rfl
 
-/-
-@[spec]
-theorem assertGadget_spec {m : Type → Type u} {ps : PredShape} [Monad m] [WPMonad m ps] {P : PreCond ps} {Q : PostCond Unit ps} (h : Q.1 () ≤ P) :
-  ⦃Q.1 () ⊓ P⦄ (assertGadget P : m Unit) ⦃Q⦄ := by
-  unfold assertGadget
-  xwp
-  simp[h]
--/
 @[wp_simp]
 theorem invariantGadget_apply {m : Type → Type u₂} {ps : PredShape} {α : Type} {β : Type} [Monad m] [WPMonad m ps]
   (xs : List α) (init : β) (f : α → β → m (ForInStep β)) (inv : β → {α : Type} → {xs : List α} → List.Zipper xs → PreCond ps) (Q : PostCond β ps) :
@@ -206,7 +200,7 @@ def patch_invariant (e : Expr) (args : Array Expr := Array.empty) (names : Array
             wrapper <|
             mkLet name prod_ty (.bvar 0) <|
             e
-      let some max := mut_vars.max? | throwError "TODO: handle invariants without mut vars"
+      let some max := mut_vars.foldr (fun a mb => max (some a) mb) none | throwError "TODO: handle invariants without mut vars"
       let mut subst : Array Expr := mkArray (max + 1) (.bvar 0)
       for i in [0:subst.size] do
         subst := subst.set! i (.bvar (i + mut_vars.size * 2))
@@ -270,10 +264,10 @@ partial def elab_newdecl : CommandElab := fun decl => do
       -- defn[4][1] is the term/do block; we'll patch it with the gadgets for requires and ensures
       let body ←
         if req[1].isMissing
-        then `(requiresGadget (PreCond.pure True) (ensuresGadget (fun $ens:basicFun) $(⟨defn[4][1]⟩)))
+        then `(requiresGadget ⌜True⌝ (ensuresGadget (by exact (fun $ens:basicFun)) $(⟨defn[4][1]⟩)))
         else if req[1].getKind = ``basicFun
-        then `(requiresGadget (fun $(⟨req[1]⟩):basicFun) (ensuresGadget (fun $ens:basicFun) $(⟨defn[4][1]⟩)))
-        else `(requiresGadget ($(⟨req[2]⟩):term) (ensuresGadget (fun $ens:basicFun) $(⟨defn[4][1]⟩)))
+        then `(requiresGadget (fun $(⟨req[1]⟩):basicFun) (ensuresGadget (by exact (fun $ens:basicFun)) $(⟨defn[4][1]⟩)))
+        else `(requiresGadget ($(⟨req[2]⟩):term) (ensuresGadget (by exact (fun $ens:basicFun)) $(⟨defn[4][1]⟩)))
       pure (Syntax.node info ``declValSimple (Array.set! args 1 body))
     | _ => throwUnsupportedSyntax
   -- dbg_trace olddeclValRefined
@@ -414,17 +408,29 @@ def fib_impl (n : Nat) : Idd Nat
 
 #check fib_impl.spec
 
-theorem fib_triple : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ := by
+theorem fib_triple_old : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ := by
+  -- This is how CHONK could prove fib_impl.spec using the old way (intro+xwp)
   unfold fib_impl
-  intro h
+  intro _
   xwp
   if h : n = 0 then simp[h] else
-  simp[h]
+  simp only [h, reduceIte]
   xapp Specs.forIn_list ?inv ?step
   case inv => exact PostCond.total fun (⟨a, b⟩, xs) => a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)
   case pre => simp_all
   case step => intros; xwp; simp_all
-  intro _ _
+  simp_all[Nat.sub_one_add_one]
+
+theorem fib_triple_new : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ := by
+  unfold fib_impl
+  mintro -
+  mwp
+  if h : n = 0 then simp[h] else
+  simp only [h, reduceIte]
+  mspec Specs.forIn_list ?inv ?step
+  case inv => exact PostCond.total fun (⟨a, b⟩, xs) => a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)
+  case pre => simp_all
+  case step => intros; mintro _; mwp; simp_all
   simp_all[Nat.sub_one_add_one]
 
 theorem fib_correct {n} : (fib_impl n).run = fib_spec n := by
@@ -457,7 +463,7 @@ def mkFreshInt {m : Type → Type} [Monad m] : StateT (Nat × Nat) m Nat
   ensures r => ⌜r = n ∧ (#st).1 = n + 1 ∧ (#st).2 = o⌝
 := do
   let n ← Prod.fst <$> get
-  -- assert _ => PreCond.pure (o = 13)
+  -- assert _ => ⌜o = 13⌝
   modify (fun s => (s.1 + 1, s.2))
   pure n
 

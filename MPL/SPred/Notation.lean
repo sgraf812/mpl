@@ -3,7 +3,6 @@ Copyright (c) 2022 Lars König. All rights reserved.
 Released under Apache 2.0 license.
 Authors: Lars König, Sebastian Graf
 -/
-
 import Lean
 import MPL.SPred.SPred
 import MPL.Utils.UnexpandRule
@@ -83,13 +82,6 @@ macro_rules
   | `(spred(∀ ($x:ident : $ty) $xs*, $P)) => ``(SPred.forall (fun $x : $ty => spred(∀ $xs*, $P)))
   | `(spred(∀ ($x:ident $xs* : $ty) $ys*, $P)) => ``(SPred.forall (fun $x : $ty => spred(∀ ($xs* : $ty) $ys*, $P)))
 
-private abbrev theNat : SVal [Nat, Bool] Nat := fun n b => n
-example (P Q : SPred [Nat, Bool]): SPred [Char, Nat, Bool] :=
-  spred(fun c => ((∀ y, if y = 4 then ⌜y = #theNat⌝ ∧ P else Q) ∧ Q) → (∃ x, P → if (x : Bool) then Q else P))
-
-#check fun P Q => spred(fun n => ((∀ y, if y = n then P else Q) ∧ Q) → P → (∃ x, P → if (x : Bool) then Q else P))
-#check fun P Q => spred(fun n => ((∀ y, if y = n then ⌜‹Nat›ₛ = 4⌝ else Q) ∧ Q) → P → (∃ x, P → if (x : Bool) then Q else P))
-
 app_unexpand_rule SPred.entails
   | `($_ $P $Q)  => do
     let P ← unpack P; let Q ← unpack Q;
@@ -144,10 +136,3 @@ app_unexpand_rule SPred.iff
   | `($_ $P $Q) => do
     let P ← unpack P; let Q ← unpack Q;
     ``(spred($P ↔ $Q))
-
-#check fun P Q => spred(fun n => ((∀ y, if y = n then P else ⌜True⌝) ∧ Q) → P → (∃ x, P → if (x : Bool) then Q else P))
-#check fun P Q => spred(fun n => ((∀ y, if y = n then ⌜4 = ‹Nat›ₛ⌝ else Q) ∧ Q) → P → (∃ x, P → if (x : Bool) then Q else P))
-#check fun P Q => spred(fun n => ((∀ y, if y = n then ⌜‹Nat›ₛ + ‹Nat›ₛ = 4⌝ else Q) ∧ Q) → P → (∃ x, P → if (x : Bool) then Q else P))
-#check fun P Q => spred(fun n => ((∀ y, if y = n then ⌜‹Nat›ₛ + #theNat = 4⌝ else Q) ∧ Q) → P → (∃ x, P → if (x : Bool) then Q else P))
--- Unexpansion should work irrespective of binder name for `f`/`escape`:
-#check ∀ (a b n o : Nat) (s : Nat × Nat), (SPred.idiom fun f => a = n ∧ b = o) ⊢ₛ SPred.idiom fun f => s.1 = n ∧ a = n + 1 ∧ b = o

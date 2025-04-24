@@ -24,7 +24,9 @@ partial def mIntroStep (goal : MGoal) (ident : TSyntax ``binderIdent) (k : MGoal
   return prf
 
 private partial def betaRevPreservingHypNames (σs' e : Expr) (args : Array Expr) : Expr :=
-  if let some hyp := parseHyp? e then
+  if let some _σs := parseEmptyHyp? e then
+    emptyHyp σs'
+  else if let some hyp := parseHyp? e then
     { hyp with p := hyp.p.betaRev args }.toExpr
   else if let some (_σs, lhs, rhs) := parseAnd? e then
     -- _σs = σ :: σs'

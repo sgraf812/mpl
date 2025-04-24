@@ -1,5 +1,6 @@
 import MPL
 
+namespace MPL.Tests.Aeneas
 open MPL
 
 inductive Error where
@@ -33,15 +34,14 @@ instance Result.instWP : WP Result (.except Error .pure) where
   wp x := match x with
   | .ok v => wp⟦pure v : Except Error _⟧
   | .fail e => wp⟦throw e : Except Error _⟧
-  | .div => PredTrans.top -- const False
+  | .div => PredTrans.const ⌜False⌝
 
 instance Result.instWPMonad : WPMonad Result (.except Error .pure) where
   pure_pure := by intros; ext Q; simp[wp, PredTrans.pure, pure, Except.pure, Id.run]
   bind_bind x f := by
-    intros
-    simp[Result.instWP, bind]
+    simp only [instWP, bind]
     ext Q
-    cases x <;> simp[PredTrans.bind, PredTrans.top, PredTrans.const]; xwp
+    cases x <;> simp[PredTrans.bind, PredTrans.const, MonadExcept.throw_apply, Except.throw_apply]
 
 /-- Kinds of unsigned integers -/
 inductive UScalarTy where
@@ -67,7 +67,7 @@ structure UScalar (ty : UScalarTy) where
   bv : BitVec ty.numBits
 deriving Repr, BEq, DecidableEq
 
-def UScalar.val {ty} (x : UScalar ty) : ℕ := x.bv.toNat
+def UScalar.val {ty} (x : UScalar ty) : Nat := x.bv.toNat
 
 def UScalar.ofNatCore {ty : UScalarTy} (x : Nat) (_ : x < 2^ty.numBits) : UScalar ty :=
   { bv := BitVec.ofNat _ x }
@@ -84,7 +84,8 @@ def UScalar.add {ty : UScalarTy} (x y : UScalar ty) : Result (UScalar ty) :=
 instance {ty} : HAdd (UScalar ty) (UScalar ty) (Result (UScalar ty)) where
   hAdd x y := UScalar.add x y
 
-irreducible_def UScalar.max (ty : UScalarTy) : Nat := 2^ty.numBits-1
+@[irreducible]
+def UScalar.max (ty : UScalarTy) : Nat := 2^ty.numBits-1
 
 theorem UScalar.add_spec {ty} {x y : UScalar ty}
   (hmax : ↑x + ↑y ≤ UScalar.max ty) :
@@ -101,8 +102,7 @@ abbrev PCond (α : Type) := PostCond α (PredShape.except Error PredShape.pure)
 
 theorem U32.add_spec' {x y : U32} {Q : PCond U32} (hmax : ↑x + ↑y ≤ U32.max):
   ⦃Q.1 (UScalar.ofNatCore (↑x + ↑y) sorry)⦄ (x + y) ⦃Q⦄ := by
-    xstart
-    intro h
+    mintro h
     have ⟨z, ⟨hxy, hz⟩⟩ := U32.add_spec hmax
     simp[hxy, hz.symm, wp]
     sorry -- show Q.1 z ↔ Q.1 (ofNatCore z.val ⋯)
@@ -118,11 +118,9 @@ def mul2_add1 (x : U32) : Result U32 :=
 theorem mul2_add1_spec' (x : U32) (h : 2 * x.val + 1 ≤ U32.max)
   : ⦃Q.1 (UScalar.ofNatCore (2 * ↑x + (1 : Nat)) sorry)⦄ (mul2_add1 x) ⦃Q⦄ := by
   rw[mul2_add1]
-  xstart
-  intro h
-  xbind
-  xapp U32.add_spec' (by omega)
-  xapp U32.add_spec' (by simp; omega)
+  mintro _
+  mspec U32.add_spec' (by omega)
+  mspec U32.add_spec' (by simp; omega)
   simp +arith [h]
 
 -- for more `progress` like automation, we can register a wp transformer:
@@ -141,12 +139,12 @@ theorem U32.add_apply {x y : U32} {Q : PCond U32} :
       simp[Result.instWP, HAdd.hAdd, UScalar.add]
       have : ¬x.val + y.val ≤ U32.max → UScalar.tryMk .U32 (Add.add x.val y.val) = Result.fail integerOverflow :=
         sorry -- by definition of tryMk
-      simp only [this h]
-      xwp
+      simp[this h, MonadExcept.throw_apply, Except.throw_apply]
 
 theorem mul2_add1_apply (x : U32) (h : 2 * x.val + 1 ≤ U32.max)
   : wp⟦mul2_add1 x⟧.apply Q = Q.1 (UScalar.ofNatCore (2 * ↑x + (1 : Nat)) sorry) := by
   rw[mul2_add1]
-  xwp
+  mstart
+  mwp
   simp +arith +contextual [h]
   omega

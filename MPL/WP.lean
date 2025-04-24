@@ -33,7 +33,7 @@ instance Id.instWP : WP Id .pure where
   wp x := PredTrans.pure x.run
 
 theorem Id.by_wp {α} {x : α} {prog : Id α} (h : x = Id.run prog) (P : α → Prop) :
-  (wp prog).apply (PostCond.total P) → P x := h ▸ id
+  (⌜True⌝ ⊢ₛ (wp prog).apply (PostCond.total P)) → P x := h ▸ (fun h => h True.intro)
 
 instance Idd.instWP : WP Idd .pure where
   wp x := PredTrans.pure x.run
@@ -69,7 +69,7 @@ instance Except.instWP : WP (Except ε) (.except ε .pure) :=
   inferInstanceAs (WP (ExceptT ε Id) (.except ε .pure))
 
 theorem StateM.by_wp {α} {x : σ → α × σ} {prog : StateM σ α} (h : StateT.run prog = x) (P : α → σ → Prop) :
-  (SPred.entails (PreCond.pure True) ((wp prog).apply (PostCond.total P))) → (∀ s, P (x s).1 (x s).2) := by
+  (⌜True⌝ ⊢ₛ (wp prog).apply (PostCond.total P)) → (∀ s, P (x s).1 (x s).2) := by
     intro hspec
     intro s
     have := hspec s .intro

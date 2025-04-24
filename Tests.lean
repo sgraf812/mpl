@@ -1,2 +1,5 @@
+import Tests.Notation
+import Tests.ProofMode
 import Tests.Toy
-import Tests.HashSet
+import Tests.Aeneas
+import Tests.Demo

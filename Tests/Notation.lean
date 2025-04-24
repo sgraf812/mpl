@@ -1,5 +1,6 @@
 import MPL.SPred.Notation
 
+namespace MPL.Tests.Notation
 open MPL
 
 variable
@@ -30,106 +31,106 @@ variable
 #check (⌜7 + ‹Nat›ₛ = if ‹Bool›ₛ then 13 else 7⌝ : SPred [Nat,Char,Bool])
 
 private abbrev theChar : SVal [Nat,Char,Bool] Char := fun _ c _ => c
-/-- info: ⌜#theChar = 'a'⌝ : SPred [Nat, Char, Bool] -/
+/-- info: ⌜#MPL.Tests.Notation.theChar = 'a'⌝ : SPred [Nat, Char, Bool] -/
 #guard_msgs in
 #check ⌜#theChar = 'a'⌝
 
 
-/-- info: SPred(P ∧ Q) : SPred [Nat, Char, Bool] -/
+/-- info: spred(P ∧ Q) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check SPred(P ∧ Q)
+#check spred(P ∧ Q)
 
-/-- info: SPred(P ∧ Q ∧ R) : SPred [Nat, Char, Bool] -/
+/-- info: spred(P ∧ Q ∧ R) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check SPred(P ∧ (Q ∧ R))
+#check spred(P ∧ (Q ∧ R))
 
-/-- info: SPred(P ∨ Q) : SPred [Nat, Char, Bool] -/
+/-- info: spred(P ∨ Q) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check SPred(P ∨ Q)
+#check spred(P ∨ Q)
 
-/-- info: SPred(P ∨ Q ∨ R) : SPred [Nat, Char, Bool] -/
+/-- info: spred(P ∨ Q ∨ R) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check SPred(P ∨ (Q ∨ R))
+#check spred(P ∨ (Q ∨ R))
 
-/-- info: SPred(¬P) : SPred [Nat, Char, Bool] -/
+/-- info: spred(¬P) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check SPred(¬ P)
+#check spred(¬ P)
 
-/-- info: SPred(¬(P ∨ Q)) : SPred [Nat, Char, Bool] -/
+/-- info: spred(¬(P ∨ Q)) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check SPred(¬ (P ∨ Q))
+#check spred(¬ (P ∨ Q))
 
 
-/-- info: SPred(P → Q) : SPred [Nat, Char, Bool] -/
+/-- info: spred(P → Q) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check SPred(P → Q)
+#check spred(P → Q)
 
-/-- info: SPred(P → Q → R) : SPred [Nat, Char, Bool] -/
+/-- info: spred(P → Q → R) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check SPred(P → (Q → R))
+#check spred(P → (Q → R))
 
-/-- info: SPred(P ∧ Q → R) : SPred [Nat, Char, Bool] -/
+/-- info: spred(P ∧ Q → R) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check SPred((P ∧ Q) → R)
+#check spred((P ∧ Q) → R)
 
-/-- info: SPred(P → Q ∧ R) : SPred [Nat, Char, Bool] -/
+/-- info: spred(P → Q ∧ R) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check SPred(P → (Q ∧ R))
+#check spred(P → (Q ∧ R))
 
 
-/-- info: SPred(P ↔ Q) : SPred [Nat, Char, Bool] -/
+/-- info: spred(P ↔ Q) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check SPred(P ↔ Q)
+#check spred(P ↔ Q)
 
-/-- info: SPred(P ∧ Q ↔ Q ∧ P) : SPred [Nat, Char, Bool] -/
+/-- info: spred(P ∧ Q ↔ Q ∧ P) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check SPred((P ∧ Q) ↔ (Q ∧ P))
+#check spred((P ∧ Q) ↔ (Q ∧ P))
 
 
 /-- info: ∀ (x : Nat), x = 0 : Prop -/
 #guard_msgs in
 #check ∀ (x : Nat), x = 0
 
-/-- info: SPred(∀ x, Ψ x) : SPred [Nat, Char, Bool] -/
+/-- info: spred(∀ x, Ψ x) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check SPred(∀ x, Ψ x)
+#check spred(∀ x, Ψ x)
 
-/-- info: SPred(∀ x, Ψ x) : SPred [Nat, Char, Bool] -/
+/-- info: spred(∀ x, Ψ x) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check SPred(∀ (x : Nat), Ψ x)
+#check spred(∀ (x : Nat), Ψ x)
 
-/-- info: SPred(∀ x, ∀ y, Φ x y) : SPred [Nat, Char, Bool] -/
+/-- info: spred(∀ x, ∀ y, Φ x y) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check SPred(∀ x y, Φ x y)
+#check spred(∀ x y, Φ x y)
 
-/-- info: SPred(∀ x, ∀ y, Φ x y) : SPred [Nat, Char, Bool] -/
+/-- info: spred(∀ x, ∀ y, Φ x y) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check SPred(∀ (x : Nat) (y : Nat), Φ x y)
+#check spred(∀ (x : Nat) (y : Nat), Φ x y)
 
-/-- info: SPred(∀ x, ∀ y, Φ x y) : SPred [Nat, Char, Bool] -/
+/-- info: spred(∀ x, ∀ y, Φ x y) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check SPred(∀ (x y : Nat), Φ x y)
+#check spred(∀ (x y : Nat), Φ x y)
 
 
-/-- info: SPred(∃ x, Ψ x) : SPred [Nat, Char, Bool] -/
+/-- info: spred(∃ x, Ψ x) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check SPred(∃ x, Ψ x)
+#check spred(∃ x, Ψ x)
 
-/-- info: SPred(∃ x, Ψ x) : SPred [Nat, Char, Bool] -/
+/-- info: spred(∃ x, Ψ x) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check SPred(∃ (x : Nat), Ψ x)
+#check spred(∃ (x : Nat), Ψ x)
 
-/-- info: SPred(∃ x, ∃ y, Φ x y) : SPred [Nat, Char, Bool] -/
+/-- info: spred(∃ x, ∃ y, Φ x y) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check SPred(∃ x y, Φ x y)
+#check spred(∃ x y, Φ x y)
 
-/-- info: SPred(∃ x, ∃ y, Φ x y) : SPred [Nat, Char, Bool] -/
+/-- info: spred(∃ x, ∃ y, Φ x y) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check SPred(∃ (x : Nat) (y : Nat), Φ x y)
+#check spred(∃ (x : Nat) (y : Nat), Φ x y)
 
-/-- info: SPred(∃ x, ∃ y, Φ x y) : SPred [Nat, Char, Bool] -/
+/-- info: spred(∃ x, ∃ y, Φ x y) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check SPred(∃ (x y : Nat), Φ x y)
+#check spred(∃ (x y : Nat), Φ x y)
 
 
 /--
@@ -139,8 +140,30 @@ info: if true = true then
 else ⌜False⌝ : SPred [Nat, Char, Bool]
 -/
 #guard_msgs in
-#check SPred(if true then term(match (1,2) with | (x,y) => Φ x y) else ⌜False⌝)
+#check spred(if true then term(match (1,2) with | (x,y) => Φ x y) else ⌜False⌝)
 
 /-- info: Ψ (1 + 1) : SPred [Nat, Char, Bool] -/
 #guard_msgs in
-#check SPred(Ψ (1 + 1))
+#check spred(Ψ (1 + 1))
+
+
+private abbrev theNat : SVal [Nat, Bool] Nat := fun n b => n
+example (P Q : SPred [Nat, Bool]): SPred [Char, Nat, Bool] :=
+  spred(fun c => ((∀ y, if y = 4 then ⌜y = #theNat⌝ ∧ P else Q) ∧ Q) → (∃ x, P → if (x : Bool) then Q else P))
+
+-- A bigger example testing unexpansion as well:
+/--
+info: fun P Q n =>
+  spred((∀ y, if y = n then ⌜‹Nat›ₛ + #MPL.Tests.Notation.theNat = 4⌝ else Q) ∧ Q →
+      P → ∃ x, P → if x = true then Q else P) : SPred [Nat, Bool] → SPred [Nat, Bool] → Char → SPred [Nat, Bool]
+-/
+#guard_msgs in
+#check fun P Q => spred(fun (n : Char) => ((∀ y, if y = n then ⌜‹Nat›ₛ + #theNat = 4⌝ else Q) ∧ Q) → P → (∃ x, P → if (x : Bool) then Q else P))
+
+-- Unexpansion should work irrespective of binder name for `f`/`escape`:
+/--
+info: ∀ (a b n o : Nat) (s : Nat × Nat), ⌜a = n ∧ b = o⌝ ⊢ₛ ⌜s.fst = n ∧ a = n + 1 ∧ b = o⌝ : Prop
+-/
+#guard_msgs in
+set_option linter.unusedVariables false in
+#check ∀ (a b n o : Nat) (s : Nat × Nat), (SPred.idiom fun f => a = n ∧ b = o) ⊢ₛ SPred.idiom fun f => s.1 = n ∧ a = n + 1 ∧ b = o

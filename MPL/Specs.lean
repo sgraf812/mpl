@@ -149,34 +149,4 @@ theorem Specs.forIn_list' {α : Type} {β : Type} {m : Type → Type v} {ps : Pr
                  | .done b' => inv.1 (b', ⟨xs.reverse, [], by simp⟩), inv.2)⦄) :
   ⦃inv.1 (init, ⟨[], xs, by simp⟩)⦄ forIn xs init f ⦃(fun b => inv.1 (b, ⟨xs.reverse, [], by simp⟩), inv.2)⦄ := sorry
 
-/-
-open Lean Elab Term Command in
-elab "mycheck " "(" e:term " : " ty:term ")" : command => runTermElabM fun _ => Term.withDeclName `_check do
-  let ty ← elabTerm (← `(($e : $ty))) none
-  synthesizeSyntheticMVarsNoPostponing
---  let e ← elabTermEnsuringType e ty
-  return
-
-mycheck (Specs.forIn_list' (ps := PredShape.arg Nat PredShape.pure)
-    (fun (r, xs) s => (r.1 = none ∧ r.2 = xs.rpref.sum ∧ r.2 ≤ 4 ∨ r.1 = some 42 ∧ r.2 > 4) ∧ s = 4, ()) sorry
-    :
-    ⦃_⦄ (@forIn (StateT Nat Idd) (List Nat) Nat _ (MProd (Option Nat) Nat) _ (List.range' 1 (4 - 1) 1)
-            ⟨none, 0⟩ fun i r =>
-            if r.snd + i > 4 then pure (ForInStep.done ⟨some 42, r.snd + i⟩)
-            else do
-              pure PUnit.unit
-              pure (ForInStep.yield ⟨none, r.snd + i⟩)) ⦃_⦄)
--/
-
-#check (Specs.forIn_list' (ps := PredShape.arg Nat PredShape.pure)
-    (fun (r, xs) s => (r.1 = none ∧ r.2 = xs.rpref.sum ∧ r.2 ≤ 4 ∨ r.1 = some 42 ∧ r.2 > 4) ∧ s = 4, ()) sorry
-    :
-    ⦃_⦄ (@forIn (StateT Nat Idd) (List Nat) Nat _ (MProd (Option Nat) Nat) _ (List.range' 1 (4 - 1) 1)
-            ⟨none, 0⟩ fun i r =>
-            if r.snd + i > 4 then pure (ForInStep.done ⟨some 42, r.snd + i⟩)
-            else do
-              pure PUnit.unit
-              pure (ForInStep.yield ⟨none, r.snd + i⟩)) ⦃_⦄)
-
-
 end MPL

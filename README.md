@@ -45,15 +45,14 @@ The proof can also be conducted extrinsically and interactively (TODO: Revisit e
 ```lean
 theorem fib_triple : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ := by
   unfold fib_impl
-  intro h
-  xwp
+  mintro -
+  mwp
   if h : n = 0 then simp[h] else
-  simp[h]
-  xapp Specs.forIn_list ?inv ?step
+  simp only [h, reduceIte]
+  mspec Specs.forIn_list ?inv ?step
   case inv => exact PostCond.total fun (⟨a, b⟩, xs) => a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)
   case pre => simp_all
-  case step => intros; xwp; simp_all
-  intro _ _
+  case step => intros; mintro _; mwp; simp_all
   simp_all[Nat.sub_one_add_one]
 ```
 

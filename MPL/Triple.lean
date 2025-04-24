@@ -11,25 +11,6 @@ def triple (x : m α) (P : PreCond ps) (Q : PostCond α ps) : Prop :=
   P ⊢ₛ wp⟦x⟧.apply Q
 
 notation:lead "⦃" P "⦄ " x:lead " ⦃" Q "⦄" => triple x spred(P) spred(Q)
--- For some strange reason, we need the following definition if we do not depend on Mathlib:
--- syntax:lead "⦃" term "⦄ " term:lead " ⦃" term "⦄" : term
--- open Lean Elab Meta Term in
--- elab_rules : term
---   | `(⦃$P⦄ $x:term ⦃$Q⦄) => do
---     -- In a simple world, this would just be a macro expanding to
---     -- `triple $x spred($P) spred($Q)`.
---     -- However, it appears that type inference for the
---     -- postcondition Q is better when implemented manually.
---     let x ← elabTerm x none
---     let ty ← inferType x
---     tryPostponeIfMVar ty
---     let .app m α := ty | throwError "Not a type application {ty}"
---     let some u ← Level.dec <$> getLevel ty | throwError "Wrong level 0 {ty}"
---     let ps ← mkFreshExprMVar (mkConst ``PredShape)
---     let inst ← synthInstance (mkApp2 (mkConst ``WP [u]) m ps)
---     let P ← elabTerm (← `(spred($P))) (mkApp (mkConst ``PreCond) ps)
---     let Q ← elabTerm (← `(spred($Q))) (mkApp2 (mkConst ``PostCond) α ps)
---     return mkApp7 (mkConst ``triple [u]) m ps inst α x P Q
 app_unexpand_rule triple
   | `($_ $x $P $Q) => match Q with
     | `(⇓ $xs* => $e) => do

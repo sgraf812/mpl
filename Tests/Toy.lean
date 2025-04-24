@@ -2,6 +2,7 @@ import Lean
 import MPL
 import MPL.IO
 
+namespace MPL.Tests.Toy
 open MPL
 
 theorem test_sum :
@@ -13,7 +14,7 @@ theorem test_sum :
     pure (f := Idd) x
   ⦃⇓r => r < 30⦄ := by
   mintro -
-  mvcgen
+  mwp
   mspec (Specs.forIn_list (⇓ (r, xs) => (∀ x, x ∈ xs.suff → x ≤ 5) ∧ r + xs.suff.length * 5 ≤ 25) ?step)
   case step =>
     intro b pref x suff h
@@ -38,7 +39,7 @@ theorem mkFreshInt_spec [Monad m] [LawfulMonad m] [WPMonad m sh] :
   ⦃⇓ r => ⌜r = n ∧ #fst = n + 1 ∧ #snd = o⌝⦄ := by
   mintro _
   unfold mkFreshInt
-  mvcgen
+  mwp
   mintro ∀s
   simp
 
@@ -58,13 +59,16 @@ theorem mkFreshInt_lift_spec [Monad m] [LawfulMonad m] [WPMonad m sh] :
   (mkFreshInt : ExceptT Char (ReaderT Bool (StateT (Nat × Nat) m)) Nat)
   ⦃⇓ r _ s => ⌜r = n ∧ s.1 = n + 1 ∧ s.2 = o⌝⦄ := by
   mintro _
-  mvcgen
+  mwp
   simp
 
-example : PostCond (ℕ × List.Zipper (List.range' 1 3 1)) (PredShape.except ℕ (PredShape.arg ℕ PredShape.pure)) :=
-  ⟨fun (r, xs) s => r ≤ 4 ∧ s = 4 ∧ r + xs.suff.sum > 4, (fun e s => e = 42 ∧ s = 4, ())⟩
+example : PostCond (Nat × List.Zipper (List.range' 1 3 1)) (PredShape.except Nat (PredShape.arg Nat PredShape.pure)) :=
+  ⟨fun (r, xs) s => r ≤ 4 ∧ s = 4 ∧ r + xs.suff.sum > 4, fun e s => e = 42 ∧ s = 4, ()⟩
 
-example : (ℕ × List.Zipper (List.range' 1 3 1)) → PreCond (PredShape.except ℕ (PredShape.arg ℕ PredShape.pure)) :=
+example : PostCond (Nat × List.Zipper (List.range' 1 3 1)) (PredShape.except Nat (PredShape.arg Nat PredShape.pure)) :=
+  post⟨fun (r, xs) s => r ≤ 4 ∧ s = 4 ∧ r + xs.suff.sum > 4, fun e s => e = 42 ∧ s = 4⟩
+
+example : (Nat × List.Zipper (List.range' 1 3 1)) → PreCond (PredShape.except Nat (PredShape.arg Nat PredShape.pure)) :=
   let x := ⟨fun (r, xs) s => r ≤ 4 ∧ s = 4 ∧ r + xs.suff.sum > 4, fun e s => e = 42 ∧ s = 4⟩; Prod.fst x
 
 example :
@@ -76,7 +80,7 @@ example :
     return x
   ⦃⇓ r s => True⦄ := by
   mintro hs
-  mvcgen
+  mwp
   mspec (Specs.forIn_list (⇓ (p, xs) s => True) ?step)
   case step => intros; mintro h; simp
   mintro ∀s
@@ -90,20 +94,18 @@ theorem test_ex :
     for i in [1:s] do { x := x + i; if x > 4 then throw 42 }
     (set 1 : ExceptT Nat (StateT Nat Idd) PUnit)
     return x
-  ⦃⟨fun r s => False,
-    (fun e s => e = 42 ∧ s = 4,
-     ())⟩⦄ := by
+  ⦃post⟨fun r s => False,
+        fun e s => e = 42 ∧ s = 4⟩⦄ := by
   mintro hs ∀s
   mpure hs
   subst hs
-  mvcgen
+  mwp
 --  set_option trace.mpl.tactics.spec true in
-  mspec (Specs.forIn_list ⟨fun (r, xs) s => r ≤ 4 ∧ s = 4 ∧ r + xs.suff.sum > 4, (fun e s => e = 42 ∧ s = 4, ())⟩ ?step)
-  case pre => conv in (List.sum _) => { whnf }; simp
+  mspec (Specs.forIn_list post⟨fun (r, xs) s => r ≤ 4 ∧ s = 4 ∧ r + xs.suff.sum > 4, fun e s => e = 42 ∧ s = 4⟩ ?step)
   case step =>
     intro b pref x suff h
     mintro H
-    mvcgen
+    mwp
     simp only [h, List.sum_cons]
     mintro ∀b'
     mpure H
@@ -111,7 +113,7 @@ theorem test_ex :
     split
     · grind
     · simp only [PredTrans.pure_apply]; omega
-  simp only [List.sum_nil, add_zero]
+  simp only [List.sum_nil]
   mintro ∀s
   mpure h
   omega -- sgrind
@@ -122,7 +124,7 @@ example :
   (wp (m:= ExceptT Nat (StateT Nat (ReaderT Bool Id))) (do if (← read) then return 1 else return 0)).apply Q := by
     apply SPred.bientails.iff.mpr
     constructor
-    all_goals mstart; mvcgen; simp[ite_app]
+    all_goals mstart; mwp; simp[ite_app]
 
 example :
   (wp (m:= ReaderT Char (StateT Bool (ExceptT Nat Id))) (do set true; throw 42; set false; get)).apply Q
@@ -130,7 +132,7 @@ example :
   (wp (m:= ReaderT Char (StateT Bool (ExceptT Nat Id))) (do set true; throw 42; get)).apply Q := by
     apply SPred.bientails.iff.mpr
     constructor
-    all_goals mstart; mvcgen
+    all_goals mstart; mwp
 
 example :
   (wp (m:= ReaderT Char (StateT Bool (ExceptT Nat Id))) (do try { set true; throw 42 } catch _ => set false; get)).apply Q
@@ -138,7 +140,7 @@ example :
   (wp (m:= ReaderT Char (StateT Bool (ExceptT Nat Id))) (do set false; get)).apply Q := by
     apply SPred.bientails.iff.mpr
     constructor
-    all_goals mstart; mvcgen
+    all_goals mstart; mwp
 
 theorem test_loop_break :
   ⦃⌜‹Nat›ₛ = 42⌝⦄
@@ -151,7 +153,7 @@ theorem test_loop_break :
   ⦃⇓ r => ⌜r > 4 ∧ ‹Nat›ₛ = 1⌝⦄ := by
   mintro hs ∀s
   mpure hs
-  mvcgen
+  mwp
   mspec (Specs.forIn_list (⇓ (r, xs) s => (r ≤ 4 ∧ r = xs.rpref.sum ∨ r > 4) ∧ s = 42) ?step)
   case step =>
     intro b pref x suff h
@@ -169,7 +171,7 @@ theorem test_loop_break :
   simp_all
 
 theorem get_spec [Monad m] [WPMonad m ps] {Q : PostCond σ (.arg σ ps)} :
-  ⦃fun s => Q.1 s s⦄ (get : StateT σ m σ) ⦃Q⦄ := by mintro h; mvcgen
+  ⦃fun s => Q.1 s s⦄ (get : StateT σ m σ) ⦃Q⦄ := by mintro h; mwp
 
 theorem test_loop_early_return :
   ⦃fun s => s = 4⦄
@@ -184,7 +186,7 @@ theorem test_loop_early_return :
   mpure hs
   subst hs
   simp only [gt_iff_lt, bind_pure_comp, map_pure, Std.Range.forIn_eq_forIn_range', Std.Range.size,
-    add_tsub_cancel_right, Nat.div_one, pure_bind]
+    Nat.div_one, pure_bind]
   mspec get_spec
   mspec (Specs.forIn_list (⇓ (r, xs) s => (r.1 = none ∧ r.2 = xs.rpref.sum ∧ r.2 ≤ 4 ∨ r.1 = some 42 ∧ r.2 > 4) ∧ s = 4) ?step)
   case pre => simp
@@ -194,11 +196,11 @@ theorem test_loop_early_return :
     mintro ∀s
     mpure hs
     subst hs
-    mvcgen
+    mwp
     simp_all only [Nat.add_one_sub_one, PredShape.args, SPred.and_nil, gt_iff_lt, SPred.or_nil,
       List.reverse_append, List.reverse_cons, List.reverse_reverse, List.append_assoc,
-      List.singleton_append, List.sum_append, List.sum_cons, false_and, and_self, or_true, true_and,
-      or_false, ite_app, and_true, if_true_left, not_lt, SPred.entails_nil]
+      List.singleton_append, List.sum_cons, false_and, and_self, or_true, true_and,
+      or_false, ite_app, and_true, if_true_left, SPred.entails_nil]
     omega
   rcases r with ⟨r, x⟩
   mintro ∀s'
@@ -213,61 +215,7 @@ example : wp⟦do try { throw 42; return 1 } catch _ => return 2 : Except Nat Na
           wp⟦pure 2 : Except Nat Nat⟧.apply Q := by
   apply SPred.bientails.iff.mpr
   constructor
-  all_goals mstart; mvcgen
-
-section UserStory1
-
-def FinSimpleGraph (n : ℕ) := SimpleGraph (Fin n)
-open SimpleGraph
-open Finset
-open Classical
-
-open Std
-
-def FinSimpleGraph.IsSpannerOf {n:ℕ } (H G : FinSimpleGraph n)  (t:ℕ)  : Prop := H.IsSubgraph G ∧ H.Connected ∧  ∀ u v : Fin n, H.dist u v ≤ t * G.dist u v
-
-noncomputable def FinSimpleGraph.numEdges {n : ℕ}(G : FinSimpleGraph n) : ℕ := #G.edgeFinset
-
-def AddEdge {n :ℕ}(M : Fin n → Fin n → Prop) ( e : Sym2 (Fin n) ): Fin n → Fin n → Prop := fun (i j : Fin n) ↦ M i j ∨ (e = s(i,j))
-
-noncomputable def dist {n :ℕ}(M : Fin n → Fin n → Prop) (e : Sym2 (Fin n)): ℕ := (SimpleGraph.fromRel M).dist (Quot.out e).1 (Quot.out e).2
-
-noncomputable def greedySpanner {n:ℕ }(G : FinSimpleGraph n) (t :ℕ ): FinSimpleGraph n := Idd.run do
-  let mut f_H : Fin n → Fin n → Prop := fun (_ _) ↦ false
-  for e in G.edgeFinset.toList do
-    if (2*t -1) < dist f_H e then f_H := AddEdge f_H e
-  return SimpleGraph.fromRel f_H
-
-lemma correctnessOfGreedySpanner {n:ℕ }(G : FinSimpleGraph n)(t :ℕ ) (u v : Fin n) :
-  (greedySpanner G t).dist u v ≤ 2*t-1 := by
-    generalize h : greedySpanner G t = x
-    apply Idd.by_wp h
-    mstart
-    mvcgen
-    mspec (Specs.forIn_list (PostCond.total fun (f_H, xs) => ∀ i j, f_H i j → 2*t-1 < _root_.dist f_H s(i,j)) ?hstep)
-    case pre => simp
-    case hstep =>
-      intro f_H pref e suff h
-      mintro ⌜hinv⌝
-      mvcgen
-      if h : 2*t-1 < _root_.dist f_H e
-      then
-        simp[h]
-        show ∀ (i j : Fin n), AddEdge f_H e i j → 2 * t - 1 < _root_.dist (AddEdge f_H e) s(i, j)
-        -- domain-specific, pure proof
-        sorry
-      else
-        simp[h]
-        show  ∀ (i j : Fin n), f_H i j → 2 * t - 1 < _root_.dist f_H s(i, j)
-        -- domain-specific, pure proof
-        sorry
-    mcases h with ⌜hinv⌝
-    mpure_intro
-    show (fromRel r).dist u v ≤ 2 * t - 1
-    -- domain-specific, pure proof
-    sorry
-
-end UserStory1
+  all_goals mstart; mwp
 
 section fib
 
@@ -292,11 +240,11 @@ theorem fib_triple : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => ⌜r = fib_spec n�
   mintro _
   if h : n = 0 then simp[h] else
   simp only [h]
-  mvcgen
+  mwp
   mspec Specs.forIn_list ?inv ?step
   case inv => exact PostCond.total fun (⟨a, b⟩, xs) => a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)
   case pre => simp_all
-  case step => intros; mintro _; mvcgen; simp_all
+  case step => intros; mintro _; mwp; simp_all
   simp_all[Nat.sub_one_add_one]
 
 theorem fib_correct {n} : (fib_impl n).run = fib_spec n := by
@@ -329,13 +277,13 @@ open scoped MPL.IO
 theorem addRandomEvens_spec (n k) : ⦃True⦄ (addRandomEvens n k) ⦃⇓r => r % 2 = k % 2⦄ := by
   unfold addRandomEvens
   mintro -
-  mvcgen
+  mwp
   let _ := inferInstanceAs (WPMonad IO _)
   mspec Specs.forIn_list_const_inv -- is the one that is registered
   · exact inferInstance
   intro n r
   mintro ⌜h⌝
-  mvcgen
+  mwp
   mspec IO.rand_spec
   simp_all -- sgrind
 
@@ -344,7 +292,7 @@ the entire result is even. -/
 theorem program_spec (n k) : ⦃True⦄ program n k ⦃⇓r => r % 2 = 0⦄ := by
   unfold program
   mintro -
-  mvcgen
+  mwp
   mspec (addRandomEvens_spec n k)
   mpure h
   mspec /- registered spec is taken -/
@@ -373,20 +321,6 @@ noncomputable def prog (n : Nat) : M Nat := do
 axiom isValid : Nat → Char → Bool → String → Prop
 
 axiom op.spec {n} : ⦃isValid⦄ op n ⦃⇓r => ⌜r > 42⌝ ∧ isValid⦄
-
-theorem prog.spec : ⦃isValid⦄  prog n ⦃⇓r => ⌜r > 100⌝ ∧ isValid⦄ := by
-  unfold prog
-  intro a b c d h
-  xapp op.spec
-  intro r₁ a b c d ⟨hr₁, h⟩
-  xapp op.spec
-  intro r₂ a b c d ⟨hr₂, h⟩
-  xapp op.spec
-  intro r₃ a b c d ⟨hr₃, h⟩
-  xpure
-  simp_all only [SPred.idiom_cons, SPred.idiom_nil, SPred.and_cons, SPred.and_nil,
-    and_true, gt_iff_lt]
-  omega
 
 theorem prog.spec' : ⦃isValid⦄ prog n ⦃⇓r => ⌜r > 100⌝ ∧ isValid⦄ := by
   unfold prog
