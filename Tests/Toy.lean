@@ -124,7 +124,7 @@ example :
   (wp (m:= ExceptT Nat (StateT Nat (ReaderT Bool Id))) (do if (← read) then return 1 else return 0)).apply Q := by
     apply SPred.bientails.iff.mpr
     constructor
-    all_goals mstart; mwp; simp[ite_app]
+    all_goals mstart; mwp; simp [ite_app]
 
 example :
   (wp (m:= ReaderT Char (StateT Bool (ExceptT Nat Id))) (do set true; throw 42; set false; get)).apply Q
@@ -238,14 +238,14 @@ def fib_spec : Nat → Nat
 theorem fib_triple : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => ⌜r = fib_spec n⌝⦄ := by
   unfold fib_impl
   mintro _
-  if h : n = 0 then simp[h] else
+  if h : n = 0 then simp [h] else
   simp only [h]
   mwp
   mspec Specs.forIn_list ?inv ?step
   case inv => exact PostCond.total fun (⟨a, b⟩, xs) => a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)
   case pre => simp_all
   case step => intros; mintro _; mwp; simp_all
-  simp_all[Nat.sub_one_add_one]
+  simp_all [Nat.sub_one_add_one]
 
 theorem fib_correct {n} : (fib_impl n).run = fib_spec n := by
   generalize h : (fib_impl n).run = x

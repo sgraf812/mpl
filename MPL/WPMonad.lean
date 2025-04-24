@@ -90,7 +90,7 @@ instance ExceptT.instWPMonad [Monad m] [WPMonad m ps] : WPMonad (ExceptT ε m) (
     congr
     ext b
     cases b
-    case error a => simp[PredTrans.pure, pure]
+    case error a => simp [PredTrans.pure, pure]
     case ok a => rfl
 
 instance EStateM.instWPMonad : WPMonad (EStateM ε σ) (.except ε (.arg σ .pure)) where

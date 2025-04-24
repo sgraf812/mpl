@@ -19,10 +19,10 @@ theorem Specs.forInWithInvariant_list {α : Type} {β : Type} ⦃m : Type → Ty
   {xs : List α} {init : β} {f : α → β → m (ForInStep β)}
   {inv : PostCond (β × List.Zipper xs) ps}
   (step : ∀ b rpref x suff (h : xs = rpref.reverse ++ x :: suff),
-      ⦃inv.1 (b, ⟨rpref, x::suff, by simp[h]⟩)⦄
+      ⦃inv.1 (b, ⟨rpref, x::suff, by simp [h]⟩)⦄
       f x b
       ⦃(fun r => match r with
-                 | .yield b' => inv.1 (b', ⟨x::rpref, suff, by simp[h]⟩)
+                 | .yield b' => inv.1 (b', ⟨x::rpref, suff, by simp [h]⟩)
                  | .done b' => inv.1 (b', ⟨xs.reverse, [], by simp⟩), inv.2)⦄) :
   ⦃inv.1 (init, ⟨[], xs, by simp⟩)⦄ forInWithInvariant xs init f inv ⦃(fun b => inv.1 (b, ⟨xs.reverse, [], by simp⟩), inv.2)⦄ := by
   simp only [forInWithInvariant, pure_bind]
@@ -413,25 +413,25 @@ theorem fib_triple_old : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n�
   unfold fib_impl
   intro _
   xwp
-  if h : n = 0 then simp[h] else
+  if h : n = 0 then simp [h] else
   simp only [h, reduceIte]
   xapp Specs.forIn_list ?inv ?step
   case inv => exact PostCond.total fun (⟨a, b⟩, xs) => a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)
   case pre => simp_all
   case step => intros; xwp; simp_all
-  simp_all[Nat.sub_one_add_one]
+  simp_all [Nat.sub_one_add_one]
 
 theorem fib_triple_new : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ := by
   unfold fib_impl
   mintro -
   mwp
-  if h : n = 0 then simp[h] else
+  if h : n = 0 then simp [h] else
   simp only [h, reduceIte]
   mspec Specs.forIn_list ?inv ?step
   case inv => exact PostCond.total fun (⟨a, b⟩, xs) => a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)
   case pre => simp_all
   case step => intros; mintro _; mwp; simp_all
-  simp_all[Nat.sub_one_add_one]
+  simp_all [Nat.sub_one_add_one]
 
 theorem fib_correct {n} : (fib_impl n).run = fib_spec n := by
   generalize h : (fib_impl n).run = x

@@ -232,7 +232,7 @@ instance PredTrans.instMonadMorphismPopArg : MonadMorphism (PredTrans (.arg σ p
 --     have key : ∀ r, x.popArg r = (·.1, r) <$> x.popArg r := sorry -- A property of the range of wp at ReaderT...
 --     replace key : ∀ Q r, x.apply Q r = x.apply (fun a _ => Q.1 a r, Q.2) r := sorry -- same fact, more easily applicable
 --     ext Q r
---     simp[withReader, key]
+--     simp [withReader, key]
 
 -- TODO: Figure out whether the following instances are useful (I don't think they are.)
 /-
@@ -296,7 +296,7 @@ theorem PredTrans.popExcept_pushExcept : popExcept (pushExcept x) = x := by
 --       exact (le_trans · h) }
 --
 -- theorem PredTrans.prePost_apply {ps : PredShape} {α : Type} {P : PreCond ps} {Q : PostCond α ps} :
---   P ≤ (PredTrans.prePost P Q).apply Q := by simp[PredTrans.prePost]
+--   P ≤ (PredTrans.prePost P Q).apply Q := by simp [PredTrans.prePost]
 --
 -- theorem PredTrans.prePost_apply_conseq {ps : PredShape} {α : Type} {P : PreCond ps} {Q Q' : PostCond α ps}
 --   (hpost : Q ≤ Q') :
@@ -306,7 +306,7 @@ theorem PredTrans.popExcept_pushExcept : popExcept (pushExcept x) = x := by
 --   P ≤ x.apply Q ↔ x ≤ PredTrans.prePost P Q := by
 --     constructor
 --     · intro h;
---       simp[PredTrans.prePost]
+--       simp [PredTrans.prePost]
 --       intro Q₂
 --       simp
 --       apply PreCond.imp_pure_extract_r

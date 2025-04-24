@@ -122,7 +122,7 @@ example :
     simp only [List.sum_cons, List.sum_nil]
     intro b' hinv
     split
-    · grind -- simp[hinv, h]
+    · grind -- simp [hinv, h]
     · omega -- grind
   simp only [List.sum_nil]
   sorry -- grind -- needs 4.17 lemmas
@@ -170,7 +170,7 @@ macro_rules
         , reduceIte
         , Nat.sub_one_add_one
       ]
-    | (simp_all[$args,*, Nat.sub_one_add_one]; done)
+    | (simp_all [$args,*, Nat.sub_one_add_one]; done)
     -- | grind
     ))
 

@@ -57,7 +57,7 @@ instance EStateM.instWP : WP (EStateM ε σ) (.except ε (.arg σ .pure)) where
         | .error e s' => Q.2.1 e s'
       mono := by
         intro _ _ h s
-        simp[wp]
+        simp [wp]
         cases (x s) <;> apply_rules [h.1,h.2.1]
     }
 
@@ -73,7 +73,7 @@ theorem StateM.by_wp {α} {x : σ → α × σ} {prog : StateM σ α} (h : State
     intro hspec
     intro s
     have := hspec s .intro
-    simp[wp, PredTrans.pure] at this
+    simp [wp, PredTrans.pure] at this
     exact h ▸ this
 
 @[wp_simp]
@@ -87,7 +87,7 @@ theorem WP.StateT_run_apply [WP m ps] (x : StateT σ m α) :
 @[wp_simp]
 theorem WP.ExceptT_run_apply [WP m ps] (x : ExceptT ε m α) :
   wp⟦x.run⟧.apply Q = wp⟦x⟧.apply (fun a => Q.1 (.ok a), fun e => Q.1 (.error e), Q.2) := by
-    simp[wp, ExceptT.run]
+    simp [wp, ExceptT.run]
     congr
     (ext x; cases x) <;> rfl
 

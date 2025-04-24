@@ -11,7 +11,7 @@ be derived without doing so. -/
 @[refl,simp]
 theorem entails.refl {σs : List Type} (P : SPred σs) : P ⊢ₛ P := by
   match σs with
-  | [] => simp[entails]
+  | [] => simp [entails]
   | σ :: _ => intro s; exact entails.refl (P s)
 
 theorem entails.trans {σs : List Type} {P Q R : SPred σs} : (P ⊢ₛ Q) → (Q ⊢ₛ R) → (P ⊢ₛ R) := by
@@ -34,7 +34,7 @@ theorem bientails.iff {σs : List Type} {P Q : SPred σs} : P ⊣⊢ₛ Q ↔ (P
 
 @[refl,simp]
 theorem bientails.refl {σs : List Type} (P : SPred σs) : P ⊣⊢ₛ P := by
-  induction σs <;> simp[bientails, *]
+  induction σs <;> simp [bientails, *]
 
 theorem bientails.trans {σs : List Type} {P Q R : SPred σs} : (P ⊣⊢ₛ Q) → (Q ⊣⊢ₛ R) → (P ⊣⊢ₛ R) := by
   induction σs

@@ -35,16 +35,16 @@ theorem MonadLiftT.monadLift_refl_apply [WP m ps] :
 -- Example: `MonadStateOf.mkFreshInt_apply`
 -- The alternative would be to have one lemma for concrete transformer stack at which `mkFreshInt_apply` is used that simply unfolds the definition.
 instance StateT.instLiftMonadMorphism [Monad m] [LawfulMonad m] : MonadMorphism m (StateT σ m) MonadLift.monadLift where
-  pure_pure x := by ext; simp[liftM, MonadLift.monadLift, StateT.lift]
-  bind_bind x f := by ext; simp[liftM, MonadLift.monadLift, StateT.lift]
+  pure_pure x := by ext; simp [liftM, MonadLift.monadLift, StateT.lift]
+  bind_bind x f := by ext; simp [liftM, MonadLift.monadLift, StateT.lift]
 
 instance ReaderT.instLiftMonadMorphism [Monad m] [LawfulMonad m] : MonadMorphism m (ReaderT ρ m) MonadLift.monadLift where
-  pure_pure x := by ext; simp[liftM, MonadLift.monadLift, ReaderT.run, pure, ReaderT.pure]
-  bind_bind x f := by ext; simp[liftM, MonadLift.monadLift, ReaderT.run, bind, ReaderT.bind]
+  pure_pure x := by ext; simp [liftM, MonadLift.monadLift, ReaderT.run, pure, ReaderT.pure]
+  bind_bind x f := by ext; simp [liftM, MonadLift.monadLift, ReaderT.run, bind, ReaderT.bind]
 
 instance ExceptT.instLiftMonadMorphism [Monad m] [LawfulMonad m] : MonadMorphism m (ExceptT ε m) MonadLift.monadLift where
   pure_pure x := by ext; simp only [MonadLift.monadLift, ExceptT.lift, map_pure, ExceptT.run_pure]; rfl
-  bind_bind x f := by ext; simp[liftM, MonadLift.monadLift, ExceptT.lift, ExceptT.mk, bind, ExceptT.bind, ExceptT.bindCont]
+  bind_bind x f := by ext; simp [liftM, MonadLift.monadLift, ExceptT.lift, ExceptT.mk, bind, ExceptT.bind, ExceptT.bindCont]
 
 -- Now rewrites for the standard lib:
 

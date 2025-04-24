@@ -30,7 +30,7 @@ infixr:25 " ⊢ₑ " => FailConds.entails
 @[simp, refl]
 theorem FailConds.entails_refl {ps : PredShape} (x : FailConds ps) : x ⊢ₑ x := by
   induction ps
-  case pure => simp[entails]
+  case pure => simp [entails]
   case arg σ s ih => exact (ih x)
   case except ε s ih => simp only [entails, PreCond, SPred.entails.refl, implies_true, ih,
     and_self]
@@ -42,7 +42,7 @@ theorem FailConds.pure_def {x : FailConds .pure} : x = () := rfl
 theorem FailConds.entails_false {x : FailConds ps} : FailConds.false ⊢ₑ x := by
   simp only [false]
   induction ps
-  case pure => simp[entails]
+  case pure => simp [entails]
   case arg σ s ih => exact ih
   case except ε s ih => simp only [entails, PreCond.entails_false, implies_true, ih, and_self]
 
@@ -50,7 +50,7 @@ theorem FailConds.entails_false {x : FailConds ps} : FailConds.false ⊢ₑ x :=
 theorem FailConds.entails_true {x : FailConds ps} : x ⊢ₑ FailConds.true := by
   simp only [true]
   induction ps
-  case pure => simp[entails]
+  case pure => simp [entails]
   case arg σ s ih => exact ih
   case except ε s ih => simp only [entails, PreCond.entails_true, implies_true, ih, and_self]
 

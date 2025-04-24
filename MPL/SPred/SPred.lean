@@ -90,4 +90,4 @@ def conjunction {σs : List Type} (env : List (SPred σs)) : SPred σs := match 
 @[simp] theorem conjunction_nil {σs : List Type} : conjunction ([] : List (SPred σs)) = pure True := rfl
 @[simp] theorem conjunction_cons {σs : List Type} {P : SPred σs} {env : List (SPred σs)} : conjunction (P::env) = P.and (conjunction env) := rfl
 @[simp] theorem conjunction_apply {σs : List Type} {env : List (SPred (σ::σs))} : conjunction env s = conjunction (env.map (· s)) := by
-  induction env <;> simp[conjunction, *]
+  induction env <;> simp [conjunction, *]

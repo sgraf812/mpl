@@ -37,11 +37,11 @@ instance Result.instWP : WP Result (.except Error .pure) where
   | .div => PredTrans.const ⌜False⌝
 
 instance Result.instWPMonad : WPMonad Result (.except Error .pure) where
-  pure_pure := by intros; ext Q; simp[wp, PredTrans.pure, pure, Except.pure, Id.run]
+  pure_pure := by intros; ext Q; simp [wp, PredTrans.pure, pure, Except.pure, Id.run]
   bind_bind x f := by
     simp only [instWP, bind]
     ext Q
-    cases x <;> simp[PredTrans.bind, PredTrans.const, MonadExcept.throw_apply, Except.throw_apply]
+    cases x <;> simp [PredTrans.bind, PredTrans.const, MonadExcept.throw_apply, Except.throw_apply]
 
 /-- Kinds of unsigned integers -/
 inductive UScalarTy where
@@ -104,7 +104,7 @@ theorem U32.add_spec' {x y : U32} {Q : PCond U32} (hmax : ↑x + ↑y ≤ U32.ma
   ⦃Q.1 (UScalar.ofNatCore (↑x + ↑y) sorry)⦄ (x + y) ⦃Q⦄ := by
     mintro h
     have ⟨z, ⟨hxy, hz⟩⟩ := U32.add_spec hmax
-    simp[hxy, hz.symm, wp]
+    simp [hxy, hz.symm, wp]
     sorry -- show Q.1 z ↔ Q.1 (ofNatCore z.val ⋯)
 
 @[simp]
@@ -133,13 +133,13 @@ theorem U32.add_apply {x y : U32} {Q : PCond U32} :
     split
     next h =>
       have ⟨z, ⟨hxy, hz⟩⟩ := U32.add_spec h
-      simp[hxy, hz.symm, wp]
+      simp [hxy, hz.symm, wp]
       sorry -- show Q.1 z ↔ Q.1 (ofNatCore z.val ⋯)
     next h =>
-      simp[Result.instWP, HAdd.hAdd, UScalar.add]
+      simp [Result.instWP, HAdd.hAdd, UScalar.add]
       have : ¬x.val + y.val ≤ U32.max → UScalar.tryMk .U32 (Add.add x.val y.val) = Result.fail integerOverflow :=
         sorry -- by definition of tryMk
-      simp[this h, MonadExcept.throw_apply, Except.throw_apply]
+      simp [this h, MonadExcept.throw_apply, Except.throw_apply]
 
 theorem mul2_add1_apply (x : U32) (h : 2 * x.val + 1 ≤ U32.max)
   : wp⟦mul2_add1 x⟧.apply Q = Q.1 (UScalar.ofNatCore (2 * ↑x + (1 : Nat)) sorry) := by
