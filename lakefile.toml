@@ -5,4 +5,4 @@ defaultTargets = ["mpl"]
 
 [[lean_lib]]
 name = "mpl"
-roots = ["MPL", "Tests"]
+roots = ["MPL", "MPL.IO", "MPL.Experimental", "Tests"]

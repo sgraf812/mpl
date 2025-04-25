@@ -1,5 +1,12 @@
 # `mpl`
 
+**Disclaimer**: This library is still an unreleased pre-alpha, unfit for production use. 
+While the dust on the semantic foundations and the proof mode has mostly settled,
+aspects such as automation are still underdeveloped and experimental.
+In particular, there is no full-blown verification condition generator yet. 
+
+---
+
 A Lean library implementing a Monadic Program Logic.
 That is, a Floyd-Hoare-style program logic for functional correctness proofs of programs written using Lean's `do` notation.
 It supports both automated and interactive proofs, intrinsic or extrinsic to the program syntax.
@@ -40,7 +47,7 @@ theorem fib_correct {n} : (fib_impl n).run = fib_spec n := by
   apply fib_impl.spec n True.intro
 ```
 
-The proof can also be conducted extrinsically and interactively (TODO: Revisit example once the proof mode has been properly integrated and tactics have been renamed):
+The proof can also be conducted extrinsically and interactively:
 
 ```lean
 theorem fib_triple : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ := by
@@ -59,5 +66,5 @@ theorem fib_triple : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ :
 # Key features
 
 * **Monad-agnostic**: You can instantiate this framework at any particular monad your program is written in. Batteries are included for working with standard monad transformer stacks such as `StateT`, `ExceptT`, `ReaderT`, `Id` and `IO`. 
-* **Semi-automated**: The full spectrum of automation is available: Start trying a fully automated proof, fall back to automatic generation of manually discharged verification conditions, and perform Iris-style interactive proofs in a dedicated proof mode for the leftovers.
+* **Semi-automated**: The full spectrum of automation is available: Start trying a fully automated proof, fall back to automatic generation of manually discharged verification conditions, and perform Iris-style interactive proofs in a dedicated proof mode for the leftovers. In the current pre-alpha, expect only that the latter mode works reliably for you.
 * **Functional correctness**: The framework offers a unary program logic for functional correctness proofs. As of yet there are no plans to support relational program logics.
