@@ -6,6 +6,8 @@ Authors: Sebastian Graf
 import Lean
 import Init.Data.List
 
+/-! # State-indexed values -/
+
 namespace MPL
 
 /--
@@ -49,6 +51,9 @@ def uncurry {σs : List Type} (f : SVal σs α) : StateTuple σs → α := match
 /-- Embed a pure value into an `SVal`. -/
 abbrev pure {σs : List Type} (a : α) : SVal σs α := curry (fun _ => a)
 
+instance [Inhabited α] : Inhabited (SVal σs α) where
+  default := pure default
+
 class GetTy (σ : Type) (σs : List Type) where
   get : SVal σs σ
 
@@ -62,3 +67,7 @@ instance [GetTy σ₁ σs] : GetTy σ₁ (σ₂ :: σs) where
 def getThe {σs : List Type} (σ : Type) [GetTy σ σs] : SVal σs σ := GetTy.get
 @[simp] theorem getThe_here {σs : List Type} (σ : Type) (s : σ) : getThe (σs := σ::σs) σ s = pure s := rfl
 @[simp] theorem getThe_there {σs : List Type} [GetTy σ σs] (σ' : Type) (s : σ') : getThe (σs := σ'::σs) σ s = getThe (σs := σs) σ := rfl
+
+@[simp]
+theorem ite_app {c:Prop} [Decidable c] {α β : Type} (t e : α → β) (a : α) : (ite c t e) a = if c then t a else e a := by
+  split <;> rfl

@@ -8,9 +8,42 @@ import MPL.Idd
 import MPL.PredTrans
 import MPL.WPSimp
 
+/-!
+# Weakest precondition interpretation
+
+This module defines the weakest precondition interpretation `WP` of monadic programs
+in terms of predicate transformers `PredTrans`.
+
+This interpretation forms the basis of our notion of Hoare triples.
+It is the main mechanism of this library for reasoning about monadic programs.
+
+An instance `WP m ps` determines an interpretation `wp⟦x⟧` of a program `x : m α` in terms of a
+predicate transformer `PredTrans ps α`; The monad `m` determines `ps : PostShape` and hence
+the particular shape of the predicate transformer.
+
+This library comes with pre-defined instances for common monads and transformers such as
+
+* `WP Id .pure`, interpreting pure computations `x : Id α` in terms of a function (isomorphic to)
+  `(α → Prop) → Prop`.
+* `WP (StateT σ m) (.arg σ ps)` given an instance `WP m ps`, interpreting `StateM σ α` in terms of
+  a function `(α → σ → Prop) → σ → Prop`.
+* `WP (ExceptT ε m) (.except ε ps)` given an instance `WP m ps`, interpreting `Except ε α` in terms
+  of `(α → Prop) → (ε → Prop) → Prop`.
+* `WP (EStateM ε σ) (.except ε (.arg σ .pure))` interprets `EStateM ε σ α` in terms of
+  a function `(α → σ → Prop) → (ε → σ → Prop) → σ → Prop`.
+
+These instances are all monad morphisms, a fact which is properly encoded and exploited
+by the subclass `WPMonad`.
+-/
+
 namespace MPL
 
-class WP (m : Type → Type u) (ps : outParam PredShape) where
+/--
+  A weakest precondition interpretation of a monadic program `x : m α` in terms of a
+  predicate transformer `PredTrans ps α`.
+  The monad `m` determines `ps : PostShape`. See the module comment for more details.
+-/
+class WP (m : Type → Type u) (ps : outParam PostShape) where
   wp {α} (x : m α) : PredTrans ps α
 
 export WP (wp)
@@ -21,19 +54,18 @@ macro_rules
   | `(wp⟦$x:term⟧) => `(WP.wp $x)
   | `(wp⟦$x:term : $ty⟧) => `(WP.wp ($x : $ty))
 
--- σ₁ → ... → σₙ → Prop σᵢ
 open Lean.PrettyPrinter in
 @[app_unexpander WP.wp]
 protected def unexpandWP : Unexpander
-  | `($_ $x) => `(wp⟦$x⟧)
---  | `($_ ($x : $ty)) => `(wp⟦$x : $ty⟧) -- TODO?!
+  | `($_ $e) => match e with
+    | `(($x : $ty)) => `(wp⟦$x : $ty⟧)
+    | _ => `(wp⟦$e⟧)
   | _ => (throw () : UnexpandM _)
 
 section Instances
 
 variable {m : Type → Type u}
 
-@[simp]
 instance Id.instWP : WP Id .pure where
   wp x := PredTrans.pure x.run
 
@@ -81,26 +113,21 @@ theorem StateM.by_wp {α} {x : σ → α × σ} {prog : StateM σ α} (h : State
     simp [wp, PredTrans.pure] at this
     exact h ▸ this
 
-@[wp_simp]
 theorem WP.ReaderT_run_apply [WP m ps] (x : ReaderT ρ m α) :
   wp⟦x.run r⟧.apply Q = wp⟦x⟧.apply (fun a _ => Q.1 a, Q.2) r := rfl
 
-@[wp_simp]
 theorem WP.StateT_run_apply [WP m ps] (x : StateT σ m α) :
   wp⟦x.run s⟧.apply Q = wp⟦x⟧.apply (fun a s => Q.1 (a, s), Q.2) s := rfl
 
-@[wp_simp]
 theorem WP.ExceptT_run_apply [WP m ps] (x : ExceptT ε m α) :
   wp⟦x.run⟧.apply Q = wp⟦x⟧.apply (fun a => Q.1 (.ok a), fun e => Q.1 (.error e), Q.2) := by
     simp [wp, ExceptT.run]
     congr
     (ext x; cases x) <;> rfl
 
-@[wp_simp]
 theorem WP.dite_apply {ps} {Q : PostCond α ps} (c : Prop) [Decidable c] [WP m ps] (t : c → m α) (e : ¬ c → m α) :
   wp⟦if h : c then t h else e h⟧.apply Q = if h : c then wp⟦t h⟧.apply Q else wp⟦e h⟧.apply Q := by split <;> rfl
 
-@[wp_simp]
 theorem WP.ite_apply {ps} {Q : PostCond α ps} (c : Prop) [Decidable c] [WP m ps] (t : m α) (e : m α) :
   wp⟦if c then t else e⟧.apply Q = if c then wp⟦t⟧.apply Q else wp⟦e⟧.apply Q := by split <;> rfl
 
@@ -108,7 +135,7 @@ end Instances
 
 open Lean Elab Meta Term Command
 
-theorem congr_apply_Q {α : Type} {m : Type → Type u} (a b : m α) (h : a = b) {ps : PredShape} [WP m ps] (Q : PostCond α ps) :
+theorem congr_apply_Q {α : Type} {m : Type → Type u} (a b : m α) (h : a = b) {ps : PostShape} [WP m ps] (Q : PostCond α ps) :
   wp⟦a⟧.apply Q = wp⟦b⟧.apply Q := by congr
 
 -- the following function is vendored from Mathlib for now.  TODO: Specialize, simplify
@@ -138,7 +165,7 @@ private def _root_.Lean.Expr.reduceProjStruct? (e : Expr) : MetaM (Option Expr) 
 
 def deriveWPSimpFromEq (eq type : Expr) (baseName : Name) (fieldProjs : List Name := []) : TermElabM Name := do
   let lemmaName := baseName ++ `wp_apply
-  let res ← forallTelescopeReducing type fun xs type => do
+  let res ← forallTelescopeReducing type fun xs _ => do
     let eq := eq.beta xs
     let_expr Eq ty lhs rhs := (← inferType eq) | throwError "not an equality {eq}"
     -- For eta-reduced equalities such as liftM.eq_def, we have
@@ -190,6 +217,11 @@ def isConstructorType? [Monad m] [MonadEnv m] (ty : Expr) : m (Option StructureI
 
 def looksTypeLikeMonadicOp? (ty : Expr) : Bool := ty.getForallBody.isApp
 
+/--
+  The command `derive_wp_simp foo` will derive a `wp_simp` lemma that unfolds the definition of `foo`.
+  Similarly, `derive_wp_simp instMonadReaderOfMonadLift` will derive a `wp_simp` lemma for `bar` assuming that `foo` is a
+  each method in the `instMonadReaderOfMonadLift` instance.
+-/
 -- TODO: Should be an attribute `wp_simps`
 elab "derive_wp_simp " names:ident,+ : command =>
   for name in names.getElems do
@@ -205,8 +237,8 @@ elab "derive_wp_simp " names:ident,+ : command =>
       let .some eqn ← getUnfoldEqnFor? (nonRec := true) name.getId | throwError s!"{name} does not have an unfolding theorem"
       let eq ← mkConstWithFreshMVarLevels eqn
       if let .some info ← isConstructorType? defn.type then
-        let structName := info.structName
-        -- logInfo structName
+        let _structName := info.structName
+        -- logInfo _structName
         for fieldInfo in info.fieldInfo do
           let info ← getConstInfo fieldInfo.projFn
           if looksTypeLikeMonadicOp? info.type then

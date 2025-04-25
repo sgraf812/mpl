@@ -7,10 +7,20 @@ import MPL.WPMonad
 import MPL.SPred.Notation
 import MPL.ProofMode.MGoal
 
+/-!
+# Hoare triples
+
+Hoare triples form the basis for compositional functional correctness proofs about monadic programs.
+
+As usual, `triple x P Q` holds iff the precondition `P` entails the weakest precondition
+`wp⟦x⟧.apply Q` of `x : m α` for the postcondition `Q`.
+It is thus defined in terms of an instance `WP m ps`.
+-/
+
 namespace MPL
 
 universe u
-variable {m : Type → Type u} {ps : PredShape} [WP m ps]
+variable {m : Type → Type u} {ps : PostShape} [WP m ps]
 
 def triple (x : m α) (P : PreCond ps) (Q : PostCond α ps) : Prop :=
   P ⊢ₛ wp⟦x⟧.apply Q
@@ -26,15 +36,8 @@ app_unexpand_rule triple
 instance [WP m ps] (x : m α) : ProofMode.PropAsEntails (triple x P Q) spred(P → wp⟦x⟧.apply Q) where
   prop_as_entails := (SPred.entails_true_intro P (wp⟦x⟧.apply Q)).symm
 
-theorem triple_conseq {α} (x : m α) {P P' : PreCond ps} {Q Q' : PostCond α ps}
-  (hp : P.entails P' := by simp) (hq : Q'.entails Q := by simp) (h : triple x P' Q') :
-  triple x P Q := by
-    apply SPred.entails.trans hp
-    apply SPred.entails.trans h
-    apply wp⟦x⟧.mono Q' Q hq
-
 theorem triple_pure [Monad m] [MonadMorphism m (PredTrans ps) wp] {α} {Q : PostCond α ps} (a : α) (himp : P.entails (Q.1 a)) :
-  triple (pure (f:=m) a) P Q := by apply SPred.entails.trans himp (by simp only [pure_pure, PredTrans.pure_apply, SPred.entails.refl])
+  triple (pure (f:=m) a) P Q := himp.trans (by simp only [pure_pure, PredTrans.pure_apply, SPred.entails.refl])
 
 theorem triple_bind [Monad m] [MonadMorphism m (PredTrans ps) wp] {α β} {P : PreCond ps} {Q : α → PreCond ps} {R : PostCond β ps} (x : m α) (f : α → m β)
   (hx : triple x P (Q, R.2))
@@ -43,5 +46,5 @@ theorem triple_bind [Monad m] [MonadMorphism m (PredTrans ps) wp] {α β} {P : P
     apply SPred.entails.trans hx
     simp only [bind_bind]
     apply wp⟦x⟧.mono _ _
-    simp only [PostCond.entails, PreCond, FailConds.entails_refl, and_true]
+    simp only [PostCond.entails, PreCond, FailConds.entails.refl, and_true]
     exact hf

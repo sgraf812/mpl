@@ -6,10 +6,17 @@ Authors: Sebastian Graf
 import MPL.WPMonad
 import MPL.WPMonadLift
 
+/-!
+# Weakest precondition transformers for `MonadFunctor`
+
+The definitions in this module define `wp_simp` lemmas for interpreting `mmap` and thus the basis
+for automatic reasoning about instances of `MonadReaderWithOf`.
+-/
+
 namespace MPL
 
 universe u
-variable {m : Type → Type u} {ps : PredShape}
+variable {m : Type → Type u} {ps : PostShape}
 
 open MonadFunctor renaming monadMap → mmap
 
@@ -73,10 +80,6 @@ theorem MonadWithReaderOf.withTheReader_apply [MonadWithReaderOf ρ m] [WP m sh]
 theorem MonadWithReader.withReader_apply [MonadWithReaderOf ρ m] [WP m sh] (f : ρ → ρ) (x : m α) :
   wp⟦MonadWithReader.withReader f x⟧.apply Q = wp⟦MonadWithReaderOf.withReader f x⟧.apply Q := rfl
 
-@[simp]
-theorem ite_app {c:Prop} [Decidable c] (t e : α → β) (a : α) : (ite (α := α → β) c t e) a = if c then t a else e a := by
-  split <;> rfl
-
 example :
   wp (m:= ExceptT Nat (StateT Nat (ReaderT Bool Id))) (withTheReader Bool not (do if (← read) then return 0 else return 1)) =
   wp (m:= ExceptT Nat (StateT Nat (ReaderT Bool Id))) (do if (← read) then return 1 else return 0) := by
@@ -87,6 +90,6 @@ example :
       PredTrans.pure_apply, MonadReader.read_apply, MonadReaderOf.read_apply,
       ExceptT.monadLift_apply, PredTrans.monadLiftExcept_apply, StateT.monadLift_apply,
       PredTrans.monadLiftArg_apply, ReaderT.read_apply]
-    simp only [ite_app, Bool.not_eq_eq_eq_not, Bool.not_true, Bool.ite_eq_false]
+    simp only [SVal.ite_app, Bool.not_eq_eq_eq_not, Bool.not_true, Bool.ite_eq_false]
 
 end MPL

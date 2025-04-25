@@ -9,6 +9,8 @@ import MPL.Experimental.Do
 namespace MPL.Tests.Demo
 open MPL
 
+set_option grind.warning false
+
 -- Hoare triple specifications defined in terms of weakest precondition predicate transformers
 
 def AppState := Nat × Nat
@@ -222,9 +224,6 @@ def fib_impl' (n : Nat) : Idd Nat
 
 
 
-
-
-
 -- exceptions, transformer stacks
 
 example :
@@ -238,7 +237,7 @@ example :
     set 1
     return x
     : ExceptT Nat (StateT Nat Idd) Nat)
-  ⦃post⟨fun r s => False, fun e s => e = 42 ∧ s = 4⟩⦄ := by
+  ⦃post⟨fun _ _ => False, fun e s => e = 42 ∧ s = 4⟩⦄ := by
   mintro h ∀s
   mpure h
   subst h
@@ -248,7 +247,7 @@ example :
     intro b pref x suff h
     mintro hinv ∀b'
     mwp
-    simp_all only [h, List.sum_cons, ite_app]
+    simp_all only [h, List.sum_cons, SVal.ite_app]
     mpure hinv
     mpure_intro
     split

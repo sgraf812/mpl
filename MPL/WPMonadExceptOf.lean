@@ -7,10 +7,20 @@ import MPL.WPMonad
 import MPL.WPMonadLift
 import MPL.WPMonadFunctor
 
+/-!
+# Weakest precondition transformers for `MonadExceptOf`
+
+The definitions in this module define `wp_simp` lemmas for interpreting `throw`, `throwThe`,
+`tryCatch`, etc.
+
+This type class cannot be lifted through `MonadLift` or `MonadFunctor`, so there is one lemma per
+`MonadExceptOf` operation and instance to lift through; the classic m*n instances problem.
+-/
+
 namespace MPL
 
 universe u
-variable {m : Type → Type u} {ps : PredShape}
+variable {m : Type → Type u} {ps : PostShape}
 
 theorem MonadExcept.throw_apply [MonadExceptOf ε m] [WP m ps] :
   wp⟦throw e : m α⟧.apply Q = wp⟦MonadExceptOf.throw e : m α⟧.apply Q := rfl

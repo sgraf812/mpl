@@ -15,11 +15,11 @@ namespace MPL
 open Lean Parser Meta Elab Term Command
 
 def forInWithInvariant {m : Type → Type u₂} {α : Type} {β : Type} [Monad m]
-  (xs : List α) (init : β) (f : α → β → m (ForInStep β)) {ps : PredShape} [WP m ps] (_inv : PostCond (β × List.Zipper xs) ps) : m β :=
+  (xs : List α) (init : β) (f : α → β → m (ForInStep β)) {ps : PostShape} [WP m ps] (_inv : PostCond (β × List.Zipper xs) ps) : m β :=
     pure () >>= fun _ => forIn xs init f
 
 @[spec]
-theorem Specs.forInWithInvariant_list {α : Type} {β : Type} ⦃m : Type → Type v⦄ {ps : PredShape}
+theorem Specs.forInWithInvariant_list {α : Type} {β : Type} ⦃m : Type → Type v⦄ {ps : PostShape}
   [Monad m] [WPMonad m ps]
   {xs : List α} {init : β} {f : α → β → m (ForInStep β)}
   {inv : PostCond (β × List.Zipper xs) ps}
@@ -58,10 +58,10 @@ def ForIn.toList [ForIn Id ρ α] (xs : ρ) : List α := Id.run do
 class LawfulForIn (m : Type → Type u) (ρ : Type u) (α : Type u) [Monad m] [ForIn m ρ α] [ForIn Id ρ α] where
   forIn_forIn_toList (xs : ρ) b (f : α → β → m (ForInStep β)) : forIn xs b f = forIn (ForIn.toList xs) b f
 
-abbrev requiresGadget {α : Type} {m : Type → Type u} {ps : PredShape} [WP m ps] (_p : PreCond ps) (x : m α) : m α :=
+abbrev requiresGadget {α : Type} {m : Type → Type u} {ps : PostShape} [WP m ps] (_p : PreCond ps) (x : m α) : m α :=
   x
 
-abbrev ensuresGadget {α : Type} {m : Type → Type u} {ps : PredShape} [WP m ps] (_p : α → PreCond ps) (x : m α): m α :=
+abbrev ensuresGadget {α : Type} {m : Type → Type u} {ps : PostShape} [WP m ps] (_p : α → PreCond ps) (x : m α): m α :=
   x
 
 @[wp_simp]
@@ -72,23 +72,23 @@ theorem requiresGadget_apply [WP m sh] (x : m α) :
 theorem ensuresGadget_apply [WP m sh] (x : m α) :
   wp⟦ensuresGadget P x⟧.apply Q = wp⟦x⟧.apply Q := rfl
 
-def assertGadget {m : Type → Type u} {ps : PredShape} [Monad m] [WP m ps] (_p : PreCond ps) : m Unit :=
+def assertGadget {m : Type → Type u} {ps : PostShape} [Monad m] [WP m ps] (_p : PreCond ps) : m Unit :=
   pure ()
 
 -- This one will have the let mut vars as free occurrences
-def invariantGadget1.{u} {m : Type → Type u} {ps : PredShape} [Monad m] [WP m ps] (_inv : {α : Type} → {xs:List α} → List.Zipper xs → PreCond ps) : m Unit :=
+def invariantGadget1.{u} {m : Type → Type u} {ps : PostShape} [Monad m] [WP m ps] (_inv : {α : Type} → {xs:List α} → List.Zipper xs → PreCond ps) : m Unit :=
   pure ()
 
 -- This one will have the let mut vars as bound occurrences in β
-def invariantGadget2.{u,v} (β : Type v) {m : Type → Type u} {ps : PredShape} [Monad m] [WP m ps] (_inv : β → {α : Type} → {xs:List α} → List.Zipper xs → PreCond ps) : m Unit :=
+def invariantGadget2.{u,v} (β : Type v) {m : Type → Type u} {ps : PostShape} [Monad m] [WP m ps] (_inv : β → {α : Type} → {xs:List α} → List.Zipper xs → PreCond ps) : m Unit :=
   pure ()
 
 @[wp_simp]
-theorem assertGadget_apply {m : Type → Type u} {ps : PredShape} [Monad m] [WP m ps] {P : PreCond ps} {Q : PostCond Unit ps} : -- (h : Q.1 () ≤ P) :
+theorem assertGadget_apply {m : Type → Type u} {ps : PostShape} [Monad m] [WP m ps] {P : PreCond ps} {Q : PostCond Unit ps} : -- (h : Q.1 () ≤ P) :
   wp⟦assertGadget P : m Unit⟧.apply Q = wp⟦pure () : m Unit⟧.apply Q := rfl
 
 @[wp_simp]
-theorem invariantGadget_apply {m : Type → Type u₂} {ps : PredShape} {α : Type} {β : Type} [Monad m] [WPMonad m ps]
+theorem invariantGadget_apply {m : Type → Type u₂} {ps : PostShape} {α : Type} {β : Type} [Monad m] [WPMonad m ps]
   (xs : List α) (init : β) (f : α → β → m (ForInStep β)) (inv : β → {α : Type} → {xs : List α} → List.Zipper xs → PreCond ps) (Q : PostCond β ps) :
   wp⟦invariantGadget2 β inv : m Unit⟧.apply (no_index (fun _ => wp⟦forIn xs init f⟧.apply Q, Q.2)) = wp⟦forInWithInvariant xs init f (PostCond.total fun (β, xs) => (inv β xs))⟧.apply Q := by
     calc
@@ -163,7 +163,7 @@ def patch_invariant (e : Expr) (args : Array Expr := Array.empty) (names : Array
       body := b
       bvshift := bvshift + 1
       while true do
-        if let some init := (match_expr body with | ForIn.forIn _ _ _ _ _ _ xs init f => some init | _ => none) then
+        if let some init := (match_expr body with | ForIn.forIn _ _ _ _ _ _ _ init _ => some init | _ => none) then
           -- init contains the good stuff; a tuple of all the mut vars
           body := init
           break
@@ -411,7 +411,7 @@ def fib_impl (n : Nat) : Idd Nat
     b := a' + b
   return b
 
-#check fib_impl.spec
+--#check fib_impl.spec
 
 theorem fib_triple_old : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ := by
   -- This is how CHONK could prove fib_impl.spec using the old way (intro+xwp)

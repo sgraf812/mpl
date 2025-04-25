@@ -11,9 +11,27 @@ import MPL.WPMonadLift
 import MPL.WPMonadFunctor
 import MPL.WPMonadExceptOf
 
+/-!
+# Tactic `mwp`
+
+The tactic `mwp` is the basis for rewriting stateful goal states of the form `H ⊢ₛ wp⟦x⟧.apply Q`.
+
+This tactic will be superceded by a more sophisticated verification condition generator in the
+future. The main difference would be that the VC generator would apply general Hoare triple
+specifications (which can be lossy) instead of information preserving rewrites.
+-/
+
 namespace MPL.ProofMode.Tactics
 open Lean Elab Tactic Meta
 
+/--
+  Rewrites stateful goal states of the form `H ⊢ₛ wp⟦x⟧.apply Q` using lemmas registered with
+  `@[wp_simp]`.
+
+  This tactic will be superceded by a more sophisticated verification condition generator in the
+  future. The main difference would be that the VC generator would apply general Hoare triple
+  specifications (which can be lossy) instead of information preserving rewrites.
+-/
 elab "mwp" : tactic => do
   let mvar ← getMainGoal
   let some _ := parseMGoal? (← instantiateMVars <| ← mvar.getType) | throwError "mwp: not in proof mode"
@@ -23,33 +41,11 @@ elab "mwp" : tactic => do
   let (mvars, _) ← runTactic mvar (← `(tactic| wp_simp))
   replaceMainGoal mvars
 
--- TODO: upstream
-@[simp] theorem Array.forIn'_eq_forIn'_toList {α β} [Monad m] (arr : Array α)
-    (init : β) (f : (a : α) → a ∈ arr → β → m (ForInStep β)) :
-    forIn' arr init f =
-      forIn' arr.toList init (fun a h => f a (Array.mem_toList.mp h)) := by
-  conv => lhs; simp only [forIn', Array.forIn']
-  simp
-  sorry -- do the same as for Std.Range
-  -- rw [forIn'_loop_eq_forIn'_range']
-
-@[simp] theorem Array.forIn_eq_forIn_toList {α β} [Monad m] (arr : Array α)
-    (init : β) (f : α → β → m (ForInStep β)) :
-    forIn arr init f = forIn arr.toList init f := by
-  simp only [forIn, forIn'_eq_forIn'_toList]
-
--- not sure how to do this in a non-bloaty way. Probably involves a type class
---@[simp] theorem List.forIn_MProd_to_Prod {α β} [Monad m]
-    --(init : β) (f : α → β → m (ForInStep β)) :
-    --forIn xs init f = forIn xs init f := by
-  --simp only [forIn, forIn'_eq_forIn'_toList]
-
 attribute [wp_simp]
   eq_self
-  SPred.imp_self_simp
-  SPred.true_intro_simp
-  SPred.true_intro_simp_nil
-  PostCond.entails FailConds.entails_false FailConds.entails_refl FailConds.entails_true FailConds.pure_def SPred.entails.refl
+  SPred.entails.refl SPred.imp_self_simp SPred.true_intro_simp SPred.true_intro_simp_nil
+  FailConds.entails.refl FailConds.entails_false FailConds.entails_true FailConds.pure_def
+  PostCond.entails PostCond.entails.refl PostCond.total PostCond.partial
   -- Lawful monad normalization that we don't appear to be needing!
   -- bind_pure_comp map_pure id_map' ExceptT.map_throw bind_map bind_map_left bind_pure pure_bind bind_assoc
   -- MonadMorphism and basic if/then/else:
@@ -69,7 +65,6 @@ attribute [wp_simp]
   WP.ReaderT_run_apply WP.StateT_run_apply WP.ExceptT_run_apply
   -- List.Zipper.begin_suff List.Zipper.tail_suff List.Zipper.end_suff -- Zipper stuff needed for invariants
   Std.Range.forIn_eq_forIn_range' Std.Range.forIn'_eq_forIn'_range' Std.Range.size Nat.div_one  -- rewrite to forIn_list
-  Array.forIn_eq_forIn_toList Array.forIn'_eq_forIn'_toList -- rewrite to forIn_list
   -- state, reader, except ..Of impls
   StateT.get_apply
   StateT.set_apply

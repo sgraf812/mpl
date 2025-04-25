@@ -6,16 +6,16 @@ Authors: Sebastian Graf
 import MPL.Triple
 import MPL.SpecAttr
 
+/-!
+# Hoare triple specifications for select functions
+
+This module contains Hoare triple specifications for some functions in Core.
+-/
+
 namespace MPL
 
 namespace List
 
-theorem tail_of_cons_suffix : hd::tl <:+ l → tl <:+ l := by
-  intro ⟨pre, h⟩
-  exists (pre ++ [hd])
-  simp [h]
-
--- TODO: Replace l by α, remove property, define toList instead?
 @[ext]
 structure Zipper {α : Type u} (l : List α) : Type u where
   rpref : List α
@@ -25,14 +25,11 @@ structure Zipper {α : Type u} (l : List α) : Type u where
 @[simp]
 abbrev Zipper.pref {α} {l : List α} (s : List.Zipper l) : List α := s.rpref.reverse
 
-def Zipper.suffix (s : List.Zipper l) : s.suff <:+ l := ⟨s.pref, s.property⟩
-def Zipper.prefix (s : List.Zipper l) : s.pref <+: l := ⟨s.suff, s.property⟩
 def Zipper.begin {l : List α} : Zipper l := ⟨[],l,rfl⟩
 def Zipper.end {l : List α} : Zipper l := ⟨l.reverse,[],by simp⟩
-def Zipper.atSuff {l suff : List α} (h : suff <:+ l): Zipper l := ⟨l.reverse.drop suff.length,suff,sorry⟩
 def Zipper.tail (s : Zipper l) (h : s.suff = hd::tl) : Zipper l :=
   { rpref := hd::s.rpref, suff := tl, property := by simp [s.property, ←h] }
---theorem Zipper.tail_is_tail (s : Zipper l) (h : s.suff = hd::tl) : (s.tail h).suff = tl := by simp [tail]
+
 @[simp]
 theorem Zipper.begin_eq_end_iff_nil : @Zipper.begin _ l = @Zipper.end _ l ↔ l = [] := by
   constructor <;> simp [begin, Zipper.end]
@@ -55,30 +52,17 @@ theorem Zipper.end_suff {l : List α} : (@Zipper.end α l).suff = [] := rfl
 @[simp]
 theorem Zipper.tail_suff {l : List α} {s : Zipper l} (h : s.suff = hd::tl) : (s.tail h).suff = tl := rfl
 
-@[simp]
-theorem Zipper.atSuff_nil_end (l : List α) : @Zipper.atSuff _ l [] List.nil_suffix = Zipper.end := rfl
-
-@[simp]
-theorem Zipper.atSuff_rfl_begin (l : List α) : @Zipper.atSuff _ l l List.suffix_rfl = Zipper.begin := by
-  simp [begin, atSuff]
-
-@[simp]
-theorem Zipper.atSuff_tail (l : List α) (h : hd::tl <:+ l): (Zipper.atSuff h).tail rfl = Zipper.atSuff (tail_of_cons_suffix h) := by
-  induction l
-  case nil => simp at h
-  case cons hd' tl' ih => sorry -- later
-
 end List
 
 @[spec]
-theorem Specs.pure {m : Type → Type} {ps : PredShape} [Monad m] [WPMonad m ps] {α} {a : α} {Q : PostCond α ps} :
+theorem Specs.pure {m : Type → Type} {ps : PostShape} [Monad m] [WPMonad m ps] {α} {a : α} {Q : PostCond α ps} :
   ⦃Q.1 a⦄ (pure (f:=m) a) ⦃Q⦄ := triple_pure a .rfl
 
 @[spec]
-theorem Specs.bind {m : Type → Type} {ps : PredShape} [Monad m] [WPMonad m ps] {α β} {x : m α} {f : α → m β} {Q : PostCond β ps} :
+theorem Specs.bind {m : Type → Type} {ps : PostShape} [Monad m] [WPMonad m ps] {α β} {x : m α} {f : α → m β} {Q : PostCond β ps} :
   ⦃wp⟦x⟧.apply (fun a => wp⟦f a⟧.apply Q, Q.2)⦄ (x >>= f) ⦃Q⦄ := triple_bind x f .rfl (fun _ => .rfl)
 
-theorem Specs.forIn_list {α : Type} {β : Type} {m : Type → Type v} {ps : PredShape}
+theorem Specs.forIn_list {α : Type} {β : Type} {m : Type → Type v} {ps : PostShape}
   [Monad m] [LawfulMonad m] [WPMonad m ps]
   {xs : List α} {init : β} {f : α → β → m (ForInStep β)}
   (inv : PostCond (β × List.Zipper xs) ps)
@@ -110,7 +94,7 @@ theorem Specs.forIn_list {α : Type} {β : Type} {m : Type → Type v} {ps : Pre
 
 -- using the postcondition as a constant invariant:
 @[spec]
-theorem Specs.forIn_list_const_inv {α : Type} {β : Type} {m : Type → Type v} {ps : PredShape}
+theorem Specs.forIn_list_const_inv {α : Type} {β : Type} {m : Type → Type v} {ps : PostShape}
   [Monad m] [LawfulMonad m] [WPMonad m ps]
   {xs : List α} {init : β} {f : α → β → m (ForInStep β)}
   {inv : PostCond β ps}
@@ -121,7 +105,7 @@ theorem Specs.forIn_list_const_inv {α : Type} {β : Type} {m : Type → Type v}
   ⦃inv.1 init⦄ forIn xs init f ⦃inv⦄ :=
     Specs.forIn_list (fun p => inv.1 p.1, inv.2) (fun b _ hd _ _ => step hd b)
 
-theorem Specs.foldlM_list {α : Type} {β : Type} {m : Type → Type v} {ps : PredShape}
+theorem Specs.foldlM_list {α : Type} {β : Type} {m : Type → Type v} {ps : PostShape}
   [Monad m] [LawfulMonad m] [WPMonad m ps]
   {xs : List α} {init : β} {f : β → α → m β}
   (inv : PostCond (β × List.Zipper xs) ps)
@@ -139,7 +123,7 @@ theorem Specs.foldlM_list {α : Type} {β : Type} {m : Type → Type v} {ps : Pr
 
 -- using the postcondition as a constant invariant:
 @[spec]
-theorem Specs.foldlM_list_const_inv {α : Type} {β : Type} {m : Type → Type v} {ps : PredShape}
+theorem Specs.foldlM_list_const_inv {α : Type} {β : Type} {m : Type → Type v} {ps : PostShape}
   [Monad m] [LawfulMonad m] [WPMonad m ps]
   {xs : List α} {init : β} {f : β → α → m β}
   {inv : PostCond β ps}
@@ -149,17 +133,5 @@ theorem Specs.foldlM_list_const_inv {α : Type} {β : Type} {m : Type → Type v
       ⦃(fun b' => inv.1 b', inv.2)⦄) :
   ⦃inv.1 init⦄ List.foldlM f init xs ⦃inv⦄ :=
     Specs.foldlM_list (fun p => inv.1 p.1, inv.2) (fun b _ hd _ _ => step hd b)
-
-theorem Specs.forIn_list' {α : Type} {β : Type} {m : Type → Type v} {ps : PredShape}
-  [Monad m] [LawfulMonad m] [WPMonad m ps]
-  {xs : List α} {init : β} {f : α → β → m (ForInStep β)}
-  (inv : PostCond (β × List.Zipper xs) ps)
-  (step : ∀ b rpref x suff (h : xs = rpref.reverse ++ x :: suff),
-      ⦃inv.1 (b, ⟨rpref, x::suff, by simp [h]⟩)⦄
-      f x b
-      ⦃(fun r => match r with
-                 | .yield b' => inv.1 (b', ⟨x::rpref, suff, by simp [h]⟩)
-                 | .done b' => inv.1 (b', ⟨xs.reverse, [], by simp⟩), inv.2)⦄) :
-  ⦃inv.1 (init, ⟨[], xs, by simp⟩)⦄ forIn xs init f ⦃(fun b => inv.1 (b, ⟨xs.reverse, [], by simp⟩), inv.2)⦄ := sorry
 
 end MPL

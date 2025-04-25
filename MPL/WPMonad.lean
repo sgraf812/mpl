@@ -6,68 +6,69 @@ Authors: Sebastian Graf
 import MPL.WP
 import MPL.MonadMorphism
 
+/-!
+# Monad morphisms and weakest precondition interpretations
+
+A `WP m ps` is a `WPMonad m ps` if the interpretation `WP.wp` is also a `MonadMorphism`.
+-/
+
+namespace MPL
 open MPL
 
 universe u
-variable {m : Type → Type u} {ps : PredShape}
+variable {m : Type → Type u} {ps : PostShape}
 
-class WPMonad (m : Type → Type u) (ps : outParam PredShape) [Monad m] extends LawfulMonad m, WP m ps, MonadMorphism m (PredTrans ps) wp where
+/--
+  A `WP` that is also a `MonadMorphism`. (They all are.)
+-/
+class WPMonad (m : Type → Type u) (ps : outParam PostShape) [Monad m]
+  extends LawfulMonad m, WP m ps, MonadMorphism m (PredTrans ps) wp where
 
-@[wp_simp]
 theorem WP.pure_apply [Monad m] [WPMonad m ps] (a : α) (Q : PostCond α ps) :
   wp⟦pure (f:=m) a⟧.apply Q = Q.1 a := by
     simp only [pure_pure, PredTrans.pure_apply]
 
-@[wp_simp]
 theorem WP.bind_apply [Monad m] [WPMonad m ps] (x : m α) (f : α → m β) (Q : PostCond β ps) :
   wp⟦x >>= f⟧.apply Q = wp⟦x⟧.apply (fun a => wp⟦f a⟧.apply Q, Q.2) := by
     simp only [bind_bind, PredTrans.bind_apply]
 
-@[wp_simp]
 theorem WP.map_apply [Monad m] [WPMonad m ps] (f : α → β) (x : m α) (Q : PostCond β ps) :
   wp⟦f <$> x⟧.apply Q = wp⟦x⟧.apply (fun a => Q.1 (f a), Q.2) := by
     simp only [map_map, PredTrans.map_apply]
 
-@[wp_simp]
 theorem WP.seq_apply [Monad m] [WPMonad m ps] (f : m (α → β)) (x : m α) (Q : PostCond β ps) :
   wp⟦f <*> x⟧.apply Q = wp⟦f⟧.apply (fun f => wp⟦x⟧.apply (fun a => Q.1 (f a), Q.2), Q.2) := by
     simp only [seq_seq, PredTrans.seq_apply]
 
-@[wp_simp]
 theorem WP.morph_pure_apply [Monad m] [Monad n] [LawfulMonad m] [MonadMorphism m n morph] [WPMonad n ps]
   (a : α) (Q : PostCond α ps) :
   wp⟦morph (pure a) : n α⟧.apply Q = wp⟦pure a : n α⟧.apply Q := by
     simp only [pure_pure]
 
-@[wp_simp]
 theorem WP.morph_bind_apply [Monad m] [Monad n] [LawfulMonad m] [MonadMorphism m n morph] [WPMonad n ps]
   (x : m α) (f : α → m β) (Q : PostCond β ps) :
   wp⟦morph (x >>= f) : n β⟧.apply Q = wp⟦morph x >>= fun a => morph (f a) : n β⟧.apply Q := by
     simp only [bind_bind]
 
-@[wp_simp]
 theorem WP.morph_map_apply [Monad m] [Monad n] [LawfulMonad m] [MonadMorphism m n morph] [WPMonad n ps]
   (f : α → β) (x : m α) (Q : PostCond β ps) :
   wp⟦morph (f <$> x) : n β⟧.apply Q = wp⟦f <$> morph x : n β⟧.apply Q := by
     simp only [map_map]
 
-@[wp_simp]
 theorem WP.morph_seq_apply [Monad m] [Monad n] [LawfulMonad m] [MonadMorphism m n morph] [WPMonad n ps]
   (f : m (α → β)) (x : m α) (Q : PostCond β ps) :
   wp⟦morph (f <*> x) : n β⟧.apply Q = wp⟦morph f <*> morph x : n β⟧.apply Q := by
     simp only [seq_seq]
 
-@[wp_simp]
 theorem WP.morph_dite_apply {ps} {Q : PostCond α ps} (c : Prop) [Decidable c] [Monad m] [Monad n] [MonadMorphism m n morph] [WP n ps] (t : c → m α) (e : ¬ c → m α) :
   wp⟦morph (if h : c then t h else e h)⟧.apply Q = if h : c then wp⟦morph (t h)⟧.apply Q else wp⟦morph (e h)⟧.apply Q := by split <;> rfl
 
-@[wp_simp]
 theorem WP.morph_ite_apply {ps} {Q : PostCond α ps} (c : Prop) [Decidable c] [Monad m] [Monad n] [MonadMorphism m n morph] [WP n ps] (t : m α) (e : m α) :
   wp⟦morph (if c then t else e)⟧.apply Q = if c then wp⟦morph t⟧.apply Q else wp⟦morph e⟧.apply Q := by split <;> rfl
 
 instance Idd.instWPMonad : WPMonad Idd .pure where
-  pure_pure a := by simp only [wp, PredTrans.pure, Pure.pure, Idd.run_pure]
-  bind_bind x f := by simp only [wp, PredTrans.pure, Bind.bind, Idd.bind, PredTrans.bind]
+  pure_pure a := by ext; simp only [wp, Idd.run_pure, instMonadPredTrans]
+  bind_bind x f := by ext; simp only [wp, PredTrans.pure, Bind.bind, Idd.bind, PredTrans.bind]
 
 instance Id.instWPMonad : WPMonad Id .pure where
   pure_pure a := by simp only [wp, PredTrans.pure, Pure.pure, Id.run]
@@ -86,11 +87,11 @@ instance ReaderT.instWPMonad [Monad m] [WPMonad m ps] : WPMonad (ReaderT ρ m) (
     PredTrans.pushArg_apply, PredTrans.map_apply]
 
 instance ExceptT.instWPMonad [Monad m] [WPMonad m ps] : WPMonad (ExceptT ε m) (.except ε ps) where
-  pure_pure a := by ext; simp only [wp, pure, ExceptT.pure, mk, pure_pure, PredTrans.pure,
+  pure_pure a := by ext; simp only [wp, pure, ExceptT.pure, ExceptT.mk, pure_pure, PredTrans.pure,
     PredTrans.pushExcept_apply]
   bind_bind x f := by
     ext Q
-    simp only [wp, bind, ExceptT.bind, mk, bind_bind, PredTrans.bind, ExceptT.bindCont,
+    simp only [wp, bind, ExceptT.bind, ExceptT.mk, bind_bind, PredTrans.bind, ExceptT.bindCont,
       PredTrans.pushExcept_apply]
     congr
     ext b

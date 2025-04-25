@@ -5,12 +5,16 @@ Authors: Lars König, Mario Carneiro, Sebastian Graf
 -/
 import MPL.SPred.Laws
 
+/-!
+# Derived laws of `SPred`
+
+This module contains some laws about `SPred` that are derived from
+the laws in `MPL.SPred.Laws`.
+-/
+
 namespace MPL.SPred
 
 variable {σs : List Type} {P P' Q Q' R R' : SPred σs} {φ φ₁ φ₂ : Prop}
-
-/- Most of the laws below are derived from the laws in Laws.lean
-and should not need induction on σs. TODO: Realize this or move to Laws.lean. -/
 
 theorem entails.rfl {σs : List Type} {P : SPred σs} : P ⊢ₛ P := entails.refl P
 
@@ -134,8 +138,8 @@ theorem pure_forall {φ : α → Prop} : (∀ x, (⌜φ x⌝ : SPred σs)) ⊣�
 
 theorem pure_exists {φ : α → Prop} : (∃ x, ⌜φ x⌝ : SPred σs) ⊣⊢ₛ ⌜∃ x, φ x⌝ := bientails.iff.mpr ⟨exists_elim fun a => pure_mono (⟨a, ·⟩), pure_elim' fun ⟨x, h⟩ => (pure_intro h).trans (exists_intro' x .rfl)⟩
 
-theorem true_intro_simp : (Q ⊢ₛ ⌜True⌝) ↔ True := iff_true_intro SPred.true_intro
-theorem true_intro_simp_nil {Q : SPred []} : (Q ⊢ₛ True) ↔ True := SPred.true_intro_simp
+@[simp] theorem true_intro_simp : (Q ⊢ₛ ⌜True⌝) ↔ True := iff_true_intro SPred.true_intro
+@[simp] theorem true_intro_simp_nil {Q : SPred []} : (Q ⊢ₛ True) ↔ True := SPred.true_intro_simp
 
 /-! # Miscellaneous -/
 
@@ -146,11 +150,5 @@ theorem and_right_comm : (P ∧ Q) ∧ R ⊣⊢ₛ (P ∧ R) ∧ Q := and_assoc.
 
 theorem entails_pure_intro {σs : List Type} (P Q : Prop) (h : P → Q) : SPred.entails ⌜P⌝ (σs := σs) ⌜Q⌝ := pure_elim' fun hp => pure_intro (h hp)
 
-@[simp]
-theorem entails_pure_elim {σ : Type} {σs : List Type} [Inhabited σ] (P Q : Prop) : SPred.entails ⌜P⌝ (σs := σ::σs) ⌜Q⌝ ↔ SPred.entails ⌜P⌝ (σs := σs) ⌜Q⌝:= by simp only [entails, SVal.curry_cons, forall_const]
-
-@[simp]
-theorem entails_true_intro {σs : List Type} (P Q : SPred σs) : ⌜True⌝ ⊢ₛ P → Q ↔ P ⊢ₛ Q := by
-  induction σs
-  case nil => simp only [pure, SVal.curry_nil, imp_nil, entails_nil, forall_const]
-  case cons σ σs ih => simp only [entails, SVal.curry_cons, imp, ih]
+@[simp] theorem entails_pure_elim {σ : Type} {σs : List Type} [Inhabited σ] (P Q : Prop) : SPred.entails ⌜P⌝ (σs := σ::σs) ⌜Q⌝ ↔ SPred.entails ⌜P⌝ (σs := σs) ⌜Q⌝:= by simp only [entails, SVal.curry_cons, forall_const]
+@[simp] theorem entails_true_intro {σs : List Type} (P Q : SPred σs) : ⊢ₛ P → Q ↔ P ⊢ₛ Q := Iff.intro (fun h => (and_intro true_intro .rfl).trans (imp_elim h)) (fun h => imp_intro (and_elim_r.trans h))

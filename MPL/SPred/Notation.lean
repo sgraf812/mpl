@@ -44,16 +44,16 @@ partial def unpack [Monad m] [MonadRef m] [MonadQuotation m] : Term → m Term
   | `(($P : $t))             => do ``(($(← unpack P) : $t))
   | `($t)                    => `($t)
 
--- Idiom notation
+/-! # Idiom notation -/
 
 /-- Embedding of pure Lean values into `SVal`. -/
 syntax "⌜" term "⌝" : term
-/-- ‹t› in `SVal`. -/
+/-- ‹t› in `SVal` idiom notation. -/
 syntax "‹" term "›ₛ" : term
 /-- Use getter `t` in `SVal` idiom notation. -/
 syntax:max "#" term:max : term
 
--- Now the actual logic
+/-! # Sugar for `SPred` -/
 
 /-- Entailment in `SPred`; sugar for `SPred.entails`. -/
 syntax:25 term:26 " ⊢ₛ " term:25 : term

@@ -5,10 +5,17 @@ Authors: Sebastian Graf
 -/
 import MPL.WPMonad
 
+/-!
+# Weakest precondition transformers for `MonadLift`
+
+The definitions in this module define `wp_simp` lemmas for interpreting `liftM` and thus the basis
+for automatic reasoning about instances of `MonadStateOf`.
+-/
+
 namespace MPL
 
 universe u
-variable {m : Type → Type u} {ps : PredShape}
+variable {m : Type → Type u} {ps : PostShape}
 
 -- The next 3 instances are important to interpret away monadLift.
 -- Note that we manage to map from `wp⟦·⟧.apply Q` to `wp⟦·⟧.apply (... Q ...)`
@@ -35,9 +42,9 @@ theorem MonadLiftT.monadLift_refl_apply [WP m ps] :
   wp⟦MonadLiftT.monadLift x : m α⟧.apply Q = wp⟦x : m α⟧.apply Q := by
     simp only [MonadLiftT.monadLift]
 
--- The following instance is useful when we have want to derive `modify f = monadLift (modify f)` and `modify f`
+-- The following instance is useful when we want to derive `modify f = monadLift (modify f)` and `modify f`
 -- is defined in terms of multiple primitive definitions in `m` (`get`, `set`, ...), rather than just one call to `modifyGet`.
--- Example: `MonadStateOf.mkFreshInt_apply`
+-- Example: `MonadStateOf.mkFreshInt_apply` in Tests/Toy.lean
 -- The alternative would be to have one lemma for concrete transformer stack at which `mkFreshInt_apply` is used that simply unfolds the definition.
 instance StateT.instLiftMonadMorphism [Monad m] [LawfulMonad m] : MonadMorphism m (StateT σ m) MonadLift.monadLift where
   pure_pure x := by ext; simp [liftM, MonadLift.monadLift, StateT.lift]

@@ -103,7 +103,7 @@ theorem U32.add_spec {x y : U32} (hmax : x.val + y.val ≤ U32.max) :
   ∃ z, x + y = Result.ok z ∧ (↑z : Nat) = ↑x + ↑y :=
   UScalar.add_spec sorry -- (by scalar_tac)
 
-abbrev PCond (α : Type) := PostCond α (PredShape.except Error PredShape.pure)
+abbrev PCond (α : Type) := PostCond α (PostShape.except Error PostShape.pure)
 
 theorem U32.add_spec' {x y : U32} {Q : PCond U32} (hmax : ↑x + ↑y ≤ U32.max):
   ⦃Q.1 (UScalar.ofNatCore (↑x + ↑y) sorry)⦄ (x + y) ⦃Q⦄ := by

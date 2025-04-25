@@ -10,6 +10,8 @@ import MPL.IO
 namespace MPL.Tests.Toy
 open MPL
 
+set_option grind.warning false
+
 theorem test_sum :
   ⦃True⦄
   do
@@ -67,13 +69,13 @@ theorem mkFreshInt_lift_spec [Monad m] [LawfulMonad m] [WPMonad m sh] :
   mwp
   simp
 
-example : PostCond (Nat × List.Zipper (List.range' 1 3 1)) (PredShape.except Nat (PredShape.arg Nat PredShape.pure)) :=
+example : PostCond (Nat × List.Zipper (List.range' 1 3 1)) (PostShape.except Nat (PostShape.arg Nat PostShape.pure)) :=
   ⟨fun (r, xs) s => r ≤ 4 ∧ s = 4 ∧ r + xs.suff.sum > 4, fun e s => e = 42 ∧ s = 4, ()⟩
 
-example : PostCond (Nat × List.Zipper (List.range' 1 3 1)) (PredShape.except Nat (PredShape.arg Nat PredShape.pure)) :=
+example : PostCond (Nat × List.Zipper (List.range' 1 3 1)) (PostShape.except Nat (PostShape.arg Nat PostShape.pure)) :=
   post⟨fun (r, xs) s => r ≤ 4 ∧ s = 4 ∧ r + xs.suff.sum > 4, fun e s => e = 42 ∧ s = 4⟩
 
-example : (Nat × List.Zipper (List.range' 1 3 1)) → PreCond (PredShape.except Nat (PredShape.arg Nat PredShape.pure)) :=
+example : (Nat × List.Zipper (List.range' 1 3 1)) → PreCond (PostShape.except Nat (PostShape.arg Nat PostShape.pure)) :=
   let x := ⟨fun (r, xs) s => r ≤ 4 ∧ s = 4 ∧ r + xs.suff.sum > 4, fun e s => e = 42 ∧ s = 4⟩; Prod.fst x
 
 example :
@@ -83,7 +85,7 @@ example :
     for i in [1:4] do { x := x + i }
     (pure () : (StateT Nat Idd) Unit)
     return x
-  ⦃⇓ r s => True⦄ := by
+  ⦃⇓ _ _ => True⦄ := by
   mintro hs
   mwp
   mspec (Specs.forIn_list (⇓ (p, xs) s => True) ?step)
@@ -99,7 +101,7 @@ theorem test_ex :
     for i in [1:s] do { x := x + i; if x > 4 then throw 42 }
     (set 1 : ExceptT Nat (StateT Nat Idd) PUnit)
     return x
-  ⦃post⟨fun r s => False,
+  ⦃post⟨fun _ _ => False,
         fun e s => e = 42 ∧ s = 4⟩⦄ := by
   mintro hs ∀s
   mpure hs
@@ -129,7 +131,7 @@ example :
   (wp (m:= ExceptT Nat (StateT Nat (ReaderT Bool Id))) (do if (← read) then return 1 else return 0)).apply Q := by
     apply SPred.bientails.iff.mpr
     constructor
-    all_goals mstart; mwp; simp [ite_app]
+    all_goals mstart; mwp; simp [SVal.ite_app]
 
 example :
   (wp (m:= ReaderT Char (StateT Bool (ExceptT Nat Id))) (do set true; throw 42; set false; get)).apply Q
@@ -170,6 +172,7 @@ theorem test_loop_break :
   case post.success =>
     mintro ∀s
     subst_vars
+    dsimp
     (conv in (List.sum _) => whnf)
     simp_all
     omega
@@ -202,10 +205,10 @@ theorem test_loop_early_return :
     mpure hs
     subst hs
     mwp
-    simp_all only [Nat.add_one_sub_one, PredShape.args, SPred.and_nil, gt_iff_lt, SPred.or_nil,
+    simp_all only [Nat.add_one_sub_one, PostShape.args, SPred.and_nil, gt_iff_lt, SPred.or_nil,
       List.reverse_append, List.reverse_cons, List.reverse_reverse, List.append_assoc,
       List.singleton_append, List.sum_cons, false_and, and_self, or_true, true_and,
-      or_false, ite_app, and_true, if_true_left, SPred.entails_nil]
+      or_false, SVal.ite_app, and_true, if_true_left, SPred.entails_nil]
     omega
   rcases r with ⟨r, x⟩
   mintro ∀s'
@@ -309,7 +312,7 @@ end KimsBabySteps
 
 section WeNeedAProofMode
 
-private abbrev theNat : SVal [Nat, Bool] Nat := fun n b => n
+private abbrev theNat : SVal [Nat, Bool] Nat := fun n _ => n
 private def test (P Q : PreCond (.arg Nat (.arg Bool .pure))) : PreCond (.arg Char (.arg Nat (.arg Bool .pure))) :=
   spred(fun n => ((∀ y, if y = n then ⌜‹Nat›ₛ + #theNat = 4⌝ else Q) ∧ Q) → P → (∃ x, P → if (x : Bool) then Q else P))
 

@@ -19,19 +19,15 @@ namespace MPL
 
 open Lean Meta Elab Tactic
 
-theorem wp_apply_triple_conseq {m : Type → Type} {ps : PredShape} [WP m ps] {α} {x : m α} {P : PreCond ps} {Q Q' : PostCond α ps}
+theorem wp_apply_triple_conseq {m : Type → Type} {ps : PostShape} [WP m ps] {α} {x : m α} {P : PreCond ps} {Q Q' : PostCond α ps}
   (h : ⦃P⦄ x ⦃Q⦄) (hpost : SPred.entails (wp⟦x⟧.apply Q) (wp⟦x⟧.apply Q')) :
   P.entails (wp⟦x⟧.apply Q') := SPred.entails.trans h hpost
 
-theorem wp_apply_triple_conseq_mono {m : Type → Type} {ps : PredShape} [WP m ps] {α} {x : m α} {P : PreCond ps} {Q Q' : PostCond α ps}
+theorem wp_apply_triple_conseq_mono {m : Type → Type} {ps : PostShape} [WP m ps] {α} {x : m α} {P : PreCond ps} {Q Q' : PostCond α ps}
   (h : ⦃P⦄ x ⦃Q⦄) (hpost : Q.entails Q') :
   P.entails (wp⟦x⟧.apply Q') := wp_apply_triple_conseq h (wp⟦x⟧.mono _ _ hpost)
 
 macro "xstart" : tactic => `(tactic| unfold triple)
-
-theorem ite_extrude_yield {c : Prop} [Decidable c] {x y : α} :
-  (if c then pure (.yield x) else pure (.yield y)) = ForInStep.yield <$> if c then pure x else pure (f := Idd) y := by
-  split <;> simp
 
 macro "xwp" : tactic =>
   `(tactic| ((try unfold triple); wp_simp))
@@ -48,7 +44,7 @@ def xapp_n_no_xbind (goal : MVarId) (spec : Option (TSyntax `term)) (thm : Name)
   let tgt := tgt.consumeMData -- had the error below trigger in Lean4Lean for some reason
   unless tgt.isAppOf ``PredTrans.apply do throwError s!"xapp: Not a PredTrans.apply application {tgt}"
   let wp := tgt.getArg! 2
-  let_expr WP.wp m ps instWP α x := wp | throwError "xapp: Not a wp application {wp}"
+  let_expr WP.wp m ps _instWP _α x := wp | throwError "xapp: Not a wp application {wp}"
   let triple_goal::post_goal::pre_goal::gs ← goal.apply (mkApp2 (mkConst thm) m ps) | failure
   post_goal.setTag main_tag -- this is going to be the main goal after applying the triple
   pre_goal.setTag `pre
@@ -74,7 +70,7 @@ def xapp_n_no_xbind (goal : MVarId) (spec : Option (TSyntax `term)) (thm : Name)
         pruneSolvedGoals
     else
       throwError s!"not an application of a constant: {x}"
-  try let _ ← post_goal.apply (mkConst ``PostCond.entails_refl) catch _ => pure ()
+  try let _ ← post_goal.apply (mkConst ``PostCond.entails.refl) catch _ => pure ()
 
 syntax "xapp_no_xbind" (ppSpace colGt term)? : tactic
 
@@ -106,60 +102,6 @@ macro_rules
 
 macro "sgrind" : tactic => `(tactic| ((try simp +contextual); grind))
 
-example :
-  ⦃fun s => s = 4⦄
-  do
-    let mut x := 0
-    let s ← get
-    for i in [1:s] do { x := x + i; if x > 4 then throw 42 }
-    (set 1 : ExceptT Nat (StateT Nat Idd) PUnit)
-    return x
-  ⦃post⟨fun r s => False, fun e s => e = 42 ∧ s = 4⟩⦄ := by
-  intro s hs
-  xwp
-  -- xbind -- optional
-  xapp (Specs.forIn_list ↑⟨fun (r, xs) s => r ≤ 4 ∧ s = 4 ∧ r + xs.suff.sum > 4, fun e s => e = 42 ∧ s = 4, ()⟩ ?step)
-  case pre => simp only [hs]; decide
-  case step =>
-    intro b _rpref x suff _h
-    xstart
-    xwp
-    simp only [List.sum_cons, List.sum_nil]
-    intro b' hinv
-    split
-    · grind -- simp [hinv, h]
-    · omega -- grind
-  simp only [List.sum_nil]
-  sorry -- grind -- needs 4.17 lemmas
-
-example :
-  ⦃fun s => s = 4⦄
-  do
-    let mut x := 0
-    let s ← get
-    for i in [1:s] do { x := x + i; if x > 4 then throw 42 }
-    (set 1 : ExceptT Nat (StateT Nat Idd) PUnit)
-    return x
-  ⦃post⟨fun r s => False,
-        fun e s => e = 42 ∧ s = 4⟩⦄ := by
-  mintro h ∀s
-  mpure h
-  subst h
-  mwp
-  mspec (Specs.forIn_list ↑⟨fun (r, xs) s => r ≤ 4 ∧ s = 4 ∧ r + xs.suff.sum > 4, fun e s => e = 42 ∧ s = 4, ()⟩ ?step)
-  case step =>
-    intro b _rpref x suff _h
-    mintro hinv ∀s
-    mpure hinv
-    mwp
-    simp_all only [List.sum_cons, List.sum_nil, ite_app]
-    split
-    · trivial
-    · simp_all only [PredShape.args, SVal.curry_nil, true_and,
-      SPred.entails_nil, forall_const]; omega -- grind
-  simp only [List.sum_nil]
-  sorry -- grind -- needs 4.17 lemmas
-
 syntax "CHONK_trivial" : tactic
 macro_rules | `(tactic| CHONK_trivial) => `(tactic| trivial)
 
@@ -174,6 +116,8 @@ macro_rules
     | simp_all only [if_true_left, if_false_left, and_self, and_true, List.length_nil, List.length_cons, ne_eq, not_false_eq_true, gt_iff_lt
         , reduceIte
         , Nat.sub_one_add_one
+        , SVal.curry_nil
+        , PostCond.total
       ]
     | (simp_all [$args,*, Nat.sub_one_add_one]; done)
     -- | grind

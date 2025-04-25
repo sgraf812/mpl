@@ -7,9 +7,15 @@ import MPL.SPred.Notation
 
 namespace MPL.SPred
 
-/- This module contains lemmas that need to be proved by induction on σs.
+/-!
+# Laws of `SPred`
+
+This module contains lemmas about `SPred` that need to be proved by induction on σs.
 That is, they need to proved by appealing to the model of `SPred` and cannot
-be derived without doing so. -/
+be derived without doing so.
+
+`MPL.SPred.DerivedLaws` has some more laws that are derivative of what follows.
+-/
 
 /-! # Entailment -/
 

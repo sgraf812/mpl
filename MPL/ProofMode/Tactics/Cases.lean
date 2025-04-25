@@ -1,7 +1,7 @@
 /-
-Copyright (c) 2025 Lean FRO LLC. All rights reserved.
+Copyright (c) 2022 Lars König. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
-Authors: Sebastian Graf
+Authors: Lars König, Mario Carneiro, Sebastian Graf
 -/
 import MPL.ProofMode.Focus
 import MPL.ProofMode.Patterns.MCases
@@ -77,7 +77,7 @@ private def getQH (goal : MGoal) : MetaM (Expr × Expr) := do
 def mCasesExists (H : Expr) (name : TSyntax ``binderIdent)
   (k : Expr /-name:α-/ → MetaM (α × MGoal × Expr)) : MetaM (α × MGoal × Expr) := do
   let some (α, σs, ψ) := H.consumeMData.app3? ``SPred.exists | throwError "Not an existential quantifier {H}"
-  let (name, ref) ← getFreshHypName name
+  let (name, _ref) ← getFreshHypName name
   withLocalDeclD name α fun x => do
     -- addLocalVarInfo ref (← getLCtx) h φ
     let (r, goal, prf /- : goal.toExpr -/) ← k x
@@ -171,7 +171,7 @@ partial def mCasesCore (σs : Expr) (H : Expr) (pat : MCasesPat) (k : Expr → M
       let prf := mkApp8 (mkConst ``SCases.and_3) σs Q H₁ H₂ H goal.target hand prf
       let goal := { goal with hyps := mkAnd! σs Q H }
       return (a, goal, prf)
-    else if let some (α, σs, ψ) := H.consumeMData.app3? ``SPred.exists then
+    else if let some (_α, σs, ψ) := H.consumeMData.app3? ``SPred.exists then
       let .one n := p
         | throwError "cannot further destruct a term after moving it to the Lean context"
       -- goal is Q ∧ (∃ x, ψ x) ⊢ₛ T. The plan is pretty similar to sPureCore:

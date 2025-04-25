@@ -12,23 +12,28 @@ Authors: Sebastian Graf
 def Idd (α : Type u) := α
 
 def Idd.run (x : Idd α) : α := cast (by unfold Idd; rfl) x
-def Idd.pure (a : α) : Idd α := cast (by unfold Idd; rfl) a
 
-@[simp]
-theorem Idd.run_pure (a : α) : Idd.run (Idd.pure a) = a := by with_unfolding_all rfl
+@[ext]
+def Idd.ext {α : Type u} {a b : Idd α} (h : a.run = b.run) : a = b := by with_unfolding_all (exact h)
+
+def Idd.pure (a : α) : Idd α := cast (by unfold Idd; rfl) a
 
 def Idd.bind (x : Idd α) (f : α → Idd β) : Idd β := f x.run
 instance : Monad Idd where
   pure := Idd.pure
   bind := Idd.bind
 
-instance : LawfulMonad Idd where
-  bind_pure_comp := by intros; constructor
-  pure_bind := by intros; with_unfolding_all constructor
-  bind_assoc := by intros; constructor
-  bind_map := by intros; constructor
-  map_const := sorry
-  id_map := sorry
-  pure_seq := sorry
-  seqLeft_eq := sorry
-  seqRight_eq := sorry
+@[simp]
+theorem Idd.run_pure (a : α) : Idd.run (Pure.pure a) = a := by with_unfolding_all rfl
+
+@[simp]
+theorem Idd.bind_pure (x : Idd α) (f : α → Idd β) : (x >>= f).run = (f x.run).run := by with_unfolding_all rfl
+
+@[simp]
+theorem Idd.map_pure (x : Idd α) (f : α → β) : (f <$> x).run = f x.run := by with_unfolding_all rfl
+
+instance : LawfulMonad Idd :=
+  LawfulMonad.mk'
+    (id_map := by intro _ x; ext; simp)
+    (pure_bind := by intro _ _ x f; ext; simp)
+    (bind_assoc := by intro _ _ _ x f g; ext; simp)

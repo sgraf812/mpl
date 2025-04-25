@@ -6,12 +6,20 @@ Authors: Sebastian Graf
 import Lean
 import MPL.SPred.SVal
 
+/-!
+# State-indexed predicates
+
+This module provides a type `SPred σs` of predicates indexed by a list of states.
+This type forms the basis for the notion of precondition in `mpl`; see `MPL.PreCond`.
+-/
+
 namespace MPL
 
-/-- A Predicate indexed by a list of states.
-```
-example : SPred [Nat, Bool] = (Nat → Bool → Prop) := rfl
-```
+/--
+  A Predicate indexed by a list of states.
+  ```
+  example : SPred [Nat, Bool] = (Nat → Bool → Prop) := rfl
+  ```
 -/
 abbrev SPred (σs : List Type) : Type := SVal σs Prop
 

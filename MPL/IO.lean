@@ -7,6 +7,9 @@ import MPL.WPMonad
 
 open MPL
 
+/-
+An idea for a semantic basis for separation logic that avoids a universe bump in `Heap`:
+```
 structure Universe where
   U : Type
   El : U → Type
@@ -15,6 +18,8 @@ def Elts (u : Universe) : Type := Σ x, u.El x
 
 abbrev Addr := Fin
 def Heap (u : Universe) n := Addr n → Elts u
+```
+-/
 
 axiom IO.wp {α ε} (x : EIO ε α) : PredTrans (.except ε .pure) α
 axiom IO.wp_pure {α ε} (a : α) :

@@ -152,7 +152,7 @@ else ⌜False⌝ : SVal [Nat, Char, Bool] Prop
 #check spred(Ψ (1 + 1))
 
 
-private abbrev theNat : SVal [Nat, Bool] Nat := fun n b => n
+private abbrev theNat : SVal [Nat, Bool] Nat := fun n _ => n
 example (P Q : SPred [Nat, Bool]): SPred [Char, Nat, Bool] :=
   spred(fun c => ((∀ y, if y = 4 then ⌜y = #theNat⌝ ∧ P else Q) ∧ Q) → (∃ x, P → if (x : Bool) then Q else P))
 

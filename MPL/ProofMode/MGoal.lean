@@ -1,7 +1,7 @@
 /-
-Copyright (c) 2025 Lean FRO LLC. All rights reserved.
+Copyright (c) 2022 Lars König. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
-Authors: Sebastian Graf
+Authors: Lars König, Mario Carneiro, Sebastian Graf
 -/
 import Lean
 import MPL.SPred

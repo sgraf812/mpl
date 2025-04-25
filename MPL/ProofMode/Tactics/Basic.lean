@@ -33,6 +33,13 @@ def mStart (mvar : MVarId) : MetaM (MVarId × MGoal) := mvar.withContext do
   let goal := { goal with target := ← instantiateMVars goal.target }
   pure (subgoal.mvarId!, goal)
 
+/--
+  Start the stateful proof mode of `mpl`.
+  This will transform a goal of the form `H ⊢ₛ T` into `⊢ₛ H → T`
+  upon which `mintro` can be used to re-introduce `H` and give it a name.
+  It is often more convenient to use `mintro` directly, which will
+  try `mstart` automatically if necessary.
+-/
 elab "mstart" : tactic => do
   let (mvar, _) ← mStart (← getMainGoal)
   replaceMainGoal [mvar]

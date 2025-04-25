@@ -1,7 +1,7 @@
 /-
-Copyright (c) 2025 Lean FRO LLC. All rights reserved.
+Copyright (c) 2022 Lars König. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
-Authors: Sebastian Graf
+Authors: Lars König, Mario Carneiro, Sebastian Graf
 -/
 import MPL.ProofMode.Tactics.Basic
 import MPL.ProofMode.Patterns.MCases
@@ -51,8 +51,40 @@ partial def mForallIntroStep (goal : MGoal) (ident : TSyntax ``binderIdent) (k :
     let prf ← mkLambdaFVars #[s] (← k { σs:=σs', hyps:=H, target:=T })
     return mkApp5 (mkConst ``SPred.entails_cons_intro) σ σs' goal.hyps goal.target prf
 
-syntax (name := mintro) "mintro" (colGt mintroPat)+ : tactic
+/--
+  Like `rcases`, but operating on stateful hypotheses.
+  Example: Given a goal `h : (P ∧ (Q ∨ R) ∧ (Q → R)) ⊢ₛ R`,
+  `mcases h with ⟨-, ⟨hq | hr⟩, hqr⟩` will yield two goals:
+  `(hq : Q, hqr : Q → R) ⊢ₛ R` and `(hr : R) ⊢ₛ R`.
+
+  That is, `mcases h with pat` has the following semantics, based on `pat`:
+  * `pat=□h'` renames `h` to `h'` in the stateful context, regardless of whether `h` is pure
+  * `pat=⌜h'⌝` introduces `h' : φ`  to the pure local context if `h : ⌜φ⌝` (c.f. `IsPure`)
+  * `pat=h'` is like `pat=⌜h'⌝` if `h` is pure (c.f. `IsPure`), otherwise it is like `pat=□h'`.
+  * `pat=_` renames `h` to an inaccessible name
+  * `pat=-` discards `h`
+  * `⟨pat₁, pat₂⟩` matches on conjunctions and existential quantifiers and recurses via
+    `pat₁` and `pat₂`.
+  * `⟨pat₁ | pat₂⟩` matches on disjunctions, matching the left alternative via `pat₁` and the right
+    alternative via `pat₂`.
+-/
 syntax (name := mcases) "mcases" colGt ident "with" colGt mcasesPat : tactic
+
+/--
+  Like `intro`, but introducing stateful hypotheses into the stateful context.
+  That is, given a stateful goal `(hᵢ : Hᵢ)* ⊢ₛ P → T`, `mintro h` transforms
+  intro `(hᵢ : Hᵢ)*, (h : P) ⊢ₛ T`.
+
+  Furthermore, `mintro ∀s` is like `intro s`, but preserves the stateful goal.
+  That is, `mintro ∀s` brings the topmost state variable `s:σ` in scope and transforms
+  `(hᵢ : Hᵢ)* ⊢ₛ T` (where the entailment is in `SPred (σ::σs)`) into
+  `(hᵢ : Hᵢ s)* ⊢ₛ T s` (where the entailment is in `SPred σs`).
+
+  Beyond that, `mintro` supports the full syntax of `mcases` patterns
+  (`mintro pat = (mintro h; mcases h with pat`), and can perform multiple
+  introductions in sequence.
+-/
+syntax (name := mintro) "mintro" (colGt mintroPat)+ : tactic
 
 macro_rules
   | `(tactic| mintro $pat₁ $pat₂ $pats:mintroPat*) => `(tactic| mintro $pat₁; mintro $pat₂ $pats*)

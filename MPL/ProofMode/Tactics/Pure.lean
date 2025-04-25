@@ -36,7 +36,7 @@ def mPureCore (σs : Expr) (hyp : Expr) (name : TSyntax ``binderIdent)
   (k : Expr /-φ:Prop-/ → Expr /-h:φ-/ → MetaM (α × MGoal × Expr)) : MetaM (α × MGoal × Expr) := do
   let φ ← mkFreshExprMVar (mkSort .zero)
   let inst ← synthInstance (mkApp3 (mkConst ``IsPure) σs hyp φ)
-  let (name, ref) ← getFreshHypName name
+  let (name, _ref) ← getFreshHypName name
   withLocalDeclD name φ fun h => do
     -- addLocalVarInfo ref (← getLCtx) h φ
     let (a, goal, prf /- : goal.toExpr -/) ← k φ h
