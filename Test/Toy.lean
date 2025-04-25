@@ -7,7 +7,7 @@ import Lean
 import MPL
 import MPL.IO
 
-namespace MPL.Tests.Toy
+namespace MPL.Test.Toy
 open MPL
 
 set_option grind.warning false

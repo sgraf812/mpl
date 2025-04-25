@@ -6,7 +6,7 @@ Authors: Sebastian Graf
 import MPL
 import MPL.Experimental.Do
 
-namespace MPL.Tests.Demo
+namespace MPL.Test.Demo
 open MPL
 
 set_option grind.warning false

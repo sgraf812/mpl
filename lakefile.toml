@@ -1,8 +1,11 @@
 name = "mpl"
 version = "0.1.0"
-keywords = ["math"]
-defaultTargets = ["mpl"]
+defaultTargets = ["MPL"]
 
 [[lean_lib]]
-name = "mpl"
-roots = ["MPL", "MPL.IO", "MPL.Experimental", "Tests"]
+name = "MPL"
+roots = ["MPL", "MPL.IO", "MPL.Experimental"]
+
+[[lean_lib]]
+name = "MPLTest"
+roots = ["Test"]

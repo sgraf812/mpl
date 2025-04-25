@@ -5,7 +5,7 @@ Authors: Lars König, Mario Carneiro, Sebastian Graf
 -/
 import MPL.SPred.Notation
 
-namespace MPL.Tests.Notation
+namespace MPL.Test.Notation
 open MPL
 
 variable
@@ -36,7 +36,7 @@ variable
 #check (⌜7 + ‹Nat›ₛ = if ‹Bool›ₛ then 13 else 7⌝ : SPred [Nat,Char,Bool])
 
 private abbrev theChar : SVal [Nat,Char,Bool] Char := fun _ c _ => c
-/-- info: ⌜#MPL.Tests.Notation.theChar = 'a'⌝ : SVal [Nat, Char, Bool] Prop -/
+/-- info: ⌜#MPL.Test.Notation.theChar = 'a'⌝ : SVal [Nat, Char, Bool] Prop -/
 #guard_msgs in
 #check ⌜#theChar = 'a'⌝
 
@@ -159,7 +159,7 @@ example (P Q : SPred [Nat, Bool]): SPred [Char, Nat, Bool] :=
 -- A bigger example testing unexpansion as well:
 /--
 info: fun P Q n =>
-  spred((∀ y, if y = n then ⌜‹Nat›ₛ + #MPL.Tests.Notation.theNat = 4⌝ else Q) ∧ Q →
+  spred((∀ y, if y = n then ⌜‹Nat›ₛ + #MPL.Test.Notation.theNat = 4⌝ else Q) ∧ Q →
       P → ∃ x, P → if x = true then Q else P) : SPred [Nat, Bool] → SPred [Nat, Bool] → Char → SPred [Nat, Bool]
 -/
 #guard_msgs in

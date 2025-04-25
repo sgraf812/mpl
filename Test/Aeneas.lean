@@ -5,7 +5,7 @@ Authors: Sebastian Graf
 -/
 import MPL
 
-namespace MPL.Tests.Aeneas
+namespace MPL.Test.Aeneas
 open MPL
 
 inductive Error where
