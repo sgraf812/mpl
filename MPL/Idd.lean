@@ -4,9 +4,9 @@ Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Sebastian Graf
 -/
 -- This type exists purely because of the following annoying simp rules:
-#check Id.map_eq
-#check Id.bind_eq
-#check Id.pure_eq
+--#check Id.map_eq
+--#check Id.bind_eq
+--#check Id.pure_eq
 
 @[irreducible]
 def Idd (α : Type u) := α
@@ -32,7 +32,7 @@ theorem Idd.bind_pure (x : Idd α) (f : α → Idd β) : (x >>= f).run = (f x.ru
 @[simp]
 theorem Idd.map_pure (x : Idd α) (f : α → β) : (f <$> x).run = f x.run := by with_unfolding_all rfl
 
-instance : LawfulMonad Idd :=
+instance Idd.instLawfulMonad : LawfulMonad Idd :=
   LawfulMonad.mk'
     (id_map := by intro _ x; ext; simp)
     (pure_bind := by intro _ _ x f; ext; simp)
