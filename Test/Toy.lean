@@ -243,16 +243,15 @@ def fib_spec : Nat → Nat
 | 1 => 1
 | n+2 => fib_spec n + fib_spec (n+1)
 
-theorem fib_triple : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => ⌜r = fib_spec n⌝⦄ := by
+theorem fib_triple : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ := by
   unfold fib_impl
+  dsimp
   mintro _
   if h : n = 0 then simp [h] else
   simp only [h]
   mwp
-  mspec Specs.forIn_list ?inv ?step
-  case inv => exact PostCond.total fun (⟨a, b⟩, xs) => a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)
-  case pre => simp_all
-  case step => intros; mintro _; mwp; simp_all
+  mspec Specs.forIn_list (⇓ (⟨a, b⟩, xs) => a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)) ?step
+  case step => dsimp; intros; mintro _; mwp; simp_all
   simp_all [Nat.sub_one_add_one]
 
 theorem fib_correct {n} : (fib_impl n).run = fib_spec n := by
@@ -332,7 +331,7 @@ axiom op.spec {n} : ⦃isValid⦄ op n ⦃⇓r => ⌜r > 42⌝ ∧ isValid⦄
 
 theorem prog.spec' : ⦃isValid⦄ prog n ⦃⇓r => ⌜r > 100⌝ ∧ isValid⦄ := by
   unfold prog
-  mintro □h
+  mintro h
   mspec op.spec
   mcases h with ⟨⌜hr₁⌝, □h⟩
   mspec op.spec
