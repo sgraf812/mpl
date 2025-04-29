@@ -69,7 +69,7 @@ initialize registerTraceClass `mpl (inherited := true)
 
 def getSpecKey (ty : Expr) : MetaM Expr := do
   let (_xs, _bis, body) ← forallMetaTelescope ty
-  let_expr triple _m _ps _inst _α x _P _Q := body | throwError s!"not a triple: {body}"
+  let_expr Triple _m _ps _inst _α x _P _Q := body | throwError s!"not a triple: {body}"
   if x.getAppFn'.isConst then
     return x
   else

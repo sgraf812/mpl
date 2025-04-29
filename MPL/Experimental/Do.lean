@@ -338,7 +338,7 @@ partial def elab_newdecl : CommandElab := fun decl => do
     -- let `($xs => $e) := spec[0]
     -- dbg_trace spec[2][1]
     -- dbg_trace call
-    let refined_triple_ty := mkApp7 (mkConst ``triple [u]) m ps wp α call P Q
+    let refined_triple_ty := mkApp7 (mkConst ``Triple [u]) m ps wp α call P Q
     return (refined_triple_ty, body)
   let (refined_spec, erased_value) ← spec_ty (mkConst defn.name (defn.levelParams.map .param)) defn.value numProgBinders defn.type
   let erased_value ← instantiateMVars erased_value
@@ -423,7 +423,7 @@ theorem fib_triple_old : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n�
   xapp Specs.forIn_list ?inv ?step
   case inv => exact PostCond.total fun (⟨a, b⟩, xs) => a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)
   case pre => simp_all
-  case step => intros; xwp; simp_all
+  case step => intros; intro _; xwp; simp_all
   simp_all [Nat.sub_one_add_one]
 
 theorem fib_triple_new : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ := by

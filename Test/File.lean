@@ -197,9 +197,9 @@ theorem Triple.conj [WP m ps] (x : m α) (h₁ : ⦃P₁⦄ x ⦃Q₁⦄) (h₂ 
   mintro ⟨hp₁, hp₂⟩
   mreplace hp₁ : wp⟦x⟧.apply Q₁ := by mspecialize_pure h₁ hp₁ as h; mexact h
   mreplace hp₂ : wp⟦x⟧.apply Q₂ := by mspecialize_pure h₂ hp₂ as h; mexact h
-  mwp
-  mspec h₁
-  mspec h₂
+  mhave hp : spred(wp⟦x⟧.apply Q₁ ∧ wp⟦x⟧.apply Q₂) := by mrefine ⟨hp₁,hp₂⟩
+  mspecialize_pure ((wp⟦x⟧.conjunctive _ _).mpr) hp as h
+  mexact h
 
 def Schema.wellFormedSubFile (s : Schema) (f : File) : Prop :=
   ∃ v : s.interp, match EStateM.run (s.serialize v) File.mkEmpty with

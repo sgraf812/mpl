@@ -56,11 +56,11 @@ end List
 
 @[spec]
 theorem Specs.pure {m : Type → Type} {ps : PostShape} [Monad m] [WPMonad m ps] {α} {a : α} {Q : PostCond α ps} :
-  ⦃Q.1 a⦄ (pure (f:=m) a) ⦃Q⦄ := triple_pure a .rfl
+  ⦃Q.1 a⦄ (pure (f:=m) a) ⦃Q⦄ := Triple.pure a .rfl
 
 @[spec]
 theorem Specs.bind {m : Type → Type} {ps : PostShape} [Monad m] [WPMonad m ps] {α β} {x : m α} {f : α → m β} {Q : PostCond β ps} :
-  ⦃wp⟦x⟧.apply (fun a => wp⟦f a⟧.apply Q, Q.2)⦄ (x >>= f) ⦃Q⦄ := triple_bind x f .rfl (fun _ => .rfl)
+  ⦃wp⟦x⟧.apply (fun a => wp⟦f a⟧.apply Q, Q.2)⦄ (x >>= f) ⦃Q⦄ := Triple.bind x f .rfl (fun _ => .rfl)
 
 theorem Specs.forIn'_list {α : Type} {β : Type} {m : Type → Type v} {ps : PostShape}
     [Monad m] [WPMonad m ps]
@@ -80,15 +80,15 @@ theorem Specs.forIn'_list {α : Type} {β : Type} {m : Type → Type v} {ps : Po
     from h [] xs rfl
   intro rpref suff h
   induction suff generalizing rpref init
-  case nil => apply triple_pure; simp [h]
+  case nil => apply Triple.pure; simp [h]
   case cons x suff ih =>
     simp only [List.forIn'_cons]
-    apply triple_bind
+    apply Triple.bind
     case hx => exact step init rpref x (by simp[h]) suff h
     case hf =>
       intro r
       split
-      next => apply triple_pure; simp [h]
+      next => apply Triple.pure; simp [h]
       next b =>
         simp
         have := @ih b (x::rpref) (by simp [h])
@@ -148,7 +148,7 @@ theorem Specs.foldlM_list {α : Type} {β : Type} {m : Type → Type v} {ps : Po
     simp only [List.forIn_yield_eq_foldlM, id_map']
   rw[this]
   apply Specs.forIn_list inv
-  simp only [triple, map_map, PredTrans.map_apply]
+  simp only [Triple, map_map, PredTrans.map_apply]
   exact step
 
 -- using the postcondition as a constant invariant:

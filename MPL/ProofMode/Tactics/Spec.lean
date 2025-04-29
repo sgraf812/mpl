@@ -68,7 +68,7 @@ def mFindSpec (stx? : Option (TSyntax `term)) (u : Level) (m : Expr) (ps : Expr)
   trace[mpl.tactics.spec] "spec syntax: {stx}"
   let P ← mkFreshExprMVar (mkApp (mkConst ``Assertion) ps) (userName := `P)
   let Q ← mkFreshExprMVar (mkApp2 (mkConst ``PostCond) α ps) (userName := `Q)
-  let expectedTy := mkApp7 (mkConst ``triple [u]) m ps instWP α prog P Q
+  let expectedTy := mkApp7 (mkConst ``Triple [u]) m ps instWP α prog P Q
   check expectedTy
   trace[mpl.tactics.spec] "expected type: {← instantiateMVars expectedTy}"
   let (spec, mvarIds) ← elabTermForSpec stx expectedTy
