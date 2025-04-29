@@ -42,14 +42,14 @@ end MaxAndSum
 
 namespace InvertInjection
 
-def invert_injection (xs : Array Nat) (h : ∀ i, (h : i < xs.size) → xs[i] < xs.size) : Idd (Array Nat) := do
-  let mut ys : { ys : Array Nat // ys.size = xs.size } := Subtype.mk xs rfl
-  for h' : i in [0:ys.1.size] do
-    have h' : xs[i] < ys.1.size := cast (by simp[ys.2]) (h i (by get_elem_tactic))
-    ys := ⟨ys.val.set xs[i] i, by simp[ys.property]⟩
+def invert_injection (xs : Vector Nat N) (h : ∀ i, (h : i < N) → xs[i] < N) : Idd (Vector Nat N) := do
+  let mut ys := xs
+  for h' : i in [0:N] do
+    have h' : xs[i] < N := h i (by get_elem_tactic)
+    ys := ys.set xs[i] i
   return ys
 
-def invert_injection' (xs : Array Nat) : Idd (Array Nat) := do
+def invert_injection' (xs : Vector Nat N) : Idd (Vector Nat N) := do
   let mut ys := xs
   for i in [0:ys.size] do
     ys := ys.set! xs[i]! i
@@ -97,7 +97,8 @@ theorem invert_injection_spec (xs : Array Nat)
       SPred.entails_nil, forall_const]
     intro j h₃
     if h₄ : j = rpref.length
-    then simp[h₄]
+    then
+      simp[range_elim hzipper, h₄, Array.getElem_setIfInBounds_self, Array.getElem!_eq_setIfInBounds]
     have := h₂ j h₃
 
 end InvertInjection
