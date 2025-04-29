@@ -37,6 +37,11 @@ theorem ExceptT.throw_apply [Monad m] [WPMonad m ps] :
     simp only [wp, throw, throwThe, MonadExceptOf.throw, ExceptT.mk, pure_pure, pure, PredTrans.pure,
       PredTrans.pushExcept_apply, PredTrans.throw]
 
+theorem EStateM.throw_apply :
+  wp⟦MonadExceptOf.throw e : EStateM ε σ α⟧.apply Q = Q.2.1 e := by
+    simp only [wp, throw, throwThe, MonadExceptOf.throw, EStateM.throw, pure_pure, pure, PredTrans.pure,
+      PredTrans.pushArg_apply, PredTrans.throw]
+
 theorem ReaderT.throw_apply [WP m sh] [Monad m] [MonadExceptOf ε m] :
   wp⟦MonadExceptOf.throw (ε:=ε) e : ReaderT ρ m α⟧.apply Q = wp⟦MonadLift.monadLift (MonadExceptOf.throw (ε:=ε) e : m α) : ReaderT ρ m α⟧.apply Q := rfl
 
@@ -69,6 +74,14 @@ theorem ExceptT.tryCatch_apply [Monad m] [WPMonad m ps] :
     congr
     ext x
     split <;> simp
+
+open EStateM.Backtrackable in
+theorem EStateM.tryCatch_apply {ε σ δ α x h Q} [EStateM.Backtrackable δ σ]:
+  wp⟦MonadExceptOf.tryCatch x h : EStateM ε σ α⟧.apply Q = fun s => wp⟦x⟧.apply (Q.1, fun e s' => wp⟦h e⟧.apply Q (restore s' (save s)), Q.2.2) s := by
+    ext s;
+    simp only [wp, MonadExceptOf.tryCatch, EStateM.tryCatch, bind_bind,
+      PredTrans.pushExcept_apply, PredTrans.bind_apply, PredTrans.tryCatch]
+    cases x s <;> simp
 
 theorem ReaderT.tryCatch_apply [WP m sh] [Monad m] [MonadExceptOf ε m] :
   wp⟦MonadExceptOf.tryCatch (ε:=ε) x h : ReaderT ρ m α⟧.apply Q = fun r => wp⟦MonadExceptOf.tryCatch (ε:=ε) (x.run r) (fun e => (h e).run r) : m α⟧.apply (fun a => Q.1 a r, Q.2) := by

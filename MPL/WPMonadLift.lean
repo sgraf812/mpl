@@ -89,6 +89,11 @@ theorem StateT.get_apply [Monad m] [WPMonad m psm] :
   wp⟦MonadStateOf.get : StateT σ m σ⟧.apply Q = fun s => Q.1 s s := by
     simp only [StateT.wp_get, PredTrans.get_apply]
 
+theorem EStateM.get_apply :
+    wp⟦MonadStateOf.get : EStateM ε σ σ⟧.apply Q = fun s => Q.1 s s := by
+  ext; simp only [wp, MonadStateOf.get, EStateM.get, pure_pure, pure, PredTrans.pure,
+    PredTrans.pushArg_apply, PredTrans.get]
+
 theorem MonadStateOf.get_apply [MonadStateOf σ m] [MonadLift m n] [WP n _] :
   wp⟦MonadStateOf.get : n σ⟧.apply Q = wp⟦MonadLift.monadLift (MonadStateOf.get : m σ) : n σ⟧.apply Q := rfl
 
@@ -107,6 +112,11 @@ theorem StateT.set_apply [WP m sh] [Monad m] [MonadMorphism m _ wp] (x : σ) :
   wp⟦MonadStateOf.set x : StateT σ m PUnit⟧.apply Q = fun _ => Q.1 ⟨⟩ x := by
     simp only [StateT.wp_set, PredTrans.set_apply]
 
+theorem EStateM.set_apply (x : σ) :
+    wp⟦MonadStateOf.set x : EStateM ε σ PUnit⟧.apply Q = fun _ => Q.1 ⟨⟩ x := by
+  ext; simp only [wp, MonadState.set, set, EStateM.set, pure_pure, pure, PredTrans.pure,
+    PredTrans.pushArg_apply, PredTrans.set]
+
 theorem MonadStateOf.set_apply [MonadStateOf σ m] [MonadLift m n] [WP n _] :
   wp⟦MonadStateOf.set x : n PUnit⟧.apply Q = wp⟦MonadLift.monadLift (MonadStateOf.set (σ:=σ) x : m PUnit) : n PUnit⟧.apply Q := rfl
 
@@ -123,6 +133,11 @@ theorem StateT.modifyGet_apply [WP m sh] [Monad m] [MonadMorphism m (PredTrans s
   (f : σ → α × σ) :
   wp⟦MonadStateOf.modifyGet f : StateT σ m α⟧.apply Q = fun s => Q.1 (f s).1 (f s).2 := by
     simp only [wp, MonadStateOf.modifyGet, StateT.modifyGet, pure_pure, pure, PredTrans.pure,
+      PredTrans.pushArg_apply]
+
+theorem EStateM.modifyGet_apply (f : σ → α × σ) :
+  wp⟦MonadStateOf.modifyGet f : EStateM ε σ α⟧.apply Q = fun s => Q.1 (f s).1 (f s).2 := by
+      simp only [wp, MonadStateOf.modifyGet, EStateM.modifyGet, pure_pure, pure, PredTrans.pure,
       PredTrans.pushArg_apply]
 
 theorem MonadStateOf.modifyGet_apply [MonadStateOf σ m] [MonadLift m n] [WP n _]
