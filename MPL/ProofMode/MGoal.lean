@@ -24,6 +24,9 @@ instance : PropAsEntails (σs := []) φ φ where
 theorem start_entails (φ : Prop) [PropAsEntails φ P] : (⊢ₛ P) → φ :=
   PropAsEntails.prop_as_entails.mpr
 
+theorem elim_entails (φ : Prop) [PropAsEntails φ P] : φ → (⊢ₛ P) :=
+  PropAsEntails.prop_as_entails.mp
+
 /-- Tautology in `SPred` as a definition. -/
 abbrev _root_.MPL.SPred.tautological {σs : List Type} (Q : SPred σs) : Prop := ⊢ₛ Q
 

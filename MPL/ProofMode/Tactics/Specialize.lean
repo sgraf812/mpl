@@ -31,6 +31,9 @@ theorem Specialize.imp_pure {P Q R : SPred σs}
 theorem Specialize.forall {P : SPred σs} {ψ : α → SPred σs}
   (a : α) : P ∧ (∀ x, ψ x) ⊢ₛ P ∧ ψ a := SPred.and_mono_r (SPred.forall_elim a)
 
+theorem Specialize.pure_start {φ : Prop} {H P T : SPred σs} [PropAsEntails φ H] (hpure : φ) (hgoal : P ∧ H ⊢ₛ T) : P ⊢ₛ T :=
+  (SPred.and_intro .rfl (SPred.true_intro.trans (PropAsEntails.prop_as_entails.mp hpure))).trans hgoal
+
 def mSpecializeImpStateful (σs : Expr) (P : Expr) (QR : Expr) (arg : TSyntax `term) : OptionT TacticM (Expr × Expr) := do
   guard (arg.raw.isIdent)
   let some arg := focusHyp σs (mkAnd! σs P QR) arg.raw.getId | failure
@@ -100,8 +103,7 @@ elab "mspecialize" hyp:ident args:(colGt term:max)* : tactic => do
   let σs := goal.σs
   let P := specFocus.restHyps
   let mut H := specFocus.focusHyp
-  let mut goal : MGoal := goal
-  -- invariant: proof (_ : goal.toExpr) fills the mvar
+  -- invariant: proof (_ : { goal with hyps := mkAnd! σs P H }.toExpr) fills the mvar
   let mut proof : Expr → Expr :=
     mkApp7 (mkConst ``focus) σs goal.hyps P H goal.target specFocus.proof
 
@@ -126,22 +128,28 @@ elab "mspecialize_pure" head:(term:max) args:(colGt term:max)* " as " hyp:ident 
   let (mvar, goal) ← mStart (← getMainGoal)
   mvar.withContext do
 
-  -- Want to prove goal P ⊢ₛ T. `head` is a pure term elaborating to Q ⊢ₛ R.
+  -- Want to prove goal P ⊢ₛ T. `head` is a pure proof of type `φ` that turns into `⊢ₛ H` via `start_entails`.
   -- So we
-  -- 1. Introduce `head` as stateful hypothesis named `hyp`, P ∧ (hyp : Q → R) ⊢ₛ T
-  -- 2. Produce a (transitive chain of) proofs
-  --      P' ∧ (Q → R) ⊢ P' ∧ R ⊢ₛ P' ∧ R' ⊢ₛ ...
-  --    One for each arg; end up with goal P' ∧ H' ⊢ₛ T
+  -- 1. Introduce `head` via `PropAsEntails` as stateful hypothesis named `hyp`, P ∧ (hyp : H) ⊢ₛ T
+  -- 2. (from here on it's the same as `mspecialize`.)
+  --    Produce a (transitive chain of) proofs
+  --      P ∧ H ⊢ P ∧ H₁ ⊢ₛ P ∧ H₂ ⊢ₛ ...
+  --    One for each arg; end up with goal P ∧ H' ⊢ₛ T
   -- 3. Recombine with mkAnd (NB: P' might be empty), compose with P' ∧ H' ⊣⊢ₛ mkAnd P' H'.
   -- 4. Make a new MVar for goal `mkAnd P' H' ⊢ T` and assign the transitive chain.
-  let some specFocus := goal.focusHyp hyp.getId | throwError "unknown identifier '{hyp}'"
   let σs := goal.σs
-  let P := specFocus.restHyps
-  let mut H := specFocus.focusHyp
-  let mut goal : MGoal := goal
-  -- invariant: proof (_ : goal.toExpr) fills the mvar
+  let P := goal.hyps
+  let T := goal.target
+  let hφ ← elabTerm head none
+  let φ ← inferType hφ
+  let H ← mkFreshExprMVar (mkApp (mkConst ``SPred) σs)
+  let inst ← synthInstance (mkApp3 (mkConst ``PropAsEntails) φ σs H)
+  let mut H := (Hyp.mk hyp.getId (← instantiateMVars H)).toExpr
+
+  let goal : MGoal := { goal with hyps := mkAnd! σs P H }
+  -- invariant: proof (_ : { goal with hyps := mkAnd! σs P H }.toExpr) fills the mvar
   let mut proof : Expr → Expr :=
-    mkApp7 (mkConst ``focus) σs goal.hyps P H goal.target specFocus.proof
+    mkApp8 (mkConst ``Specialize.pure_start) σs φ H P T inst hφ
 
   for arg in args do
     let res? ← OptionT.run
