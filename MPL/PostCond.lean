@@ -121,7 +121,7 @@ def FailConds.and {ps : PostShape} (x : FailConds ps) (y : FailConds ps) : FailC
   match ps with
   | .pure => ()
   | .arg _ ps => @FailConds.and ps x y
-  | .except ε ps => (fun e => SPred.and (x.1 e) (y.1 e), FailConds.and x.2 y.2)
+  | .except _ _ => (fun e => SPred.and (x.1 e) (y.1 e), FailConds.and x.2 y.2)
 
 infixr:35 " ∧ₑ " => FailConds.and
 
