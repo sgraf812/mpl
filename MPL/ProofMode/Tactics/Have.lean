@@ -51,7 +51,7 @@ elab "mhave" h:ident ty?:Parser.Term.optType " := " rhs:term : tactic => do
   let T := goal.target
   let (PH, hand) := mkAnd goal.σs P H
   let haveGoal := { goal with target := H }
-  let hhave ← elabTerm rhs haveGoal.toExpr
+  let hhave ← elabTermEnsuringType rhs haveGoal.toExpr
   let newGoal := { goal with hyps := PH }
   let m ← mkFreshExprSyntheticOpaqueMVar newGoal.toExpr
   mvar.assign (mkApp8 (mkConst ``Have.have) goal.σs P H PH T hand hhave m)
@@ -71,7 +71,7 @@ elab "mreplace" h:ident ty?:Parser.Term.optType " := " rhs:term : tactic => do
     | _                             => mkFreshExprMVar spred
   let H' := (Hyp.mk h.raw.getId H').toExpr
   let haveGoal := { goal with target := H' }
-  let hhave ← elabTerm rhs haveGoal.toExpr
+  let hhave ← elabTermEnsuringType rhs haveGoal.toExpr
   let T := goal.target
   let (PH', hand) := mkAnd goal.σs P H'
   let newGoal := { goal with hyps := PH' }

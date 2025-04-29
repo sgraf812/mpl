@@ -64,12 +64,8 @@ theorem ExceptT.monadMap_apply (m : Type → Type u) [Monad m] [WP m psm]
   simp only [wp, MonadFunctor.monadMap, PredTrans.pushExcept_apply, ExceptT.run]
   congr; ext; split <;> rfl
 
-protected theorem ReaderT.wp_withReader [WP m psm] :
-  wp⟦MonadWithReaderOf.withReader f x : ReaderT ρ m α⟧ = PredTrans.withReader f wp⟦x⟧ := rfl
-
 theorem ReaderT.withReader_apply [WP m psm] :
-  wp⟦MonadWithReaderOf.withReader f x : ReaderT ρ m α⟧.apply Q = fun r => wp⟦x⟧.apply (fun a _ => Q.1 a r, Q.2) (f r) := by
-    simp only [ReaderT.wp_withReader, PredTrans.withReader_apply]
+  wp⟦MonadWithReaderOf.withReader f x : ReaderT ρ m α⟧.apply Q = fun r => wp⟦x⟧.apply (fun a _ => Q.1 a r, Q.2) (f r) := rfl
 
 theorem MonadWithReaderOf.withReader_apply [MonadWithReaderOf ρ m] [WP m msh] [WP n nsh] [MonadFunctor m n] [MonadFunctor (PredTrans msh) (PredTrans nsh)] (f : ρ → ρ) (x : n α) :
   wp⟦MonadWithReaderOf.withReader f x⟧.apply Q = wp⟦mmap (m:=m) (MonadWithReaderOf.withReader f) x⟧.apply Q := rfl

@@ -117,6 +117,7 @@ theorem FailConds.entails_false {x : FailConds ps} : FailConds.false ⊢ₑ x :=
 theorem FailConds.entails_true {x : FailConds ps} : x ⊢ₑ FailConds.true := by
   induction ps <;> simp_all [true, const, entails, SPred.true_intro]
 
+@[simp]
 def FailConds.and {ps : PostShape} (x : FailConds ps) (y : FailConds ps) : FailConds ps :=
   match ps with
   | .pure => ()
@@ -156,6 +157,17 @@ theorem FailConds.false_and {x : FailConds ps} : FailConds.false ∧ₑ x ⊢ₑ
   case except ε ps ih =>
     simp_all[and, false, const]
     constructor <;> simp only [SPred.false_and.mp, implies_true, ih]
+
+theorem FailConds.and_eq_left {ps : PostShape} {p q : FailConds ps} (h : p ⊢ₑ q) :
+    p = (p ∧ₑ q) := by
+  induction ps
+  case pure => trivial
+  case arg ih => exact ih h
+  case except ε ps ih =>
+    simp_all[and, const]
+    apply Prod.ext
+    · ext a; exact (SPred.and_eq_left.mp (h.1 a)).to_eq
+    · exact ih h.2
 
 /--
   A multi-barreled postcondition for the given predicate shape.
@@ -225,3 +237,9 @@ abbrev PostCond.and (p : PostCond α ps) (q : PostCond α ps) : PostCond α ps :
   (fun a => SPred.and (p.1 a) (q.1 a), FailConds.and p.2 q.2)
 
 infixr:35 " ∧ₚ " => PostCond.and
+
+theorem PostCond.and_eq_left {p q : PostCond α ps} (h : p ⊢ₚ q) :
+    p = (p ∧ₚ q) := by
+  ext
+  · exact (SPred.and_eq_left.mp (h.1 _)).to_eq
+  · exact FailConds.and_eq_left h.2

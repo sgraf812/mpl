@@ -28,8 +28,21 @@ This module defines interpretations of common monadic operations, such as `get`,
 namespace MPL
 
 /-- The stronger the postcondition, the stronger the transformed precondition. -/
-def PredTrans.Mono {ps : PostShape} {α : Type} (x : PostCond α ps → Assertion ps) : Prop :=
-  ∀ Q₁ Q₂, (Q₁ ⊢ₚ Q₂) → (x Q₁) ⊢ₛ (x Q₂)
+def PredTrans.Monotonic {ps : PostShape} {α : Type} (t : PostCond α ps → Assertion ps) : Prop :=
+  ∀ Q₁ Q₂, (Q₁ ⊢ₚ Q₂) → (t Q₁) ⊢ₛ (t Q₂)
+
+/-- The of conjunction of a transformed precondition is the same as the transformed conjunction
+of preconditions. -/
+def PredTrans.Conjunctive {ps : PostShape} {α : Type} (t : PostCond α ps → Assertion ps) : Prop :=
+  ∀ Q₁ Q₂, t (Q₁ ∧ₚ Q₂) ⊣⊢ₛ t Q₁ ∧ t Q₂
+
+/-- Any predicate transformer that is conjunctive is also monotonic. -/
+def PredTrans.Conjunctive.mono {ps : PostShape} {α : Type}
+    (t : PostCond α ps → Assertion ps) (h : PredTrans.Conjunctive t) : PredTrans.Monotonic t := by
+  intro Q₁ Q₂ hq
+  replace hq : Q₁ = (Q₁ ∧ₚ Q₂) := PostCond.and_eq_left hq
+  rw [hq, (h Q₁ Q₂).to_eq]
+  exact SPred.and_elim_r
 
 /--
   The type of predicate transformers for a given `ps : PostShape` and return type `α : Type`.
@@ -41,10 +54,13 @@ def PredTrans.Mono {ps : PostShape} {α : Type} (x : PostCond α ps → Assertio
 @[ext]
 structure PredTrans (ps : PostShape) (α : Type) : Type where
   apply : PostCond α ps → Assertion ps
-  mono : PredTrans.Mono apply
+  conjunctive : PredTrans.Conjunctive apply
+
+theorem PredTrans.mono {ps : PostShape} {α : Type} (t : PredTrans ps α) : PredTrans.Monotonic t.apply :=
+  PredTrans.Conjunctive.mono t.apply t.conjunctive
 
 def PredTrans.const {ps : PostShape} {α : Type} (p : Assertion ps) : PredTrans ps α :=
-  ⟨fun _ => p, fun _ _ _ => SPred.entails.refl _⟩
+  ⟨fun _ => p, fun _ _ => SPred.and_self.symm⟩
 
 /--
   Given a fixed postcondition, the *stronger* predicate transformer will yield a
@@ -55,17 +71,16 @@ def PredTrans.le {ps : PostShape} {α : Type} (x y : PredTrans ps α) : Prop :=
 instance : LE (PredTrans ps α) := ⟨PredTrans.le⟩
 
 def PredTrans.pure {ps : PostShape} {α : Type} (a : α) : PredTrans ps α :=
-  { apply := fun Q => Q.1 a, mono := by intro _ _ h; apply h.1 }
+  { apply := fun Q => Q.1 a, conjunctive := by intro _ _; simp }
 
 def PredTrans.bind {ps : PostShape} {α β : Type} (x : PredTrans ps α) (f : α → PredTrans ps β) : PredTrans ps β :=
-  { apply := fun Q => x.apply (fun a => (f a).apply Q, Q.2), mono := by
-      intro Q₁ Q₂ h
-      rw [apply]
-      apply x.mono
-      refine ⟨?_, h.2⟩
-      intro a
-      apply (f a).mono
-      exact h }
+  { apply := fun Q => x.apply (fun a => (f a).apply Q, Q.2), conjunctive := by
+      intro Q₁ Q₂
+      apply SPred.bientails.of_eq
+      dsimp
+      conv => rhs; rw [← (x.conjunctive _ _).to_eq]
+      conv in (f _).apply _ => rw [((f _).conjunctive _ _).to_eq]
+  }
 
 instance : Monad (PredTrans ps) where
   pure := PredTrans.pure
@@ -96,86 +111,48 @@ instance PredTrans.instLawfulMonad : LawfulMonad (PredTrans ps) :=
     (pure_bind := by simp +unfoldPartialApp [Bind.bind, PredTrans.bind, Pure.pure, PredTrans.pure])
     (bind_assoc := by simp +unfoldPartialApp [Bind.bind, PredTrans.bind])
 
-def PredTrans.get {ps : PostShape} {σ : Type} : PredTrans (.arg σ ps) σ :=
-  { apply := fun Q s => Q.1 s s, mono := by
-      intro Q₁ Q₂ h
-      simp only [apply]
-      intro s
-      exact h.1 s s }
-
-def PredTrans.set {ps : PostShape} {σ : Type} (s : σ) : PredTrans (.arg σ ps) PUnit :=
-  { apply := fun Q _ => Q.1 ⟨⟩ s, mono := by
-      intro Q₁ Q₂ h
-      simp only [apply]
-      intro _
-      exact h.1 ⟨⟩ s }
-
-def PredTrans.throw {ps : PostShape} {ε : Type} (e : ε) : PredTrans (.except ε ps) α :=
-  { apply := fun Q => Q.2.1 e, mono := by
-      intro Q₁ Q₂ h
-      simp only [apply]
-      exact h.2.1 e }
-
-def PredTrans.tryCatch {ps : PostShape} {ε : Type} (x : PredTrans (.except ε ps) α) (handle : ε → PredTrans (.except ε ps) α) : PredTrans (.except ε ps) α :=
-  { apply := fun Q => x.apply (Q.1, fun e => (handle e).apply Q, Q.2.2), mono := by
-      intro Q₁ Q₂ h
-      apply x.mono
-      refine ⟨h.1, ?_, h.2.2⟩
-      intro e
-      apply (handle e).mono _ _ h }
-
-@[simp]
-def PredTrans.modify {ps : PostShape} {σ : Type} (f : σ → σ) : PredTrans (.arg σ ps) PUnit := do
-  let s ← PredTrans.get
-  PredTrans.set (f s)
-
 -- The interpretation of `StateT σ (PredTrans ps) α` into `PredTrans (.arg σ ps) α`.
 -- Think: modifyGetM
 def PredTrans.pushArg {ps : PostShape} {σ : Type} {α : Type} (x : StateT σ (PredTrans ps) α) : PredTrans (.arg σ ps) α :=
-  { apply := fun Q s => (x s).apply (fun (a, s) => Q.1 a s, Q.2), mono := by
-      intro Q₁ Q₂ h
-      simp only [apply]
-      intro s
-      apply (x s).mono
-      exact ⟨fun p => h.1 p.1 p.2, h.2⟩ }
+  { apply := fun Q s => (x s).apply (fun (a, s) => Q.1 a s, Q.2), conjunctive := by
+      intro Q₁ Q₂
+      apply SPred.bientails.of_eq
+      ext s
+      dsimp
+      rw[← ((x s).conjunctive _ _).to_eq] }
 
 def PredTrans.popArg {ps : PostShape} {α} (x : PredTrans (.arg σ ps) α) : StateT σ (PredTrans ps) α := fun s =>
   { apply Q := x.apply (fun r s' => Q.1 (r, s'), Q.2) s,
-    mono := by
-      intro Q₁ Q₂ h
-      apply x.mono
-      refine ⟨?_, h.2⟩
-      intro r s'
-      apply h.1 }
+    conjunctive := by
+      intro Q₁ Q₂
+      apply SPred.bientails.of_eq
+      dsimp
+      have {Q₁ Q₂}: spred(x.apply Q₁ ∧ x.apply Q₂) s = spred(x.apply (Q₁ ∧ₚ Q₂) s) := by
+        rw[congrFun (x.conjunctive _ _).to_eq _]
+      simp only [SPred.and] at this
+      simp only [this]
+      rfl }
 
 -- The interpretation of `ExceptT ε (PredTrans ps) α` into `PredTrans (.except ε ps) α`
 def PredTrans.pushExcept {ps : PostShape} {α ε} (x : ExceptT ε (PredTrans ps) α) : PredTrans (.except ε ps) α :=
   { apply Q := x.apply (fun | .ok a => Q.1 a | .error e => Q.2.1 e, Q.2.2),
-    mono := by
-      intro Q₁ Q₂ h
-      apply x.mono
-      simp
-      exact ⟨fun | .ok a => h.1 a | .error e => h.2.1 e, h.2.2⟩ }
+    conjunctive := by
+      intro Q₁ Q₂
+      apply SPred.bientails.of_eq
+      dsimp
+      rw[← (x.conjunctive _ _).to_eq]
+      congr
+      ext x
+      cases x <;> simp }
 
 def PredTrans.popExcept {ps : PostShape} {α} (x : PredTrans (.except ε ps) α) : ExceptT ε (PredTrans ps) α :=
   { apply Q := x.apply (fun a => Q.1 (.ok a), fun e => Q.1 (.error e), Q.2),
-    mono := by
-      intro Q₁ Q₂ h
-      apply x.mono
-      exact ⟨fun a => h.1 (.ok a), fun e => h.1 (.error e), h.2⟩ }
-
-def PredTrans.modifyGet {ps : PostShape} {σ : Type} {α : Type} (f : σ → α × σ) : PredTrans (.arg σ ps) α :=
-  pushArg (fun a => pure (f a))
-
-@[simp]
-theorem PredTrans.modifyGet_pure {ps : PostShape} {σ : Type} {α : Type} (a : α) :
-  PredTrans.modifyGet (ps:=ps) (σ:=σ) (fun s => (a, s)) = Pure.pure a := rfl
-
-def PredTrans.withReader {ps : PostShape} {σ : Type} (f : σ → σ) (x : PredTrans (.arg σ ps) α) : PredTrans (.arg σ ps) α :=
-  PredTrans.pushArg fun r => do let (a, _) ← PredTrans.popArg x (f r); Pure.pure (a, r)
-
-theorem PredTrans.withReader_mono {ps : PostShape} {σ : Type} (f : σ → σ) (x x' : PredTrans (.arg σ ps) α) :
-  x ≤ x' → withReader f x ≤ withReader f x' := by intro h Q r; apply h
+    conjunctive := by
+      intro Q₁ Q₂
+      apply SPred.bientails.of_eq
+      dsimp
+      rw[← (x.conjunctive _ _).to_eq]
+      rfl }
 
 instance PredTrans.instMonadLiftArg : MonadLift (PredTrans m) (PredTrans (.arg σ m)) where
   monadLift x := PredTrans.pushArg (StateT.lift x)
@@ -190,24 +167,8 @@ instance PredTrans.instMonadFunctorExcept : MonadFunctor (PredTrans m) (PredTran
   monadMap f x := PredTrans.pushExcept (f x.popExcept)
 
 @[simp]
-def PredTrans.get_apply {ps} {σ : Type} {Q : PostCond σ (.arg σ ps)} :
-  PredTrans.get.apply Q = fun s => Q.1 s s := rfl
-
-@[simp]
-def PredTrans.set_apply {ps} {σ : Type} {Q : PostCond PUnit (.arg σ ps)} (s : σ) :
-  (PredTrans.set s).apply Q = fun _ => Q.1 ⟨⟩ s := rfl
-
-@[simp]
-def PredTrans.modifyGet_apply {ps} {α : Type} {σ : Type} {Q : PostCond α (.arg σ ps)} (f : σ → α × σ) :
-  (PredTrans.modifyGet f).apply Q = fun s => let ⟨a, s⟩ := f s; Q.1 a s := rfl
-
-@[simp]
 def PredTrans.pushArg_apply {ps} {α : Type} {σ : Type} {Q : PostCond α (.arg σ ps)} (f : σ → PredTrans ps (α × σ)) :
   (PredTrans.pushArg f).apply Q = fun s => (f s).apply (fun ⟨a, s⟩ => Q.1 a s, Q.2) := rfl
-
-@[simp]
-def PredTrans.throw_apply {ps} {α ε : Type} {Q : PostCond α (.except ε ps)} (e : ε) :
-  (PredTrans.throw e).apply Q = Q.2.1 e := rfl
 
 @[simp]
 def PredTrans.pushExcept_apply {ps} {α ε} {Q : PostCond α (.except ε ps)} (x : PredTrans ps (Except ε α)) :
@@ -244,10 +205,6 @@ def PredTrans.popArg_apply {ps} {Q : PostCond (α × σ) ps} (t : PredTrans (.ar
 @[simp]
 def PredTrans.popExcept_apply {ps} {Q : PostCond (Except ε α) ps} (t : PredTrans (.except ε ps) α) :
   (t.popExcept).apply Q = t.apply (fun a => Q.1 (.ok a), fun e => Q.1 (.error e), Q.2) := rfl
-
-@[simp]
-def PredTrans.withReader_apply {ps} {Q : PostCond α (.arg ρ ps)} (f : ρ → ρ) (t : PredTrans (.arg ρ ps) α) :
-  (PredTrans.withReader f t).apply Q = fun r => t.apply (fun a _ => Q.1 a r, Q.2) (f r) := rfl
 
 instance PredTrans.instMonadMorphismPushArg : MonadMorphism (StateT σ (PredTrans ps)) (PredTrans (.arg σ ps)) (PredTrans.pushArg) where
   pure_pure := by intros; rfl

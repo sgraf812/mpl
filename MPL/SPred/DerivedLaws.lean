@@ -82,6 +82,10 @@ theorem and_comm : P ∧ Q ⊣⊢ₛ Q ∧ P := bientails.iff.mpr ⟨and_symm, a
 theorem or_comm : P ∨ Q ⊣⊢ₛ Q ∨ P := bientails.iff.mpr ⟨or_symm, or_symm⟩
 theorem and_assoc : (P ∧ Q) ∧ R ⊣⊢ₛ P ∧ Q ∧ R := bientails.iff.mpr ⟨and_intro (and_elim_l' and_elim_l) (and_mono_l and_elim_r), and_intro (and_mono_r and_elim_l) (and_elim_r' and_elim_r)⟩
 theorem or_assoc : (P ∨ Q) ∨ R ⊣⊢ₛ P ∨ Q ∨ R := bientails.iff.mpr ⟨or_elim (or_mono_r or_intro_l) (or_intro_r' or_intro_r), or_elim (or_intro_l' or_intro_l) (or_mono_l or_intro_r)⟩
+theorem and_eq_right : (P ⊢ₛ Q) ↔ P ⊣⊢ₛ Q ∧ P := Iff.intro (fun h => bientails.iff.mpr ⟨and_intro h .rfl, and_elim_r⟩) (fun h => h.mp.trans and_elim_l)
+theorem and_eq_left : (P ⊢ₛ Q) ↔ P ⊣⊢ₛ P ∧ Q := Iff.intro (fun h => bientails.iff.mpr ⟨and_intro .rfl h, and_elim_l⟩) (fun h => h.mp.trans and_elim_r)
+theorem or_eq_left : (P ⊢ₛ Q) ↔ Q ⊣⊢ₛ Q ∨ P := Iff.intro (fun h => bientails.iff.mpr ⟨or_intro_l' .rfl, or_elim .rfl h⟩) (fun h => or_intro_r.trans h.mpr)
+theorem or_eq_right : (P ⊢ₛ Q) ↔ Q ⊣⊢ₛ P ∨ Q := Iff.intro (fun h => bientails.iff.mpr ⟨or_intro_r' .rfl, or_elim h .rfl⟩) (fun h => or_intro_l.trans h.mpr)
 
 theorem and_or_left : P ∧ (Q ∨ R) ⊣⊢ₛ (P ∧ Q) ∨ (P ∧ R) :=
   bientails.iff.mpr ⟨and_or_elim_r or_intro_l or_intro_r,

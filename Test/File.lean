@@ -195,8 +195,8 @@ def Schema.fileSize {s : Schema} (v : s.interp) : Nat :=
 
 theorem Triple.conj [WP m ps] (x : m α) (h₁ : ⦃P₁⦄ x ⦃Q₁⦄) (h₂ : ⦃P₂⦄ x ⦃Q₂⦄) : ⦃P₁ ∧ P₂⦄ x ⦃Q₁ ∧ₚ Q₂⦄ := by
   mintro ⟨hp₁, hp₂⟩
-  mreplace hp₁ : wp⟦x⟧.apply Q₁ := h₁ hp₁
-  mreplace hp₂ := h₂ hp₂
+  mreplace hp₁ : wp⟦x⟧.apply Q₁ := by mspecialize_pure h₁ hp₁ as h; mexact h
+  mreplace hp₂ : wp⟦x⟧.apply Q₂ := by mspecialize_pure h₂ hp₂ as h; mexact h
   mwp
   mspec h₁
   mspec h₂

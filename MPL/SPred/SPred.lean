@@ -41,8 +41,7 @@ theorem entails_cons_intro {σs : List Type} {P Q : SPred (σ::σs)} : (∀ s, e
 
 -- Reducibility of entails must be semi-reducible so that entails_refl is useful for rfl
 
-/-- Equivalence relation on `SPred`.
-Coincides with `Eq` iff all types in `σs` are inhabited. -/
+/-- Equivalence relation on `SPred`. Convert to `Eq` via `bientails.to_eq`. -/
 def bientails {σs : List Type} (P Q : SPred σs) : Prop := match σs with
 | [] => P ↔ Q
 | σ :: _ => ∀ (s : σ), bientails (P s) (Q s)

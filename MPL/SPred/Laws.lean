@@ -60,6 +60,12 @@ theorem bientails.symm {σs : List Type} {P Q : SPred σs} : (P ⊣⊢ₛ Q) →
   case nil => exact Iff.symm
   case cons σ σs ih => intro h s; exact ih (h s)
 
+theorem bientails.to_eq {σs : List Type} {P Q : SPred σs} (h : P ⊣⊢ₛ Q) : P = Q := by
+  induction σs
+  case nil => rw[iff_iff_eq.mp h]
+  case cons σ σs ih =>
+    ext s; rw[ih (h s)]
+
 /-! # Pure -/
 
 theorem pure_intro {σs : List Type} {φ : Prop} {P : SPred σs} : φ → P ⊢ₛ ⌜φ⌝ := by

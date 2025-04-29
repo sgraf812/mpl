@@ -60,14 +60,10 @@ instance ExceptT.instLiftMonadMorphism [Monad m] [LawfulMonad m] : MonadMorphism
 
 -- Now rewrites for the standard lib:
 
-protected theorem ReaderT.wp_read [Monad m] [WPMonad m psm] :
-  wp⟦MonadReaderOf.read : ReaderT ρ m ρ⟧ = PredTrans.get := by
-    ext; simp only [wp, MonadReaderOf.read, ReaderT.read, pure_pure, pure, PredTrans.pure,
-      PredTrans.pushArg_apply, PredTrans.map_apply, PredTrans.get]
-
 theorem ReaderT.read_apply [Monad m] [WPMonad m psm] :
   wp⟦MonadReaderOf.read : ReaderT ρ m ρ⟧.apply Q = fun r => Q.1 r r  := by
-    simp only [ReaderT.wp_read, PredTrans.get_apply]
+    ext; simp only [wp, MonadReaderOf.read, ReaderT.read, pure_pure, pure, PredTrans.pure,
+      PredTrans.pushArg_apply, PredTrans.map_apply]
 
 theorem MonadReaderOf.read_apply [MonadReaderOf ρ m] [MonadLift m n] [WP n _] :
   wp⟦MonadReaderOf.read : n ρ⟧.apply Q = wp⟦MonadLift.monadLift (MonadReader.read : m ρ) : n ρ⟧.apply Q := rfl
@@ -80,19 +76,14 @@ theorem MonadReader.read_apply [MonadReaderOf ρ m] [WP m sh] :
   wp⟦MonadReader.read : m ρ⟧.apply Q = wp⟦MonadReaderOf.read : m ρ⟧.apply Q := by
     simp only [read, MonadReaderOf.readThe_apply]
 
-protected theorem StateT.wp_get [Monad m] [WPMonad m psm] :
-  wp⟦MonadStateOf.get : StateT σ m σ⟧ = PredTrans.get := by
-    ext; simp only [wp, MonadStateOf.get, StateT.get, pure_pure, pure, PredTrans.pure,
-      PredTrans.pushArg_apply, PredTrans.get]
-
 theorem StateT.get_apply [Monad m] [WPMonad m psm] :
   wp⟦MonadStateOf.get : StateT σ m σ⟧.apply Q = fun s => Q.1 s s := by
-    simp only [StateT.wp_get, PredTrans.get_apply]
+    ext; simp only [wp, MonadStateOf.get, StateT.get, pure_pure, pure, PredTrans.pure,
+      PredTrans.pushArg_apply]
 
 theorem EStateM.get_apply :
     wp⟦MonadStateOf.get : EStateM ε σ σ⟧.apply Q = fun s => Q.1 s s := by
-  ext; simp only [wp, MonadStateOf.get, EStateM.get, pure_pure, pure, PredTrans.pure,
-    PredTrans.pushArg_apply, PredTrans.get]
+  ext; simp only [wp, MonadStateOf.get, EStateM.get]
 
 theorem MonadStateOf.get_apply [MonadStateOf σ m] [MonadLift m n] [WP n _] :
   wp⟦MonadStateOf.get : n σ⟧.apply Q = wp⟦MonadLift.monadLift (MonadStateOf.get : m σ) : n σ⟧.apply Q := rfl
@@ -103,31 +94,21 @@ theorem MonadStateOf.getThe_apply [WP m sh] [MonadStateOf σ m] :
 theorem MonadState.get_apply [WP m sh] [MonadStateOf σ m] :
   wp⟦MonadState.get : m σ⟧.apply Q = wp⟦MonadStateOf.get : m σ⟧.apply Q := rfl
 
-protected theorem StateT.wp_set [WP m sh] [Monad m] [MonadMorphism m _ wp] (x : σ) :
-  wp⟦MonadStateOf.set x : StateT σ m PUnit⟧ = PredTrans.set x := by
-    ext; simp only [wp, MonadState.set, set, StateT.set, pure_pure, pure, PredTrans.pure,
-      PredTrans.pushArg_apply, PredTrans.set]
-
 theorem StateT.set_apply [WP m sh] [Monad m] [MonadMorphism m _ wp] (x : σ) :
   wp⟦MonadStateOf.set x : StateT σ m PUnit⟧.apply Q = fun _ => Q.1 ⟨⟩ x := by
-    simp only [StateT.wp_set, PredTrans.set_apply]
+    ext; simp only [wp, MonadState.set, set, StateT.set, pure_pure, pure, PredTrans.pure,
+      PredTrans.pushArg_apply]
 
 theorem EStateM.set_apply (x : σ) :
     wp⟦MonadStateOf.set x : EStateM ε σ PUnit⟧.apply Q = fun _ => Q.1 ⟨⟩ x := by
   ext; simp only [wp, MonadState.set, set, EStateM.set, pure_pure, pure, PredTrans.pure,
-    PredTrans.pushArg_apply, PredTrans.set]
+    PredTrans.pushArg_apply]
 
 theorem MonadStateOf.set_apply [MonadStateOf σ m] [MonadLift m n] [WP n _] :
   wp⟦MonadStateOf.set x : n PUnit⟧.apply Q = wp⟦MonadLift.monadLift (MonadStateOf.set (σ:=σ) x : m PUnit) : n PUnit⟧.apply Q := rfl
 
 theorem MonadState.set_apply [WP m sh] [MonadStateOf σ m] :
   wp⟦MonadState.set x : m PUnit⟧.apply Q = wp⟦MonadStateOf.set x : m PUnit⟧.apply Q := rfl
-
-protected theorem StateT.wp_modifyGet [WP m sh] [Monad m] [MonadMorphism m (PredTrans sh) wp]
-  (f : σ → α × σ) :
-  wp⟦MonadStateOf.modifyGet f : StateT σ m α⟧ = PredTrans.modifyGet f := by
-    simp only [wp, MonadStateOf.modifyGet, StateT.modifyGet, pure_pure, pure, PredTrans.pure,
-      PredTrans.modifyGet]
 
 theorem StateT.modifyGet_apply [WP m sh] [Monad m] [MonadMorphism m (PredTrans sh) wp]
   (f : σ → α × σ) :

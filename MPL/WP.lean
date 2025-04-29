@@ -92,10 +92,12 @@ instance EStateM.instWP : WP (EStateM ε σ) (.except ε (.arg σ .pure)) where
     { apply := fun Q s => match x s with
         | .ok a s' => Q.1 a s'
         | .error e s' => Q.2.1 e s'
-      mono := by
-        intro _ _ h s
-        simp [wp]
-        cases (x s) <;> apply_rules [h.1,h.2.1]
+      conjunctive := by
+        intro _ _
+        apply SPred.bientails.of_eq
+        ext s
+        dsimp
+        cases (x s) <;> simp
     }
 
 instance State.instWP : WP (StateM σ) (.arg σ .pure) :=
