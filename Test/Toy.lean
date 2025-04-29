@@ -287,7 +287,6 @@ theorem addRandomEvens_spec (n k) : ⦃True⦄ (addRandomEvens n k) ⦃⇓r => r
   mwp
   let _ := inferInstanceAs (WPMonad IO _)
   mspec Specs.forIn_list_const_inv -- is the one that is registered
-  · exact inferInstance
   intro n r
   mintro ⌜h⌝
   mwp

@@ -152,19 +152,20 @@ end specialize
 
 namespace havereplace
 
-theorem repl (P Q : SPred σs) : P ⊢ₛ (P → Q) → Q := by
+theorem mrepl (P Q : SPred σs) : P ⊢ₛ (P → Q) → Q := by
   mintro HP HPQ
-  mreplace HPQ := HPQ HP
+  mreplace HPQ : Q := by mspecialize HPQ HP; mexact HPQ
   mexact HPQ
 
-theorem shave (P Q : SPred σs) : P ⊢ₛ (P → Q) → Q := by
+theorem mhave (P Q : SPred σs) : P ⊢ₛ (P → Q) → Q := by
   mintro HP HPQ
-  mhave HQ := HPQ HP
+  mhave HQ : Q := by mspecialize HPQ HP; mexact HPQ
+  mhave HQ := by mspecialize HPQ HP; mexact HPQ
   mexact HQ
 
 theorem mixed (y : Nat) (P Q : SPred σs) (Ψ : Nat → SPred σs) (hP : ⊢ₛ P) : ⊢ₛ Q → (∀ x, P → Q → Ψ x) → Ψ (y + 1) := by
   mintro HQ HΨ
-  mhave H := HΨ (y + 1) hP HQ
+  mhave H := by mspecialize HΨ (y + 1) hP HQ; mexact HΨ
   mexact H
 
 end havereplace

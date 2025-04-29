@@ -20,7 +20,7 @@ def _root_.MPL.ProofMode.MGoal.exact (goal : MGoal) (hyp : TSyntax `term) : Opti
   OptionT.mk do
   let proof := mkApp5 (mkConst ``Exact.assumption) goal.σs goal.hyps focusRes.restHyps goal.target focusRes.proof
   unless ← isDefEq focusRes.focusHyp goal.target do
-    throwError "sexact tactic failed, hypothesis {hyp} is not definitionally equal to {goal.target}"
+    throwError "mexact tactic failed, hypothesis {hyp} is not definitionally equal to {goal.target}"
   return proof
 
 def _root_.MPL.ProofMode.MGoal.exactPure (goal : MGoal) (hyp : TSyntax `term) : TacticM Expr := do
@@ -28,7 +28,7 @@ def _root_.MPL.ProofMode.MGoal.exactPure (goal : MGoal) (hyp : TSyntax `term) : 
   let expected := mkApp2 (mkConst ``SPred.tautological) goal.σs T
   let prf ← try
     elabTerm hyp expected
-  catch _ => throwError "sexact tactic failed, {hyp} does not have type {expected}"
+  catch _ => throwError "mexact tactic failed, {hyp} does not have type {expected}"
   return mkApp4 (mkConst ``Exact.from_tautology) goal.σs goal.hyps goal.target prf
 
 elab "mexact" colGt hyp:term : tactic => do

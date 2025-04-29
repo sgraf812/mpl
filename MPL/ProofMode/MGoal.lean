@@ -89,6 +89,15 @@ def parseMGoal? (expr : Expr) : Option MGoal := do
   let some (σs, hyps, target) := e.app3? ``SPred.entails | none
   some { σs, hyps, target }
 
+open Tactic in
+def ensureMGoal : TacticM (MVarId × MGoal) := do
+  let mvar ← getMainGoal
+  let goal ← instantiateMVars <| (← mvar.getType)
+  if let some goal := parseMGoal? goal then
+    return (mvar, goal)
+  else
+    throwError "Not in proof mode"
+
 def MGoal.strip (goal : MGoal) : Expr := -- omits the .mdata wrapper
   mkApp3 (mkConst ``SPred.entails) goal.σs goal.hyps goal.target
 
