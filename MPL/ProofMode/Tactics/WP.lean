@@ -43,6 +43,7 @@ elab "mwp" : tactic => do
 
 attribute [wp_simp]
   eq_self
+  SVal.curry_cons SVal.uncurry_cons -- SVal.curry_uncurry SVal.uncurry_curry
   SPred.entails.refl SPred.imp_self_simp SPred.true_intro_simp SPred.true_intro_simp_nil
   FailConds.entails.refl FailConds.entails_false FailConds.entails_true FailConds.pure_def
   PostCond.entails PostCond.entails.refl PostCond.total PostCond.partial
@@ -75,6 +76,11 @@ attribute [wp_simp]
   ExceptT.tryCatch_apply
   Except.throw_apply
   Except.tryCatch_apply
+  EStateM.get_apply
+  EStateM.set_apply
+  EStateM.modifyGet_apply
+  EStateM.throw_apply
+  EStateM.tryCatch_apply
   -- lifting state
   MonadStateOf.get_apply MonadStateOf.getThe_apply MonadState.get_apply
   MonadStateOf.set_apply MonadState.set_apply

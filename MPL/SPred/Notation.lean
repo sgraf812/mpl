@@ -92,10 +92,10 @@ app_unexpand_rule SVal.curry
     | `(fun $_ => $e) => if ts.isEmpty then ``(⌜$e⌝) else ``(⌜$e⌝ $ts*)
     | _ => throw ()
 app_unexpand_rule SVal.uncurry
-  | `($_ $f $_ $ts*) => do
+  | `($_ $f $ts*) => do
     match f with
     | `(SVal.getThe $t) => if ts.isEmpty then ``(‹$t›ₛ) else ``(‹$t›ₛ $ts*)
-    | t => if ts.isEmpty then ``(#$t) else ``(#$t $ts*)
+    | `($t) => if ts.isEmpty then ``(#$t) else ``(#$t $ts*)
 app_unexpand_rule SPred.entails
   | `($_ $P $Q)  => do
     let P ← unpack P; let Q ← unpack Q;

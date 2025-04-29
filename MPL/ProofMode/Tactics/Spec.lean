@@ -19,18 +19,18 @@ open Lean Elab Tactic Meta
 
 initialize registerTraceClass `mpl.tactics.spec
 
-theorem Spec.apply {m : Type → Type} {ps : PostShape} [WP m ps] {α} {x : m α} {P : PreCond ps} {Q Q' : PostCond α ps}
+theorem Spec.apply {m : Type → Type} {ps : PostShape} [WP m ps] {α} {x : m α} {P : Assertion ps} {Q Q' : PostCond α ps}
   (h : ⦃P⦄ x ⦃Q⦄) (hpost : SPred.entails (wp⟦x⟧.apply Q) (wp⟦x⟧.apply Q')) :
   P.entails (wp⟦x⟧.apply Q') := SPred.entails.trans h hpost
 
-theorem Spec.apply_mono {m : Type → Type} {ps : PostShape} [WP m ps] {α} {x : m α} {P : PreCond ps} {Q Q' : PostCond α ps}
+theorem Spec.apply_mono {m : Type → Type} {ps : PostShape} [WP m ps] {α} {x : m α} {P : Assertion ps} {Q Q' : PostCond α ps}
   (h : ⦃P⦄ x ⦃Q⦄) (hpost : Q.entails Q') :
   P.entails (wp⟦x⟧.apply Q') := Spec.apply h (wp⟦x⟧.mono _ _ hpost)
 
-theorem Spec.entails_total {α} {ps : PostShape} (p : α → PreCond ps) (q : PostCond α ps) :
+theorem Spec.entails_total {α} {ps : PostShape} (p : α → Assertion ps) (q : PostCond α ps) :
   (∀ a, p a ⊢ₛ q.1 a) → PostCond.total p ⊢ₚ q := (PostCond.entails_total p q).mpr
 
-theorem Spec.entails_partial {α} {ps : PostShape} (p : PostCond α ps) (q : α → PreCond ps) :
+theorem Spec.entails_partial {α} {ps : PostShape} (p : PostCond α ps) (q : α → Assertion ps) :
   (∀ a, p.1 a ⊢ₛ q a) → p ⊢ₚ PostCond.partial q := (PostCond.entails_partial p q).mpr
 
 def elabTermForSpec (stx : TSyntax `term) (expectedTy : Expr) : TacticM (Expr × List MVarId) := do
@@ -50,12 +50,12 @@ def elabTermForSpec (stx : TSyntax `term) (expectedTy : Expr) : TacticM (Expr ×
     | _      => pure ()
   -- It is vital that we supply an expected type below,
   -- otherwise `ps` will be uninstantiated on the first elaboration try
-  -- and we do not get to elaborate `fun a b => True` as `α → PreCond ps`,
+  -- and we do not get to elaborate `fun a b => True` as `α → Assertion ps`,
   -- even after instantiating `ps` to `.arg σ .pure` and retrying (a bug?).
   try
     elabTermWithHoles stx expectedTy `mspec (allowNaturalHoles := true)
   catch e : Exception =>
-    trace[mpl.tactics.spec] "error: {e.toMessageData}"
+    trace[mpl.tactics.spec] "internal error. This happens for example when the head symbol of the spec is wrong. Message:\n  {e.toMessageData}"
     throw e
 
 def mFindSpec (stx? : Option (TSyntax `term)) (u : Level) (m : Expr) (ps : Expr) (instWP : Expr) (α : Expr) (prog : Expr) : TacticM (Expr × List MVarId × Expr × Expr) := do
@@ -66,7 +66,7 @@ def mFindSpec (stx? : Option (TSyntax `term)) (u : Level) (m : Expr) (ps : Expr)
     if specs.size > 1 then throwError s!"multiple specs found for {prog}: {specs}"
     return mkIdent specs[0]!
   trace[mpl.tactics.spec] "spec syntax: {stx}"
-  let P ← mkFreshExprMVar (mkApp (mkConst ``PreCond) ps) (userName := `P)
+  let P ← mkFreshExprMVar (mkApp (mkConst ``Assertion) ps) (userName := `P)
   let Q ← mkFreshExprMVar (mkApp2 (mkConst ``PostCond) α ps) (userName := `Q)
   let expectedTy := mkApp7 (mkConst ``triple [u]) m ps instWP α prog P Q
   check expectedTy

@@ -83,13 +83,13 @@ theorem ParentWF_insert (parent : Std.HashMap Term Term) (t1 t2 : Term) (hrel : 
   exact hwf.apply a
 
 def height (s : UFState.Raw) (h : Acyclic s.parent) (t : Term) : Nat :=
-  match _ : s.parent[t]? with
+  match hpar : s.parent[t]? with
   | none => 0
   | some p => 1 + height s h p
 termination_by h.wrap t
 
 def UFState.Raw.find (uf : UFState.Raw) (h : Acyclic uf.parent) (t : Term) : Term × UFState.Raw :=
-  match _ :uf.parent[t]? with
+  match hpar : uf.parent[t]? with
   | none => (t, uf)
   | some p =>
     let (r, uf') := find uf h p

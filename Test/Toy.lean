@@ -75,7 +75,7 @@ example : PostCond (Nat × List.Zipper (List.range' 1 3 1)) (PostShape.except Na
 example : PostCond (Nat × List.Zipper (List.range' 1 3 1)) (PostShape.except Nat (PostShape.arg Nat PostShape.pure)) :=
   post⟨fun (r, xs) s => r ≤ 4 ∧ s = 4 ∧ r + xs.suff.sum > 4, fun e s => e = 42 ∧ s = 4⟩
 
-example : (Nat × List.Zipper (List.range' 1 3 1)) → PreCond (PostShape.except Nat (PostShape.arg Nat PostShape.pure)) :=
+example : (Nat × List.Zipper (List.range' 1 3 1)) → Assertion (PostShape.except Nat (PostShape.arg Nat PostShape.pure)) :=
   let x := ⟨fun (r, xs) s => r ≤ 4 ∧ s = 4 ∧ r + xs.suff.sum > 4, fun e s => e = 42 ∧ s = 4⟩; Prod.fst x
 
 example :
@@ -311,7 +311,7 @@ end KimsBabySteps
 section WeNeedAProofMode
 
 private abbrev theNat : SVal [Nat, Bool] Nat := fun n _ => n
-private def test (P Q : PreCond (.arg Nat (.arg Bool .pure))) : PreCond (.arg Char (.arg Nat (.arg Bool .pure))) :=
+private def test (P Q : Assertion (.arg Nat (.arg Bool .pure))) : Assertion (.arg Char (.arg Nat (.arg Bool .pure))) :=
   spred(fun n => ((∀ y, if y = n then ⌜‹Nat›ₛ + #theNat = 4⌝ else Q) ∧ Q) → P → (∃ x, P → if (x : Bool) then Q else P))
 
 abbrev M := StateT Nat (StateT Char (StateT Bool (StateT String Idd)))

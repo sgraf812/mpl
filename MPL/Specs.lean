@@ -62,40 +62,70 @@ theorem Specs.pure {m : Type → Type} {ps : PostShape} [Monad m] [WPMonad m ps]
 theorem Specs.bind {m : Type → Type} {ps : PostShape} [Monad m] [WPMonad m ps] {α β} {x : m α} {f : α → m β} {Q : PostCond β ps} :
   ⦃wp⟦x⟧.apply (fun a => wp⟦f a⟧.apply Q, Q.2)⦄ (x >>= f) ⦃Q⦄ := triple_bind x f .rfl (fun _ => .rfl)
 
+theorem Specs.forIn'_list {α : Type} {β : Type} {m : Type → Type v} {ps : PostShape}
+    [Monad m] [WPMonad m ps]
+    {xs : List α} {init : β} {f : (a : α) → a ∈ xs → β → m (ForInStep β)}
+    (inv : PostCond (β × List.Zipper xs) ps)
+    (step : ∀ b rpref x (hx : x ∈ xs) suff (h : xs = rpref.reverse ++ x :: suff),
+        ⦃inv.1 (b, ⟨rpref, x::suff, by simp [h]⟩)⦄
+        f x hx b
+        ⦃(fun r => match r with
+                   | .yield b' => inv.1 (b', ⟨x::rpref, suff, by simp [h]⟩)
+                   | .done b' => inv.1 (b', ⟨xs.reverse, [], by simp⟩), inv.2)⦄) :
+    ⦃inv.1 (init, ⟨[], xs, by simp⟩)⦄ forIn' xs init f ⦃(fun b => inv.1 (b, ⟨xs.reverse, [], by simp⟩), inv.2)⦄ := by
+  suffices h : ∀ rpref suff (h : xs = rpref.reverse ++ suff),
+      ⦃inv.1 (init, ⟨rpref, suff, by simp [h]⟩)⦄
+      forIn' (m:=m) suff init (fun a ha => f a (by simp[h,ha]))
+      ⦃(fun b => inv.1 (b, ⟨xs.reverse, [], by simp [h]⟩), inv.2)⦄
+    from h [] xs rfl
+  intro rpref suff h
+  induction suff generalizing rpref init
+  case nil => apply triple_pure; simp [h]
+  case cons x suff ih =>
+    simp only [List.forIn'_cons]
+    apply triple_bind
+    case hx => exact step init rpref x (by simp[h]) suff h
+    case hf =>
+      intro r
+      split
+      next => apply triple_pure; simp [h]
+      next b =>
+        simp
+        have := @ih b (x::rpref) (by simp [h])
+        simp at this
+        exact this
+
+-- using the postcondition as a constant invariant:
+@[spec]
+theorem Specs.forIn'_list_const_inv {α : Type} {β : Type} {m : Type → Type v} {ps : PostShape}
+  [Monad m] [WPMonad m ps]
+  {xs : List α} {init : β} {f : (a : α) → a ∈ xs → β → m (ForInStep β)}
+  {inv : PostCond β ps}
+  (step : ∀ x (hx : x ∈ xs) b,
+      ⦃inv.1 b⦄
+      f x hx b
+      ⦃(fun r => match r with | .yield b' => inv.1 b' | .done b' => inv.1 b', inv.2)⦄) :
+  ⦃inv.1 init⦄ forIn' xs init f ⦃inv⦄ :=
+    Specs.forIn'_list (fun p => inv.1 p.1, inv.2) (fun b _ x hx _ _ => step x hx b)
+
 theorem Specs.forIn_list {α : Type} {β : Type} {m : Type → Type v} {ps : PostShape}
-  [Monad m] [LawfulMonad m] [WPMonad m ps]
-  {xs : List α} {init : β} {f : α → β → m (ForInStep β)}
-  (inv : PostCond (β × List.Zipper xs) ps)
-  (step : ∀ b rpref x suff (h : xs = rpref.reverse ++ x :: suff),
-      ⦃inv.1 (b, ⟨rpref, x::suff, by simp [h]⟩)⦄
-      f x b
-      ⦃(fun r => match r with
-                 | .yield b' => inv.1 (b', ⟨x::rpref, suff, by simp [h]⟩)
-                 | .done b' => inv.1 (b', ⟨xs.reverse, [], by simp⟩), inv.2)⦄) :
-  ⦃inv.1 (init, ⟨[], xs, by simp⟩)⦄ forIn xs init f ⦃(fun b => inv.1 (b, ⟨xs.reverse, [], by simp⟩), inv.2)⦄ := by
-    suffices h : ∀ rpref suff (h : xs = rpref.reverse ++ suff), ⦃inv.1 (init, ⟨rpref, suff, by simp [h]⟩)⦄ forIn suff init f ⦃(fun b => inv.1 (b, ⟨xs.reverse, [], by simp [h]⟩), inv.2)⦄
-      from h [] xs rfl
-    intro rpref suff h
-    induction suff generalizing rpref init
-    case nil => apply triple_pure; simp [h]
-    case cons x suff ih =>
-      simp only [List.forIn_cons]
-      apply triple_bind
-      case hx => exact step init rpref x suff h
-      case hf =>
-        intro r
-        split
-        next => apply triple_pure; simp [h]
-        next b =>
-          simp
-          have := @ih b (x::rpref) (by simp [h])
-          simp at this
-          exact this
+    [Monad m] [WPMonad m ps]
+    {xs : List α} {init : β} {f : α → β → m (ForInStep β)}
+    (inv : PostCond (β × List.Zipper xs) ps)
+    (step : ∀ b rpref x suff (h : xs = rpref.reverse ++ x :: suff),
+        ⦃inv.1 (b, ⟨rpref, x::suff, by simp [h]⟩)⦄
+        f x b
+        ⦃(fun r => match r with
+                   | .yield b' => inv.1 (b', ⟨x::rpref, suff, by simp [h]⟩)
+                   | .done b' => inv.1 (b', ⟨xs.reverse, [], by simp⟩), inv.2)⦄) :
+    ⦃inv.1 (init, ⟨[], xs, by simp⟩)⦄ forIn xs init f ⦃(fun b => inv.1 (b, ⟨xs.reverse, [], by simp⟩), inv.2)⦄ := by
+  simp only [← forIn'_eq_forIn]
+  exact Specs.forIn'_list inv (fun b rpref x _ suff h => step b rpref x suff h)
 
 -- using the postcondition as a constant invariant:
 @[spec]
 theorem Specs.forIn_list_const_inv {α : Type} {β : Type} {m : Type → Type v} {ps : PostShape}
-  [Monad m] [LawfulMonad m] [WPMonad m ps]
+  [Monad m] [WPMonad m ps]
   {xs : List α} {init : β} {f : α → β → m (ForInStep β)}
   {inv : PostCond β ps}
   (step : ∀ hd b,
@@ -106,7 +136,7 @@ theorem Specs.forIn_list_const_inv {α : Type} {β : Type} {m : Type → Type v}
     Specs.forIn_list (fun p => inv.1 p.1, inv.2) (fun b _ hd _ _ => step hd b)
 
 theorem Specs.foldlM_list {α : Type} {β : Type} {m : Type → Type v} {ps : PostShape}
-  [Monad m] [LawfulMonad m] [WPMonad m ps]
+  [Monad m] [WPMonad m ps]
   {xs : List α} {init : β} {f : β → α → m β}
   (inv : PostCond (β × List.Zipper xs) ps)
   (step : ∀ b rpref x suff (h : xs = rpref.reverse ++ x :: suff),
@@ -124,7 +154,7 @@ theorem Specs.foldlM_list {α : Type} {β : Type} {m : Type → Type v} {ps : Po
 -- using the postcondition as a constant invariant:
 @[spec]
 theorem Specs.foldlM_list_const_inv {α : Type} {β : Type} {m : Type → Type v} {ps : PostShape}
-  [Monad m] [LawfulMonad m] [WPMonad m ps]
+  [Monad m] [WPMonad m ps]
   {xs : List α} {init : β} {f : β → α → m β}
   {inv : PostCond β ps}
   (step : ∀ hd b,

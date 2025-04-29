@@ -9,8 +9,8 @@ import MPL.Utils.UnexpandRule
 /-!
 # Pre and postconditions
 
-This module defines `PreCond` and `PostCond`, the types which constitute
-the pre and postconditions of a Hoare triple of the program logic.
+This module defines `Assertion` and `PostCond`, the types which constitute
+the pre and postconditions of a Hoare triple in the program logic.
 
 ## Predicate shapes
 
@@ -25,14 +25,14 @@ Currently, the only supported base layer is `PostShape.pure`.
 
 ## Pre and postconditions
 
-The type of preconditions `PreCond ps` is distinct from the type of postconditions `PostCond α ps`.
+The type of preconditions `Assertion ps` is distinct from the type of postconditions `PostCond α ps`.
 
 This is because postconditions not only specify what happens upon successful termination of the
 program, but also need to specify a property that holds upon failure.
 We get one "barrel" for the success case, plus one barrel per `PostShape.except` layer.
 
 It does not make much sense to talk about failure barrels in the context of preconditions.
-Hence, `PreCond ps` is defined such that all `PostShape.except` layers are discarded from `ps`,
+Hence, `Assertion ps` is defined such that all `PostShape.except` layers are discarded from `ps`,
 via `PostShape.args`.
 -/
 
@@ -50,16 +50,16 @@ abbrev PostShape.args : PostShape → List Type
   | .except _ s => PostShape.args s
 
 /--
-  A precondition on the `.arg`s in the given predicate shape.
+  An assertion on the `.arg`s in the given predicate shape.
   ```
-  example : PreCond (.arg ρ .pure) = (ρ → Prop) := rfl
-  example : PreCond (.except ε .pure) = Prop := rfl
-  example : PreCond (.arg σ (.except ε .pure)) = (σ → Prop) := rfl
-  example : PreCond (.except ε (.arg σ .pure)) = (σ → Prop) := rfl
+  example : Assertion (.arg ρ .pure) = (ρ → Prop) := rfl
+  example : Assertion (.except ε .pure) = Prop := rfl
+  example : Assertion (.arg σ (.except ε .pure)) = (σ → Prop) := rfl
+  example : Assertion (.except ε (.arg σ .pure)) = (σ → Prop) := rfl
   ```
   This is an abbreviation for `SPred` under the hood, so all theorems about `SPred` apply.
 -/
-abbrev PreCond (ps : PostShape) : Type := SPred (PostShape.args ps)
+abbrev Assertion (ps : PostShape) : Type := SPred (PostShape.args ps)
 
 /--
   Encodes one continuation barrel for each `PostShape.except` in the given predicate shape.
@@ -73,7 +73,7 @@ abbrev PreCond (ps : PostShape) : Type := SPred (PostShape.args ps)
 def FailConds : PostShape → Type
   | .pure => Unit
   | .arg _ ps => FailConds ps
-  | .except ε ps => (ε → PreCond ps) × FailConds ps
+  | .except ε ps => (ε → Assertion ps) × FailConds ps
 
 def FailConds.const {ps : PostShape} (p : Prop) : FailConds ps := match ps with
   | .pure => ()
@@ -117,6 +117,46 @@ theorem FailConds.entails_false {x : FailConds ps} : FailConds.false ⊢ₑ x :=
 theorem FailConds.entails_true {x : FailConds ps} : x ⊢ₑ FailConds.true := by
   induction ps <;> simp_all [true, const, entails, SPred.true_intro]
 
+def FailConds.and {ps : PostShape} (x : FailConds ps) (y : FailConds ps) : FailConds ps :=
+  match ps with
+  | .pure => ()
+  | .arg _ ps => @FailConds.and ps x y
+  | .except ε ps => (fun e => SPred.and (x.1 e) (y.1 e), FailConds.and x.2 y.2)
+
+infixr:35 " ∧ₑ " => FailConds.and
+
+theorem FailConds.and_true {x : FailConds ps} : x ∧ₑ FailConds.true ⊢ₑ x := by
+  induction ps
+  case pure => trivial
+  case arg ih => exact ih
+  case except ε ps ih =>
+    simp_all[and, true, const]
+    constructor <;> simp only [SPred.and_true.mp, implies_true, ih]
+
+theorem FailConds.true_and {x : FailConds ps} : FailConds.true ∧ₑ x ⊢ₑ x := by
+  induction ps
+  case pure => trivial
+  case arg ih => exact ih
+  case except ε ps ih =>
+    simp_all[and, true, const]
+    constructor <;> simp only [SPred.true_and.mp, implies_true, ih]
+
+theorem FailConds.and_false {x : FailConds ps} : x ∧ₑ FailConds.false ⊢ₑ FailConds.false := by
+  induction ps
+  case pure => trivial
+  case arg ih => exact ih
+  case except ε ps ih =>
+    simp_all[and, false, const]
+    constructor <;> simp only [SPred.and_false.mp, implies_true, ih]
+
+theorem FailConds.false_and {x : FailConds ps} : FailConds.false ∧ₑ x ⊢ₑ FailConds.false := by
+  induction ps
+  case pure => trivial
+  case arg ih => exact ih
+  case except ε ps ih =>
+    simp_all[and, false, const]
+    constructor <;> simp only [SPred.false_and.mp, implies_true, ih]
+
 /--
   A multi-barreled postcondition for the given predicate shape.
   ```
@@ -127,14 +167,14 @@ theorem FailConds.entails_true {x : FailConds ps} : x ⊢ₑ FailConds.true := b
   ```
 -/
 abbrev PostCond (α : Type) (s : PostShape) : Type :=
-  (α → PreCond s) × FailConds s
+  (α → Assertion s) × FailConds s
 
 /-- A postcondition expressing total correctness. -/
-abbrev PostCond.total (p : α → PreCond ps) : PostCond α ps :=
+abbrev PostCond.total (p : α → Assertion ps) : PostCond α ps :=
   (p, FailConds.false)
 
 /-- A postcondition expressing partial correctness. -/
-abbrev PostCond.partial (p : α → PreCond ps) : PostCond α ps :=
+abbrev PostCond.partial (p : α → Assertion ps) : PostCond α ps :=
   (p, FailConds.true)
 
 example : Unit × Unit := ⟨(), ()⟩
@@ -174,9 +214,14 @@ theorem PostCond.entails.trans {P Q R : PostCond α ps} (h₁ : P ⊢ₚ Q) (h�
   ⟨fun a => (h₁.1 a).trans (h₂.1 a), h₁.2.trans h₂.2⟩
 
 @[simp]
-theorem PostCond.entails_total (p : α → PreCond ps) (q : PostCond α ps) : PostCond.total p ⊢ₚ q ↔ ∀ a, p a ⊢ₛ q.1 a := by
+theorem PostCond.entails_total (p : α → Assertion ps) (q : PostCond α ps) : PostCond.total p ⊢ₚ q ↔ ∀ a, p a ⊢ₛ q.1 a := by
   simp only [total, entails, FailConds.entails_false, and_true]
 
 @[simp]
-theorem PostCond.entails_partial (p : PostCond α ps) (q : α → PreCond ps) : p ⊢ₚ PostCond.partial q ↔ ∀ a, p.1 a ⊢ₛ q a := by
+theorem PostCond.entails_partial (p : PostCond α ps) (q : α → Assertion ps) : p ⊢ₚ PostCond.partial q ↔ ∀ a, p.1 a ⊢ₛ q a := by
   simp only [total, entails, FailConds.entails_true, and_true]
+
+abbrev PostCond.and (p : PostCond α ps) (q : PostCond α ps) : PostCond α ps :=
+  (fun a => SPred.and (p.1 a) (q.1 a), FailConds.and p.2 q.2)
+
+infixr:35 " ∧ₚ " => PostCond.and

@@ -19,11 +19,11 @@ namespace MPL
 
 open Lean Meta Elab Tactic
 
-theorem wp_apply_triple_conseq {m : Type → Type} {ps : PostShape} [WP m ps] {α} {x : m α} {P : PreCond ps} {Q Q' : PostCond α ps}
+theorem wp_apply_triple_conseq {m : Type → Type} {ps : PostShape} [WP m ps] {α} {x : m α} {P : Assertion ps} {Q Q' : PostCond α ps}
   (h : ⦃P⦄ x ⦃Q⦄) (hpost : SPred.entails (wp⟦x⟧.apply Q) (wp⟦x⟧.apply Q')) :
   P.entails (wp⟦x⟧.apply Q') := SPred.entails.trans h hpost
 
-theorem wp_apply_triple_conseq_mono {m : Type → Type} {ps : PostShape} [WP m ps] {α} {x : m α} {P : PreCond ps} {Q Q' : PostCond α ps}
+theorem wp_apply_triple_conseq_mono {m : Type → Type} {ps : PostShape} [WP m ps] {α} {x : m α} {P : Assertion ps} {Q Q' : PostCond α ps}
   (h : ⦃P⦄ x ⦃Q⦄) (hpost : Q.entails Q') :
   P.entails (wp⟦x⟧.apply Q') := wp_apply_triple_conseq h (wp⟦x⟧.mono _ _ hpost)
 
@@ -109,7 +109,7 @@ syntax (name := CHONK) "CHONK" optional("[" Lean.Parser.Tactic.simpLemma,+ "]") 
 macro_rules
   | `(tactic| CHONK) => `(tactic| CHONK[if_true_left]) -- if_true_left is redundant, but empty list did not work for some reason.
   | `(tactic| CHONK [$args,*]) => `(tactic| (intros; first
-    | (intro; repeat intro) -- expand ≤ on → and PreConds, also turns triple goals into wp goals
+    | (intro; repeat intro) -- expand ≤ on → and Assertions, also turns triple goals into wp goals
     | CHONK_trivial
     | xapp
     | xwp

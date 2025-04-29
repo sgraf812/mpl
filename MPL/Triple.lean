@@ -22,7 +22,7 @@ namespace MPL
 universe u
 variable {m : Type → Type u} {ps : PostShape} [WP m ps]
 
-def triple (x : m α) (P : PreCond ps) (Q : PostCond α ps) : Prop :=
+def triple (x : m α) (P : Assertion ps) (Q : PostCond α ps) : Prop :=
   P ⊢ₛ wp⟦x⟧.apply Q
 
 notation:lead "⦃" P "⦄ " x:lead " ⦃" Q "⦄" => triple x spred(P) spred(Q)
@@ -39,12 +39,12 @@ instance [WP m ps] (x : m α) : ProofMode.PropAsEntails (triple x P Q) spred(P �
 theorem triple_pure [Monad m] [MonadMorphism m (PredTrans ps) wp] {α} {Q : PostCond α ps} (a : α) (himp : P.entails (Q.1 a)) :
   triple (pure (f:=m) a) P Q := himp.trans (by simp only [pure_pure, PredTrans.pure_apply, SPred.entails.refl])
 
-theorem triple_bind [Monad m] [MonadMorphism m (PredTrans ps) wp] {α β} {P : PreCond ps} {Q : α → PreCond ps} {R : PostCond β ps} (x : m α) (f : α → m β)
+theorem triple_bind [Monad m] [MonadMorphism m (PredTrans ps) wp] {α β} {P : Assertion ps} {Q : α → Assertion ps} {R : PostCond β ps} (x : m α) (f : α → m β)
   (hx : triple x P (Q, R.2))
   (hf : ∀ b, triple (f b) (Q b) R) :
   triple (x >>= f) P R := by
     apply SPred.entails.trans hx
     simp only [bind_bind]
     apply wp⟦x⟧.mono _ _
-    simp only [PostCond.entails, PreCond, FailConds.entails.refl, and_true]
+    simp only [PostCond.entails, Assertion, FailConds.entails.refl, and_true]
     exact hf

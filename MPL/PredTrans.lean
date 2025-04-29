@@ -15,7 +15,7 @@ PostShape`.
 `WP` in which we interpret monadic programs.
 
 A predicate transformer `x : PredTrans ps α` is a function that takes a postcondition
-`Q : PostCond α ps` and returns a precondition `x.apply Q : PreCond ps`, with the additional
+`Q : PostCond α ps` and returns a precondition `x.apply Q : Assertion ps`, with the additional
 monotonicity property that the precondition is stronger the stronger the postcondition is:
 `Q₁ ⊢ₚ Q₂ → x.apply Q₁ ⊢ₛ x.apply Q₂`.
 
@@ -28,22 +28,22 @@ This module defines interpretations of common monadic operations, such as `get`,
 namespace MPL
 
 /-- The stronger the postcondition, the stronger the transformed precondition. -/
-def PredTrans.Mono {ps : PostShape} {α : Type} (x : PostCond α ps → PreCond ps) : Prop :=
+def PredTrans.Mono {ps : PostShape} {α : Type} (x : PostCond α ps → Assertion ps) : Prop :=
   ∀ Q₁ Q₂, (Q₁ ⊢ₚ Q₂) → (x Q₁) ⊢ₛ (x Q₂)
 
 /--
   The type of predicate transformers for a given `ps : PostShape` and return type `α : Type`.
   A predicate transformer `x : PredTrans ps α` is a function that takes a postcondition
-  `Q : PostCond α ps` and returns a precondition `x.apply Q : PreCond ps`, with the additional
+  `Q : PostCond α ps` and returns a precondition `x.apply Q : Assertion ps`, with the additional
   monotonicity property that the precondition is stronger the stronger the postcondition is:
   `Q₁ ⊢ₚ Q₂ → x.apply Q₁ ⊢ₛ x.apply Q₂`.
  -/
 @[ext]
 structure PredTrans (ps : PostShape) (α : Type) : Type where
-  apply : PostCond α ps → PreCond ps
+  apply : PostCond α ps → Assertion ps
   mono : PredTrans.Mono apply
 
-def PredTrans.const {ps : PostShape} {α : Type} (p : PreCond ps) : PredTrans ps α :=
+def PredTrans.const {ps : PostShape} {α : Type} (p : Assertion ps) : PredTrans ps α :=
   ⟨fun _ => p, fun _ _ _ => SPred.entails.refl _⟩
 
 /--
