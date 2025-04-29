@@ -194,9 +194,9 @@ def Schema.fileSize {s : Schema} (v : s.interp) : Nat :=
   | .error _ _ => panic! "failed to serialize"
 
 theorem Triple.conj [WP m ps] (x : m α) (h₁ : ⦃P₁⦄ x ⦃Q₁⦄) (h₂ : ⦃P₂⦄ x ⦃Q₂⦄) : ⦃P₁ ∧ P₂⦄ x ⦃Q₁ ∧ₚ Q₂⦄ := by
-  mintro ⟨hp₁, hp₂⟩ ∀s
-  mreplace hp₁ := h₁ hp₁
-  h₁ hp₁
+  mintro ⟨hp₁, hp₂⟩
+  mreplace hp₁ : wp⟦x⟧.apply Q₁ := h₁ hp₁
+  mreplace hp₂ := h₂ hp₂
   mwp
   mspec h₁
   mspec h₂

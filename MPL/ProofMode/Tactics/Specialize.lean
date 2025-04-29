@@ -121,3 +121,41 @@ elab "mspecialize" hyp:ident args:(colGt term:max)* : tactic => do
   let newMVar ← mkFreshExprSyntheticOpaqueMVar { goal with hyps := mkAnd! σs P H }.toExpr
   mvar.assign (proof newMVar)
   replaceMainGoal [newMVar.mvarId!]
+
+elab "mspecialize_pure" head:(term:max) args:(colGt term:max)* " as " hyp:ident : tactic => do
+  let (mvar, goal) ← mStart (← getMainGoal)
+  mvar.withContext do
+
+  -- Want to prove goal P ⊢ₛ T. `head` is a pure term elaborating to Q ⊢ₛ R.
+  -- So we
+  -- 1. Introduce `head` as stateful hypothesis named `hyp`, P ∧ (hyp : Q → R) ⊢ₛ T
+  -- 2. Produce a (transitive chain of) proofs
+  --      P' ∧ (Q → R) ⊢ P' ∧ R ⊢ₛ P' ∧ R' ⊢ₛ ...
+  --    One for each arg; end up with goal P' ∧ H' ⊢ₛ T
+  -- 3. Recombine with mkAnd (NB: P' might be empty), compose with P' ∧ H' ⊣⊢ₛ mkAnd P' H'.
+  -- 4. Make a new MVar for goal `mkAnd P' H' ⊢ T` and assign the transitive chain.
+  let some specFocus := goal.focusHyp hyp.getId | throwError "unknown identifier '{hyp}'"
+  let σs := goal.σs
+  let P := specFocus.restHyps
+  let mut H := specFocus.focusHyp
+  let mut goal : MGoal := goal
+  -- invariant: proof (_ : goal.toExpr) fills the mvar
+  let mut proof : Expr → Expr :=
+    mkApp7 (mkConst ``focus) σs goal.hyps P H goal.target specFocus.proof
+
+  for arg in args do
+    let res? ← OptionT.run
+      (mSpecializeImpStateful σs P H arg
+        <|> mSpecializeImpPure σs P H arg
+        <|> mSpecializeForall σs P H arg)
+    match res? with
+    | some (H', H2H') =>
+      -- logInfo m!"H: {H}, proof: {← inferType H2H'}"
+      proof := fun hgoal => proof (mkApp6 (mkConst ``SPred.entails.trans) σs (mkAnd! σs P H) (mkAnd! σs P H') goal.target H2H' hgoal)
+      H := H'
+    | none =>
+      throwError "Could not specialize {H} with {arg}"
+
+  let newMVar ← mkFreshExprSyntheticOpaqueMVar { goal with hyps := mkAnd! σs P H }.toExpr
+  mvar.assign (proof newMVar)
+  replaceMainGoal [newMVar.mvarId!]
