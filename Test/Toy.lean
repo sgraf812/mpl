@@ -237,8 +237,7 @@ def fib_impl (n : Nat) : Idd Nat := do
     b := a' + b
   return b
 
-@[reducible]
-def fib_spec : Nat → Nat
+abbrev fib_spec : Nat → Nat
 | 0 => 0
 | 1 => 1
 | n+2 => fib_spec n + fib_spec (n+1)
@@ -253,6 +252,59 @@ theorem fib_triple : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ :
   mspec Specs.forIn_list (⇓ (⟨a, b⟩, xs) => a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)) ?step
   case step => dsimp; intros; mintro _; mwp; simp_all
   simp_all [Nat.sub_one_add_one]
+
+#check fib_impl.fun_cases
+theorem fib_triple_cases : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ := by
+  mintro -
+  apply fib_impl.fun_cases _ ?case1 ?case2 n
+  case case1 => unfold fib_impl; mwp
+  case case2 =>
+  intro n h
+  unfold fib_impl
+  simp only [h, reduceIte]
+  mwp
+  mspec Specs.forIn_list (⇓ (⟨a, b⟩, xs) => a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)) ?step
+  case step => dsimp; intros; mintro _; mwp; simp_all
+  simp_all [Nat.sub_one_add_one]
+
+theorem fib_impl_cases
+    (Q : Nat → PostCond Nat PostShape.pure)
+    (case1 : (Q 0).1 0)
+    (case2 : ∀ n (_ : ¬n = 0),
+             let xs := List.range' 1 (n - 1) 1
+             ∃ (I : PostCond (MProd Nat Nat × List.Zipper xs) PostShape.pure),
+               I.1 (⟨0, 1⟩, List.Zipper.begin xs)
+               ∧ (∀ r, I.1 (r, List.Zipper.end xs) ⊢ₛ (Q n).1 r.snd)
+               ∧ (∀ r rpref x suff (h : xs = rpref.reverse ++ x :: suff),
+                  I.1 (r, ⟨rpref, x::suff, by simp[h]⟩) ⊢ₛ I.1 (⟨r.2, r.1+r.2⟩, ⟨x::rpref, suff, by simp[h]⟩)))
+    : wp⟦fib_impl n⟧.apply (Q n) := by
+  apply fib_impl.fun_cases _ ?case1 ?case2 n
+  case case1 => unfold fib_impl; mstart; mwp; mpure_intro; exact case1
+  case case2 =>
+  intro n h
+  unfold fib_impl
+  simp only [*, reduceIte]
+  mstart
+  mwp
+  have ⟨I, hpre, hpost, hstep⟩ := case2 n h
+  mspec Specs.forIn_list
+  case post.success => exact hpost r
+  case step =>
+    intro _ _ _ _ h
+    mintro _
+    mwp
+    exact hstep _ _ _ _ h
+
+theorem fib_triple_cases' : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ := by
+  intro _
+  apply fib_impl_cases
+  case case1 => rfl
+  case case2 =>
+  intro n xs
+  refine ⟨(⇓ (⟨a, b⟩, xs) => a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)), ?pre, ?post, ?step⟩
+  case pre => trivial
+  case post => simp_all[Nat.sub_one_add_one]
+  case step => simp_all
 
 theorem fib_correct {n} : (fib_impl n).run = fib_spec n := by
   generalize h : (fib_impl n).run = x

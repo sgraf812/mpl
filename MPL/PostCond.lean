@@ -75,12 +75,16 @@ def FailConds : PostShape → Type
   | .arg _ ps => FailConds ps
   | .except ε ps => (ε → Assertion ps) × FailConds ps
 
+@[simp]
 def FailConds.const {ps : PostShape} (p : Prop) : FailConds ps := match ps with
   | .pure => ()
   | .arg _ ps => @FailConds.const ps p
   | .except _ ps => (fun _ε => spred(⌜p⌝), @FailConds.const ps p)
 
+@[simp]
 def FailConds.true : FailConds ps := FailConds.const True
+
+@[simp]
 def FailConds.false : FailConds ps := FailConds.const False
 
 instance : Inhabited (FailConds ps) where
@@ -206,6 +210,7 @@ def funArrow : Parser := unicodeSymbol " ↦ " " => "
 @[inherit_doc PostCond.total]
 macro "⇓" xs:Lean.Parser.Term.funBinder+ funArrow e:term : term =>
   `(PostCond.total (by exact (fun $xs* => spred($e)))) -- NB: Postponement through by exact
+
 app_unexpand_rule PostCond.total
   | `($_ fun $xs* => $e) => do `(⇓ $xs* => $(← SPred.Notation.unpack e))
 

@@ -22,32 +22,31 @@ structure Zipper {α : Type u} (l : List α) : Type u where
   suff : List α
   property : rpref.reverse ++ suff = l
 
-@[simp]
 abbrev Zipper.pref {α} {l : List α} (s : List.Zipper l) : List α := s.rpref.reverse
 
-def Zipper.begin {l : List α} : Zipper l := ⟨[],l,rfl⟩
-def Zipper.end {l : List α} : Zipper l := ⟨l.reverse,[],by simp⟩
-def Zipper.tail (s : Zipper l) (h : s.suff = hd::tl) : Zipper l :=
+abbrev Zipper.begin (l : List α) : Zipper l := ⟨[],l,rfl⟩
+abbrev Zipper.end (l : List α) : Zipper l := ⟨l.reverse,[],by simp⟩
+abbrev Zipper.tail (s : Zipper l) (h : s.suff = hd::tl) : Zipper l :=
   { rpref := hd::s.rpref, suff := tl, property := by simp [s.property, ←h] }
 
 @[simp]
-theorem Zipper.begin_eq_end_iff_nil : @Zipper.begin _ l = @Zipper.end _ l ↔ l = [] := by
+theorem Zipper.begin_eq_end_iff_nil {l : List α} : Zipper.begin l = Zipper.end l ↔ l = [] := by
   constructor <;> simp [begin, Zipper.end]
 
 @[simp]
-theorem Zipper.nil_begin_eq_end : @Zipper.begin α [] = @Zipper.end α [] := rfl
+theorem Zipper.nil_begin_eq_end : Zipper.begin ([] : List α) = Zipper.end ([] : List α) := rfl
 
 @[simp]
-theorem Zipper.begin_suff {l : List α} : (@Zipper.begin α l).suff = l := rfl
+theorem Zipper.begin_suff {l : List α} : (Zipper.begin l).suff = l := rfl
 
 @[simp]
-theorem Zipper.begin_pref {l : List α} : (@Zipper.begin α l).pref = [] := rfl
+theorem Zipper.begin_pref {l : List α} : (Zipper.begin l).pref = [] := rfl
 
 @[simp]
-theorem Zipper.end_pref {l : List α} : (@Zipper.end α l).pref = l := by simp [Zipper.end,pref]
+theorem Zipper.end_pref {l : List α} : (Zipper.end l).pref = l := by simp [Zipper.end,pref]
 
 @[simp]
-theorem Zipper.end_suff {l : List α} : (@Zipper.end α l).suff = [] := rfl
+theorem Zipper.end_suff {l : List α} : (Zipper.end l).suff = [] := rfl
 
 @[simp]
 theorem Zipper.tail_suff {l : List α} {s : Zipper l} (h : s.suff = hd::tl) : (s.tail h).suff = tl := rfl
@@ -163,5 +162,48 @@ theorem Specs.foldlM_list_const_inv {α : Type} {β : Type} {m : Type → Type v
       ⦃(fun b' => inv.1 b', inv.2)⦄) :
   ⦃inv.1 init⦄ List.foldlM f init xs ⦃inv⦄ :=
     Specs.foldlM_list (fun p => inv.1 p.1, inv.2) (fun b _ hd _ _ => step hd b)
+
+theorem Specs.forIn'_array {α : Type} {β : Type} {m : Type → Type v} {ps : PostShape}
+    [Monad m] [WPMonad m ps]
+    {xs : Array α} {init : β} {f : (a : α) → a ∈ xs → β → m (ForInStep β)}
+    (inv : PostCond (β × List.Zipper xs.toList) ps)
+    (step : ∀ b rpref x (hx : x ∈ xs) suff (h : xs.toList = rpref.reverse ++ x :: suff),
+        ⦃inv.1 (b, ⟨rpref, x::suff, by simp [h]⟩)⦄
+        f x hx b
+        ⦃(fun r => match r with
+                   | .yield b' => inv.1 (b', ⟨x::rpref, suff, by simp [h]⟩)
+                   | .done b' => inv.1 (b', ⟨xs.toList.reverse, [], by simp⟩), inv.2)⦄) :
+    ⦃inv.1 (init, ⟨[], xs.toList, by simp⟩)⦄ forIn' xs init f ⦃(fun b => inv.1 (b, ⟨xs.toList.reverse, [], by simp⟩), inv.2)⦄ := by
+  cases xs
+  simp
+  apply Specs.forIn'_list inv (fun b rpref x hx suff h => step b rpref x (by simp[hx]) suff h)
+
+theorem Specs.forIn_array {α : Type} {β : Type} {m : Type → Type v} {ps : PostShape}
+    [Monad m] [WPMonad m ps]
+    {xs : Array α} {init : β} {f : α → β → m (ForInStep β)}
+    (inv : PostCond (β × List.Zipper xs.toList) ps)
+    (step : ∀ b rpref x suff (h : xs.toList = rpref.reverse ++ x :: suff),
+        ⦃inv.1 (b, ⟨rpref, x::suff, by simp [h]⟩)⦄
+        f x b
+        ⦃(fun r => match r with
+                   | .yield b' => inv.1 (b', ⟨x::rpref, suff, by simp [h]⟩)
+                   | .done b' => inv.1 (b', ⟨xs.toList.reverse, [], by simp⟩), inv.2)⦄) :
+    ⦃inv.1 (init, ⟨[], xs.toList, by simp⟩)⦄ forIn xs init f ⦃(fun b => inv.1 (b, ⟨xs.toList.reverse, [], by simp⟩), inv.2)⦄ := by
+  cases xs
+  simp
+  apply Specs.forIn_list inv step
+
+theorem Specs.foldlM_array {α : Type} {β : Type} {m : Type → Type v} {ps : PostShape}
+  [Monad m] [WPMonad m ps]
+  {xs : Array α} {init : β} {f : β → α → m β}
+  (inv : PostCond (β × List.Zipper xs.toList) ps)
+  (step : ∀ b rpref x suff (h : xs.toList = rpref.reverse ++ x :: suff),
+      ⦃inv.1 (b, ⟨rpref, x::suff, by simp [h]⟩)⦄
+      f b x
+      ⦃(fun b' => inv.1 (b', ⟨x::rpref, suff, by simp [h]⟩), inv.2)⦄) :
+  ⦃inv.1 (init, ⟨[], xs.toList, by simp⟩)⦄ Array.foldlM f init xs ⦃(fun b => inv.1 (b, ⟨xs.toList.reverse, [], by simp⟩), inv.2)⦄ := by
+  cases xs
+  simp
+  apply Specs.foldlM_list inv step
 
 end MPL
