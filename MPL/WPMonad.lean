@@ -25,7 +25,7 @@ class WPMonad (m : Type → Type u) (ps : outParam PostShape) [Monad m]
   extends LawfulMonad m, WP m ps, MonadMorphism m (PredTrans ps) wp where
 
 theorem WP.pure_apply [Monad m] [WPMonad m ps] (a : α) (Q : PostCond α ps) :
-  wp⟦pure (f:=m) a⟧.apply Q = Q.1 a := by
+  wp⟦pure (f:=m) a⟧.apply Q = let x := a; Q.1 x := by
     simp only [pure_pure, PredTrans.pure_apply]
 
 theorem WP.bind_apply [Monad m] [WPMonad m ps] (x : m α) (f : α → m β) (Q : PostCond β ps) :

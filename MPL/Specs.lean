@@ -61,6 +61,7 @@ theorem Specs.pure {m : Type → Type} {ps : PostShape} [Monad m] [WPMonad m ps]
 theorem Specs.bind {m : Type → Type} {ps : PostShape} [Monad m] [WPMonad m ps] {α β} {x : m α} {f : α → m β} {Q : PostCond β ps} :
   ⦃wp⟦x⟧.apply (fun a => wp⟦f a⟧.apply Q, Q.2)⦄ (x >>= f) ⦃Q⦄ := Triple.bind x f .rfl (fun _ => .rfl)
 
+@[spec]
 theorem Specs.forIn'_list {α : Type} {β : Type} {m : Type → Type v} {ps : PostShape}
     [Monad m] [WPMonad m ps]
     {xs : List α} {init : β} {f : (a : α) → a ∈ xs → β → m (ForInStep β)}
@@ -95,7 +96,6 @@ theorem Specs.forIn'_list {α : Type} {β : Type} {m : Type → Type v} {ps : Po
         exact this
 
 -- using the postcondition as a constant invariant:
-@[spec]
 theorem Specs.forIn'_list_const_inv {α : Type} {β : Type} {m : Type → Type v} {ps : PostShape}
   [Monad m] [WPMonad m ps]
   {xs : List α} {init : β} {f : (a : α) → a ∈ xs → β → m (ForInStep β)}
@@ -107,6 +107,7 @@ theorem Specs.forIn'_list_const_inv {α : Type} {β : Type} {m : Type → Type v
   ⦃inv.1 init⦄ forIn' xs init f ⦃inv⦄ :=
     Specs.forIn'_list (fun p => inv.1 p.1, inv.2) (fun b _ x hx _ _ => step x hx b)
 
+@[spec]
 theorem Specs.forIn_list {α : Type} {β : Type} {m : Type → Type v} {ps : PostShape}
     [Monad m] [WPMonad m ps]
     {xs : List α} {init : β} {f : α → β → m (ForInStep β)}
@@ -122,7 +123,6 @@ theorem Specs.forIn_list {α : Type} {β : Type} {m : Type → Type v} {ps : Pos
   exact Specs.forIn'_list inv (fun b rpref x _ suff h => step b rpref x suff h)
 
 -- using the postcondition as a constant invariant:
-@[spec]
 theorem Specs.forIn_list_const_inv {α : Type} {β : Type} {m : Type → Type v} {ps : PostShape}
   [Monad m] [WPMonad m ps]
   {xs : List α} {init : β} {f : α → β → m (ForInStep β)}
@@ -134,6 +134,7 @@ theorem Specs.forIn_list_const_inv {α : Type} {β : Type} {m : Type → Type v}
   ⦃inv.1 init⦄ forIn xs init f ⦃inv⦄ :=
     Specs.forIn_list (fun p => inv.1 p.1, inv.2) (fun b _ hd _ _ => step hd b)
 
+@[spec]
 theorem Specs.foldlM_list {α : Type} {β : Type} {m : Type → Type v} {ps : PostShape}
   [Monad m] [WPMonad m ps]
   {xs : List α} {init : β} {f : β → α → m β}
@@ -151,7 +152,6 @@ theorem Specs.foldlM_list {α : Type} {β : Type} {m : Type → Type v} {ps : Po
   exact step
 
 -- using the postcondition as a constant invariant:
-@[spec]
 theorem Specs.foldlM_list_const_inv {α : Type} {β : Type} {m : Type → Type v} {ps : PostShape}
   [Monad m] [WPMonad m ps]
   {xs : List α} {init : β} {f : β → α → m β}
@@ -163,6 +163,7 @@ theorem Specs.foldlM_list_const_inv {α : Type} {β : Type} {m : Type → Type v
   ⦃inv.1 init⦄ List.foldlM f init xs ⦃inv⦄ :=
     Specs.foldlM_list (fun p => inv.1 p.1, inv.2) (fun b _ hd _ _ => step hd b)
 
+@[spec]
 theorem Specs.forIn'_array {α : Type} {β : Type} {m : Type → Type v} {ps : PostShape}
     [Monad m] [WPMonad m ps]
     {xs : Array α} {init : β} {f : (a : α) → a ∈ xs → β → m (ForInStep β)}
@@ -178,6 +179,7 @@ theorem Specs.forIn'_array {α : Type} {β : Type} {m : Type → Type v} {ps : P
   simp
   apply Specs.forIn'_list inv (fun b rpref x hx suff h => step b rpref x (by simp[hx]) suff h)
 
+@[spec]
 theorem Specs.forIn_array {α : Type} {β : Type} {m : Type → Type v} {ps : PostShape}
     [Monad m] [WPMonad m ps]
     {xs : Array α} {init : β} {f : α → β → m (ForInStep β)}
@@ -193,6 +195,7 @@ theorem Specs.forIn_array {α : Type} {β : Type} {m : Type → Type v} {ps : Po
   simp
   apply Specs.forIn_list inv step
 
+@[spec]
 theorem Specs.foldlM_array {α : Type} {β : Type} {m : Type → Type v} {ps : PostShape}
   [Monad m] [WPMonad m ps]
   {xs : Array α} {init : β} {f : β → α → m β}

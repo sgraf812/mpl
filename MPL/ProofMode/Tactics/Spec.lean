@@ -21,11 +21,11 @@ initialize registerTraceClass `mpl.tactics.spec
 
 theorem Spec.apply {m : Type → Type} {ps : PostShape} [WP m ps] {α} {x : m α} {P : Assertion ps} {Q Q' : PostCond α ps}
   (h : ⦃P⦄ x ⦃Q⦄) (hpost : SPred.entails (wp⟦x⟧.apply Q) (wp⟦x⟧.apply Q')) :
-  P.entails (wp⟦x⟧.apply Q') := SPred.entails.trans h hpost
+  P ⊢ₛ wp⟦x⟧.apply Q' := SPred.entails.trans h hpost
 
 theorem Spec.apply_mono {m : Type → Type} {ps : PostShape} [WP m ps] {α} {x : m α} {P : Assertion ps} {Q Q' : PostCond α ps}
   (h : ⦃P⦄ x ⦃Q⦄) (hpost : Q.entails Q') :
-  P.entails (wp⟦x⟧.apply Q') := Spec.apply h (wp⟦x⟧.mono _ _ hpost)
+  P ⊢ₛ wp⟦x⟧.apply Q' := Spec.apply h (wp⟦x⟧.mono _ _ hpost)
 
 theorem Spec.entails_total {α} {ps : PostShape} (p : α → Assertion ps) (q : PostCond α ps) :
   (∀ a, p a ⊢ₛ q.1 a) → PostCond.total p ⊢ₚ q := (PostCond.entails_total p q).mpr

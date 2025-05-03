@@ -22,7 +22,7 @@ namespace MPL
 universe u
 variable {m : Type → Type u} {ps : PostShape} [WP m ps]
 
-def Triple (x : m α) (P : Assertion ps) (Q : PostCond α ps) : Prop :=
+def Triple {α} (x : m α) (P : Assertion ps) (Q : PostCond α ps) : Prop :=
   P ⊢ₛ wp⟦x⟧.apply Q
 
 namespace Triple

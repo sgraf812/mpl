@@ -134,7 +134,7 @@ theorem mkFreshPair_spec :
 
 -- eliminating a Hoare triple spec into the pure world
 
-theorem mkFreshPair_correct : ∀ s, let (a,b) := (mkFreshPair s).1; a ≠ b :=
+theorem mkFreshPair_correct : ∀ s, let (a,b) := (mkFreshPair.run s).1; a ≠ b :=
   fun s => mkFreshPair_spec s True.intro
 
 
