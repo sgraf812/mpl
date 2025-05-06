@@ -80,7 +80,7 @@ def invariantGadget1.{u} {m : Type → Type u} {ps : PostShape} [Monad m] [WP m 
   pure ()
 
 -- This one will have the let mut vars as bound occurrences in β
-def invariantGadget2.{u,v} (β : Type v) {m : Type → Type u} {ps : PostShape} [Monad m] [WP m ps] (_inv : β → {α : Type} → {xs:List α} → List.Zipper xs → Assertion ps) : m Unit :=
+def invariantGadget2.{u,v} {β : Type v} {m : Type → Type u} {ps : PostShape} [Monad m] [WP m ps] (_inv : β → {α : Type} → {xs:List α} → List.Zipper xs → Assertion ps) : m Unit :=
   pure ()
 
 @[wp_simp]
@@ -90,9 +90,9 @@ theorem assertGadget_apply {m : Type → Type u} {ps : PostShape} [Monad m] [WP 
 @[wp_simp]
 theorem invariantGadget_apply {m : Type → Type u₂} {ps : PostShape} {α : Type} {β : Type} [Monad m] [WPMonad m ps]
   (xs : List α) (init : β) (f : α → β → m (ForInStep β)) (inv : β → {α : Type} → {xs : List α} → List.Zipper xs → Assertion ps) (Q : PostCond β ps) :
-  wp⟦invariantGadget2 β inv : m Unit⟧.apply (no_index (fun _ => wp⟦forIn xs init f⟧.apply Q, Q.2)) = wp⟦forInWithInvariant xs init f (PostCond.total fun (β, xs) => (inv β xs))⟧.apply Q := by
+  wp⟦invariantGadget2 inv : m Unit⟧.apply (no_index (fun _ => wp⟦forIn xs init f⟧.apply Q, Q.2)) = wp⟦forInWithInvariant xs init f (PostCond.total fun (β, xs) => (inv β xs))⟧.apply Q := by
     calc
-      _ = wp⟦invariantGadget2 β inv >>= fun _ => forIn xs init f⟧.apply Q := by simp
+      _ = wp⟦invariantGadget2 inv >>= fun _ => forIn xs init f⟧.apply Q := by simp
       _ = wp⟦forInWithInvariant xs init f (PostCond.total fun (β, xs) => (inv β xs))⟧.apply Q := rfl
 
 macro_rules
