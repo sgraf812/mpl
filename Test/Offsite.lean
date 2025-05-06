@@ -28,6 +28,22 @@ def fib_impl (n : Nat) : Idd Nat
     b := a' + b
   return b
 
+def fib_impl_refined (n : Nat) : Idd Nat := 
+  MPL.requiresGadget (⌜True⌝) <| 
+  MPL.ensuresGadget (fun r => r = fib_spec n) <|
+  do
+  if n = 0 then return 0
+  let a := 0
+  let b := 1
+  MPL.invariantGadget2 fun (MProd.mk a b) _ _ xs => 
+    a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)
+  let ⟨a, b⟩ ← forIn [1:n] (MProd.mk a b) fun _ ⟨a, b⟩ => do
+    let a' := a
+    let a := b
+    let b := a' + b
+    return .yield ⟨a, b⟩
+  return b
+
 -- intrinsic, automated proof:
 #check fib_impl.spec
 
