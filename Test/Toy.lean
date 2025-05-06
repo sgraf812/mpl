@@ -31,7 +31,7 @@ theorem test_sum :
     omega
   all_goals simp; omega -- sgrind
 
-def mkFreshInt [Monad m] [MonadStateOf (Nat × Nat) m] : m Nat := do
+def mkFreshNat [Monad m] [MonadStateOf (Nat × Nat) m] : m Nat := do
   let n ← Prod.fst <$> get
   modify (fun s => (s.1 + 1, s.2))
   pure n
@@ -40,34 +40,53 @@ private abbrev fst : SVal ((Nat × Nat)::σs) Nat := fun s => SVal.pure s.1
 private abbrev snd : SVal ((Nat × Nat)::σs) Nat := fun s => SVal.pure s.2
 
 @[spec]
-theorem mkFreshInt_spec [Monad m] [LawfulMonad m] [WPMonad m sh] :
+theorem mkFreshNat_spec [Monad m] [WPMonad m sh] :
   ⦃⌜#fst = n ∧ #snd = o⌝⦄
-  (mkFreshInt : StateT (Nat × Nat) m Nat)
+  (mkFreshNat : StateT (Nat × Nat) m Nat)
   ⦃⇓ r => ⌜r = n ∧ #fst = n + 1 ∧ #snd = o⌝⦄ := by
   mintro _
-  unfold mkFreshInt
+  unfold mkFreshNat
   mwp
   mintro ∀s
   simp
 
 @[wp_simp]
-theorem StateT.mkFreshInt_apply [Monad m] [LawfulMonad m] [WPMonad m sh] :
-  wp⟦(mkFreshInt : StateT (Nat × Nat) m Nat)⟧.apply Q = fun s => Q.1 s.1 (s.1 + 1, s.2) := by
-    unfold mkFreshInt; wp_simp
+theorem StateT.mkFreshNat_apply [Monad m] [LawfulMonad m] [WPMonad m sh] :
+  wp⟦(mkFreshNat : StateT (Nat × Nat) m Nat)⟧.apply Q = fun s => Q.1 s.1 (s.1 + 1, s.2) := by
+    unfold mkFreshNat; wp_simp
 
 @[wp_simp]
-theorem MonadStateOf.mkFreshInt_apply [Monad m] [MonadStateOf (Nat × Nat) m] [Monad n] [LawfulMonad m] [LawfulMonad n] [WP m psm] [WPMonad n psn] [MonadLift m n] [MonadMorphism m n MonadLift.monadLift] :
-  wp⟦mkFreshInt : n Nat⟧.apply Q = wp⟦MonadLift.monadLift (m:=m) mkFreshInt : n Nat⟧.apply Q := by
-    unfold mkFreshInt; wp_simp; rfl
+theorem MonadStateOf.mkFreshNat_apply [Monad m] [MonadStateOf (Nat × Nat) m] [Monad n] [LawfulMonad m] [LawfulMonad n] [WP m psm] [WPMonad n psn] [MonadLift m n] [MonadMorphism m n MonadLift.monadLift] :
+  wp⟦mkFreshNat : n Nat⟧.apply Q = wp⟦MonadLift.monadLift (m:=m) mkFreshNat : n Nat⟧.apply Q := by
+    unfold mkFreshNat; wp_simp; rfl
 
 @[spec]
-theorem mkFreshInt_lift_spec [Monad m] [LawfulMonad m] [WPMonad m sh] :
+theorem mkFreshNat_lift_spec [Monad m] [LawfulMonad m] [WPMonad m sh] :
   ⦃fun _ s => ⌜s.1 = n ∧ s.2 = o⌝⦄
-  (mkFreshInt : ExceptT Char (ReaderT Bool (StateT (Nat × Nat) m)) Nat)
+  (mkFreshNat : ExceptT Char (ReaderT Bool (StateT (Nat × Nat) m)) Nat)
   ⦃⇓ r _ s => ⌜r = n ∧ s.1 = n + 1 ∧ s.2 = o⌝⦄ := by
   mintro _
   mwp
   simp
+
+def mkFreshPair : StateM (Nat × Nat) (Nat × Nat) := do
+  let a ← mkFreshNat
+  let b ← mkFreshNat
+  pure (a, b)
+
+theorem mkFreshPair_spec :
+  ⦃⌜True⌝⦄
+  mkFreshPair
+  ⦃⇓ (a, b) => ⌜a ≠ b⌝⦄ := by
+  unfold mkFreshPair
+  mintro - ∀s
+  mspec mkFreshNat_spec
+  mintro ∀s
+  mcases h with ⌜h₁⌝
+  mspec mkFreshNat_spec
+  mintro ∀s
+  mcases h with ⌜h₂⌝
+  simp_all [h₁, h₂]
 
 example : PostCond (Nat × List.Zipper (List.range' 1 3 1)) (PostShape.except Nat (PostShape.arg Nat PostShape.pure)) :=
   ⟨fun (r, xs) s => r ≤ 4 ∧ s = 4 ∧ r + xs.suff.sum > 4, fun e s => e = 42 ∧ s = 4, ()⟩
@@ -142,12 +161,13 @@ example :
     all_goals mstart; mwp
 
 example :
-  (wp (m:= ReaderT Char (StateT Bool (ExceptT Nat Id))) (do try { set true; throw 42 } catch _ => set false; get)).apply Q
+  (wp (m:= ReaderT Char (StateT Bool (ExceptT Nat Id)))
+      (do try { set true; throw 42 } catch _ => set false; get)).apply Q
   ⊣⊢ₛ
-  (wp (m:= ReaderT Char (StateT Bool (ExceptT Nat Id))) (do set false; get)).apply Q := by
+  (wp (m:= ReaderT Char (StateT Bool (ExceptT Nat Id)))
+      (do set false; get)).apply Q := by
     apply SPred.bientails.iff.mpr
-    constructor
-    all_goals mstart; mwp
+    constructor <;> mwp
 
 theorem test_loop_break :
   ⦃⌜‹Nat›ₛ = 42⌝⦄
@@ -294,7 +314,7 @@ theorem fib_impl_vcs
     mwp;
     exact loop_step n hn _ _ _ _ h
 
-theorem fib_triple_cases' : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ := by
+theorem fib_triple_vcs : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ := by
   intro _
   apply fib_impl_vcs
   case I => intro n hn; exact (⇓ (⟨a, b⟩, xs) => a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1))
@@ -364,9 +384,7 @@ private def test (P Q : Assertion (.arg Nat (.arg Bool .pure))) : Assertion (.ar
   spred(fun n => ((∀ y, if y = n then ⌜‹Nat›ₛ + #theNat = 4⌝ else Q) ∧ Q) → P → (∃ x, P → if (x : Bool) then Q else P))
 
 abbrev M := StateT Nat (StateT Char (StateT Bool (StateT String Idd)))
-
 axiom op : Nat → M Nat
-
 noncomputable def prog (n : Nat) : M Nat := do
   let a ← op n
   let b ← op a

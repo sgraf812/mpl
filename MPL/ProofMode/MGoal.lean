@@ -134,3 +134,24 @@ def MGoal.checkProof (goal : MGoal) (prf : Expr) (suppressWarning : Bool := fals
 def getFreshHypName : TSyntax ``binderIdent → CoreM (Name × Syntax)
   | `(binderIdent| $name:ident) => pure (name.getId, name)
   | stx => return (← mkFreshUserName `h, stx)
+
+partial def betaRevPreservingHypNames (σs' e : Expr) (args : Array Expr) : Expr :=
+  if let some _σs := parseEmptyHyp? e then
+    emptyHyp σs'
+  else if let some hyp := parseHyp? e then
+    { hyp with p := hyp.p.betaRev args }.toExpr
+  else if let some (_σs, lhs, rhs) := parseAnd? e then
+    -- _σs = σ :: σs'
+    mkAnd! σs' (betaRevPreservingHypNames σs' lhs args) (betaRevPreservingHypNames σs' rhs args)
+  else
+    e.betaRev args
+
+def betaPreservingHypNames (σs' e : Expr) (args : Array Expr) : Expr :=
+  betaRevPreservingHypNames σs' e args.reverse
+
+def dropStateList (σs : Expr) (n : Nat) : MetaM Expr := do
+  let mut σs := σs
+  for _ in [:n] do
+    let some (_type, _σ, σs') := (← whnf σs).app3? ``List.cons | throwError "Ambient state list not a cons {σs}"
+    σs := σs'
+  return σs

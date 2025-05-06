@@ -44,8 +44,8 @@ theorem MonadLiftT.monadLift_refl_apply [WP m ps] :
 
 -- The following instance is useful when we want to derive `modify f = monadLift (modify f)` and `modify f`
 -- is defined in terms of multiple primitive definitions in `m` (`get`, `set`, ...), rather than just one call to `modifyGet`.
--- Example: `MonadStateOf.mkFreshInt_apply` in Tests/Toy.lean
--- The alternative would be to have one lemma for concrete transformer stack at which `mkFreshInt_apply` is used that simply unfolds the definition.
+-- Example: `MonadStateOf.mkFreshNat_apply` in Tests/Toy.lean
+-- The alternative would be to have one lemma for concrete transformer stack at which `mkFreshNat_apply` is used that simply unfolds the definition.
 instance StateT.instLiftMonadMorphism [Monad m] [LawfulMonad m] : MonadMorphism m (StateT σ m) MonadLift.monadLift where
   pure_pure x := by ext; simp [liftM, MonadLift.monadLift, StateT.lift]
   bind_bind x f := by ext; simp [liftM, MonadLift.monadLift, StateT.lift]

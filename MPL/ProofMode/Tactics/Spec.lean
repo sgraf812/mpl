@@ -86,9 +86,12 @@ partial def dischargePostEntails (α : Expr) (ps : Expr) (Q : Expr) (Q' : Expr) 
   -- Often, Q' is fully instantiated while Q contains metavariables. Try refl
   if (← isDefEq Q Q') then
     return mkApp3 (mkConst ``PostCond.entails.refl) α ps Q'
-  -- Otherwise decompose the conjunction
   let Q ← whnfR Q
   let Q' ← whnfR Q'
+  -- If Q (postcond of the spec) is just an fvar, we do not decompose further
+  if let some _fvarId := Q.fvarId? then
+    return ← discharge (mkApp4 (mkConst ``PostCond.entails) α ps Q Q') `post
+  -- Otherwise decompose the conjunction
   let prf₁ ← withLocalDeclD resultName α fun a => do
     let Q1a := (← mkProj' ``Prod 0 Q).betaRev #[a]
     let Q'1a := (← mkProj' ``Prod 0 Q').betaRev #[a]
@@ -103,25 +106,26 @@ partial def dischargeFailEntails (ps : Expr) (Q : Expr) (Q' : Expr) (goalTag : N
     return mkConst ``True.intro
   if ← isDefEq Q Q' then
     return mkApp2 (mkConst ``FailConds.entails.refl) ps Q
-  if ← isDefEq Q (mkConst ``FailConds.false) then
+  if ← isDefEq Q (mkApp (mkConst ``FailConds.false) ps) then
     return mkApp2 (mkConst ``FailConds.entails_false) ps Q'
-  if ← isDefEq Q' (mkConst ``FailConds.true) then
+  if ← isDefEq Q' (mkApp (mkConst ``FailConds.true) ps) then
     return mkApp2 (mkConst ``FailConds.entails_true) ps Q
   -- the remaining cases are recursive.
   if let some (_σ, ps) := ps.app2? ``PostShape.arg then
     return ← dischargeFailEntails ps Q Q' goalTag discharge
-  let some (ε, ps) := ps.app2? ``PostShape.except
-    | throwError "Internal error: unknown ps"
-  let Q ← whnfR Q
-  let Q' ← whnfR Q'
-  let prf₁ ← withLocalDeclD goalTag ε fun e => do
-    let Q1e := (← mkProj' ``Prod 0 Q).betaRev #[e]
-    let Q'1e := (← mkProj' ``Prod 0 Q').betaRev #[e]
-    let σs := mkApp (mkConst ``PostShape.args) ps
-    let goal := MGoal.mk σs (Hyp.mk `h Q1e).toExpr Q'1e
-    mkLambdaFVars #[e] (← discharge goal.toExpr (goalTag ++ `handle))
-  let prf₂ ← dischargeFailEntails ps (← mkProj' ``Prod 1 Q) (← mkProj' ``Prod 1 Q') (goalTag ++ `except) discharge
-  mkAppM ``And.intro #[prf₁, prf₂] -- This is just a bit too painful to construct by hand
+  if let some (ε, ps) := ps.app2? ``PostShape.except then
+    let Q ← whnfR Q
+    let Q' ← whnfR Q'
+    let prf₁ ← withLocalDeclD goalTag ε fun e => do
+      let Q1e := (← mkProj' ``Prod 0 Q).betaRev #[e]
+      let Q'1e := (← mkProj' ``Prod 0 Q').betaRev #[e]
+      let σs := mkApp (mkConst ``PostShape.args) ps
+      let goal := MGoal.mk σs (Hyp.mk `h Q1e).toExpr Q'1e
+      mkLambdaFVars #[e] (← discharge goal.toExpr (goalTag ++ `handle))
+    let prf₂ ← dischargeFailEntails ps (← mkProj' ``Prod 1 Q) (← mkProj' ``Prod 1 Q') (goalTag ++ `except) discharge
+    return ← mkAppM ``And.intro #[prf₁, prf₂] -- This is just a bit too painful to construct by hand
+  -- This case happens when decomposing with unknown `ps : PostShape`
+  discharge (mkApp3 (mkConst ``FailConds.entails) ps Q Q') goalTag
 end
 
 def dischargeMGoal (goal : MGoal) (goalTag : Name) (discharge : Expr → Name → MetaM Expr) : MetaM Expr := do
@@ -131,9 +135,16 @@ def dischargeMGoal (goal : MGoal) (goalTag : Name) (discharge : Expr → Name �
   return prf
 
 def mSpec (goal : MGoal) (spec : Option (TSyntax `term)) (discharge : Expr → Name → MetaM Expr) (resultName := `r) : TacticM (Expr × List MVarId) := do
+  -- First instantiate `fun s => ...` in the target.
+  -- This is like repeated `mintro ∀s`.
+  lambdaTelescope goal.target.consumeMData fun xs T => do
+  let goal : MGoal :=
+    { target := T,
+      σs := ← dropStateList goal.σs xs.size,
+      hyps := betaPreservingHypNames goal.σs goal.hyps xs }
+
   -- Elaborate the spec, apply style
-  let T := goal.target.consumeMData -- had the error below trigger in Lean4Lean for some reason
-  let (fn, args) := T.getAppFnArgs
+  let mut (fn, args) := T.getAppFnArgs
   unless fn == ``PredTrans.apply do throwError "target not a PredTrans.apply application {T}"
   let wp := args[2]!
   let Q' := args[3]!
@@ -141,32 +152,19 @@ def mSpec (goal : MGoal) (spec : Option (TSyntax `term)) (discharge : Expr → N
   let_expr WP.wp m ps instWP α x := wp | throwError "target not a wp application {wp}"
   let [u] := wp.getAppFn'.constLevels! | throwError "Internal error: wrong number of levels in wp application"
   let (spec, specHoles, P, Q) ← mFindSpec spec u m ps instWP α x
-  trace[mpl.tactics.spec] "old spec: {spec}"
   let spec := spec.betaRev excessArgs
-  trace[mpl.tactics.spec] "new spec: {spec}"
-  check spec
   let P := P.betaRev excessArgs
-  trace[mpl.tactics.spec] "new P: {P}"
-  check P
-  let Q := Q
-  trace[mpl.tactics.spec] "new Q: {Q}"
-  check Q
-  let Q' := Q'
-  trace[mpl.tactics.spec] "new Q': {Q'}"
-  check Q'
   -- apply the spec
   let h₁ := spec
   let postPrf ← dischargePostEntails α ps Q Q' `post resultName discharge
-  check postPrf
   let wpApplyQ  := mkApp4 (mkConst ``PredTrans.apply) ps α wp Q  -- wp⟦x⟧.apply Q; that is, T without excess args
   let wpApplyQ' := mkApp4 (mkConst ``PredTrans.apply) ps α wp Q' -- wp⟦x⟧.apply Q'
   let h₂ := mkApp6 (mkConst ``PredTrans.mono) ps α wp Q Q' postPrf
-  check h₂
   let PTPrf := mkApp6 (mkConst ``SPred.entails.trans) goal.σs P (wpApplyQ.betaRev excessArgs) (wpApplyQ'.betaRev excessArgs) h₁ (h₂.betaRev excessArgs)
-  check PTPrf
   let HPPrf ← dischargeMGoal { goal with target := P } `pre discharge
-  check HPPrf
-  return (mkApp6 (mkConst ``SPred.entails.trans) goal.σs goal.hyps P goal.target HPPrf PTPrf, specHoles)
+  let prf := mkApp6 (mkConst ``SPred.entails.trans) goal.σs goal.hyps P goal.target HPPrf PTPrf
+  let prf ← mkLambdaFVars xs prf -- Close over the `mintro ∀s`'d vars
+  return (prf, specHoles)
 
 private def addMVar (mvars : IO.Ref (List MVarId)) (goal : Expr) (name : Name) : MetaM Expr := do
   let m ← mkFreshExprSyntheticOpaqueMVar goal (tag := name)
@@ -214,7 +212,7 @@ syntax "mspec_no_simp" (ppSpace colGt term)? : tactic
 syntax "mspec" (ppSpace colGt term)? : tactic
 macro_rules
   | `(tactic| mspec_no_simp $[$spec]?) => `(tactic| ((try with_reducible mspec_no_bind MPL.Specs.bind); mspec_no_bind $[$spec]?))
-  | `(tactic| mspec $[$spec]?)         => `(tactic| mspec_no_simp $[$spec]?; all_goals ((try simp only [SPred.true_intro_simp, SPred.true_intro_simp_nil]); (try mpure_intro; trivial)))
+  | `(tactic| mspec $[$spec]?)         => `(tactic| mspec_no_simp $[$spec]?; all_goals ((try simp only [SPred.true_intro_simp, SPred.true_intro_simp_nil, SVal.curry_cons, SVal.uncurry_cons, SVal.getThe_here, SVal.getThe_there]); (try mpure_intro; trivial)))
 
 example (Q : SPred []) : Q ⊢ₛ k%2 = k%2 := by simp only [SPred.true_intro_simp_nil]
 example (Q : SPred []) : Q ⊢ₛ ⌜k%2 = k%2⌝ := by simp only [SPred.true_intro_simp]

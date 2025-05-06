@@ -43,7 +43,6 @@ inductive PostShape : Type 1 where
   | arg : (σ : Type) → PostShape → PostShape
   | except : (ε : Type) → PostShape → PostShape
 
-@[simp]
 abbrev PostShape.args : PostShape → List Type
   | .pure => []
   | .arg σ s => σ :: PostShape.args s
@@ -59,7 +58,8 @@ abbrev PostShape.args : PostShape → List Type
   ```
   This is an abbreviation for `SPred` under the hood, so all theorems about `SPred` apply.
 -/
-abbrev Assertion (ps : PostShape) : Type := SPred (PostShape.args ps)
+abbrev Assertion (ps : PostShape) : Type :=
+  SPred (PostShape.args ps)
 
 /--
   Encodes one continuation barrel for each `PostShape.except` in the given predicate shape.

@@ -18,7 +18,7 @@ syntax "∀" binderIdent : mintroPat
 theorem Intro.intro {σs : List Type} {P Q H T : SPred σs} (hand : Q ∧ H ⊣⊢ₛ P) (h : P ⊢ₛ T) : Q ⊢ₛ H → T :=
   SPred.imp_intro (hand.mp.trans h)
 
-partial def mIntroStep (goal : MGoal) (ident : TSyntax ``binderIdent) (k : MGoal → MetaM Expr) : MetaM Expr := do
+partial def mIntro (goal : MGoal) (ident : TSyntax ``binderIdent) (k : MGoal → MetaM Expr) : MetaM Expr := do
   let some (σs, H, T) := goal.target.app3? ``SPred.imp | throwError "Target not an implication {goal.target}"
   let (name, _ref) ← getFreshHypName ident
   let Q := goal.hyps
@@ -28,19 +28,8 @@ partial def mIntroStep (goal : MGoal) (ident : TSyntax ``binderIdent) (k : MGoal
   let prf := mkApp7 (mkConst ``Intro.intro) σs P Q H T hand prf
   return prf
 
-private partial def betaRevPreservingHypNames (σs' e : Expr) (args : Array Expr) : Expr :=
-  if let some _σs := parseEmptyHyp? e then
-    emptyHyp σs'
-  else if let some hyp := parseHyp? e then
-    { hyp with p := hyp.p.betaRev args }.toExpr
-  else if let some (_σs, lhs, rhs) := parseAnd? e then
-    -- _σs = σ :: σs'
-    mkAnd! σs' (betaRevPreservingHypNames σs' lhs args) (betaRevPreservingHypNames σs' rhs args)
-  else
-    e.betaRev args
-
 -- This is regular MVar.intro, but it takes care not to leave the proof mode by preserving metadata
-partial def mForallIntroStep (goal : MGoal) (ident : TSyntax ``binderIdent) (k : MGoal → MetaM Expr) : MetaM Expr := do
+partial def mIntroForall (goal : MGoal) (ident : TSyntax ``binderIdent) (k : MGoal → MetaM Expr) : MetaM Expr := do
   let some (_type, σ, σs') := (← whnf goal.σs).app3? ``List.cons | throwError "Ambient state list not a cons {goal.σs}"
   let name ← match ident with
   | `(binderIdent| $name:ident) => pure name.getId
@@ -102,7 +91,7 @@ elab_rules : tactic
   mvar.withContext do
 
   let goals ← IO.mkRef []
-  mvar.assign (← mIntroStep goal ident fun newGoal => do
+  mvar.assign (← mIntro goal ident fun newGoal => do
     let m ← mkFreshExprSyntheticOpaqueMVar newGoal.toExpr
     goals.modify (m.mvarId! :: ·)
     return m)
@@ -121,7 +110,7 @@ elab_rules : tactic
   mvar.withContext do
 
   let goals ← IO.mkRef []
-  mvar.assign (← mForallIntroStep goal ident fun newGoal => do
+  mvar.assign (← mIntroForall goal ident fun newGoal => do
     let m ← mkFreshExprSyntheticOpaqueMVar newGoal.toExpr
     goals.modify (m.mvarId! :: ·)
     return m)

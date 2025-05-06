@@ -14,6 +14,7 @@ abbrev fib_spec : Nat → Nat
 | 1 => 1
 | n+2 => fib_spec n + fib_spec (n+1)
 
+-- Extended `def` syntax:
 def fib_impl (n : Nat) : Idd Nat
   ensures r => r = fib_spec n
 := do
@@ -48,14 +49,13 @@ theorem fib_triple : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ :
   case step => dsimp; intros; mintro _; mwp; simp_all
   simp_all [Nat.sub_one_add_one]
 
-
 --
 -- Compositional proofs using Hoare triple specifications
 --
 
 abbrev AppState := Nat
 
-def mkFreshInt : StateM AppState Nat
+def mkFreshNat : StateM AppState Nat
   forall (n : Nat)
   requires s => ⌜s = n⌝
   ensures r s => ⌜r = n ∧ s = n + 1⌝
@@ -64,11 +64,11 @@ def mkFreshInt : StateM AppState Nat
   set (n+1)
   pure n
 
-#check mkFreshInt.spec
+#check mkFreshNat.spec
 
 noncomputable def mkFreshPair : StateM AppState (Nat × Nat) := do
-  let a ← mkFreshInt
-  let b ← mkFreshInt
+  let a ← mkFreshNat
+  let b ← mkFreshNat
   pure (a, b)
 
 @[spec]
@@ -78,26 +78,112 @@ theorem mkFreshPair_spec :
   ⦃⇓ (a, b) => ⌜a ≠ b⌝⦄ := by
   unfold mkFreshPair
   mintro - ∀s
-  mspec mkFreshInt.spec
+  mspec mkFreshNat.spec
   mintro ∀s
   mcases h with ⌜h₁⌝
-  mspec mkFreshInt.spec
+  mspec mkFreshNat.spec
   mintro ∀s
   mcases h with ⌜h₂⌝
   simp_all [h₁, h₂]
 
+
+
 --
--- Implicit lifting example and automation
+-- Proof mode
+--
+
+abbrev M := StateT Nat (StateT Char (StateT Bool (StateT String Idd)))
+axiom op : Nat → M Nat
+noncomputable def prog (n : Nat) : M Nat := do
+  let a ← op n
+  let b ← op a
+  let c ← op b
+  return (a + b + c)
+
+axiom isValid : Nat → Char → Bool → String → Prop
+
+axiom op.spec {n} : ⦃isValid⦄ op n ⦃⇓r => ⌜r > 42⌝ ∧ isValid⦄
+
+theorem prog.spec : ⦃isValid⦄ prog n ⦃⇓r => ⌜r > 100⌝ ∧ isValid⦄ := by
+  unfold prog
+  unfold Triple
+  change ∀ a b c d, isValid a b c d → _
+  intro a b c d h
+  mspec op.spec; mstop
+  intro a b c d ⟨hr₁, hvalid⟩
+  mspec op.spec; mstop
+  intro a b c d ⟨hr₂, hvalid⟩
+  mspec op.spec; mstop
+  intro a b c d ⟨hr₃, hvalid⟩
+  mspec
+  mpure_intro
+  refine ⟨?_, hvalid⟩
+  simp_all
+  omega
+
+theorem prog.spec' : ⦃isValid⦄ prog n ⦃⇓r => ⌜r > 100⌝ ∧ isValid⦄ := by
+  unfold prog
+  mintro h
+  mspec op.spec
+  mcases h with ⟨⌜hr₁⌝, □h⟩
+  mspec op.spec
+  mcases h with ⟨⌜hr₂⌝, □h⟩
+  mspec op.spec
+  mcases h with ⟨⌜hr₃⌝, □h⟩
+  mspec
+  mrefine ⟨?_, h⟩
+  mpure_intro
+  omega
+
+--
+-- mspec
+--
+
+example [WP m ps] (x : m α)
+   (hspec : ⦃P⦄ x ⦃Q⦄)
+   (hpre : P' ⊢ₛ P)
+   (hpost : Q ⊢ₚ Q')
+   : P' ⊢ₛ wp⟦x⟧.apply Q' := by
+  mintro h
+  mspec hspec
+  case pre => exact hpre
+  case post => exact hpost
+
+example [WP m ps] (x : m α) (Q : α → Assertion ps)
+   (hspec : ⦃P⦄ x ⦃⇓ v => Q v⦄)
+   (hpre : P' ⊢ₛ P)
+   (hpost : ∀ v, Q v ⊢ₛ Q'.1 v)
+   : P' ⊢ₛ wp⟦x⟧.apply Q' := by
+  mintro h
+  mspec hspec
+  case pre => exact hpre
+  case post.success => exact hpost r
+
+#check Specs.forIn_list
+
+--
+-- mwp
 --
 
 example :
-  (wp (m:= ReaderT Char (StateT Bool (ExceptT Nat Id)))
-      (do try { set true; throw 42 } catch _ => set false; get)).apply Q
-  ⊣⊢ₛ
-  (wp (m:= ReaderT Char (StateT Bool (ExceptT Nat Id)))
-      (do set false; get)).apply Q := by
-    apply SPred.bientails.iff.mpr
-    constructor <;> mwp
+    wp⟦do
+      try
+        set true
+        throw 42
+      catch _ =>
+        set false
+        get : ReaderT Char (StateT Bool (ExceptT Nat Id)) Bool
+      ⟧.apply Q
+    ⊣⊢ₛ
+    wp⟦do
+      set false
+      get : ReaderT Char (StateT Bool (ExceptT Nat Id)) Bool
+    ⟧.apply Q := by
+  apply SPred.bientails.iff.mpr
+  constructor <;> mwp
+
+#check StateT.get_apply
+#check MonadStateOf.get_apply
 
 --
 -- Verification conditions
@@ -256,12 +342,3 @@ theorem read_spec :
   case post.except.handle => simp
   mintro ∀f
   simp_all [hasRead]
-
-
-theorem Spec.triple_conseq {m ps α P P' Q' Q}
-  [WP m ps] (x : m α)
-  (hpre : P ⊢ₛ P')
-  (htriple : ⦃P'⦄ x ⦃Q'⦄)
-  (hpost : Q' ⊢ₚ Q)
-  : P ⊢ₛ wp⟦x⟧.apply Q :=
-  (hpre.trans htriple).trans (wp⟦x⟧.mono _ _ hpost)

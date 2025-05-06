@@ -15,7 +15,7 @@ set_option grind.warning false
 
 def AppState := Nat × Nat
 
-def mkFreshInt [Monad m] [MonadStateOf AppState m] : m Nat := do
+def mkFreshNat [Monad m] [MonadStateOf AppState m] : m Nat := do
   let n ← Prod.fst <$> get
   modify (fun s => (s.1 + 1, s.2))
   pure n
@@ -23,21 +23,21 @@ def mkFreshInt [Monad m] [MonadStateOf AppState m] : m Nat := do
 private abbrev st : SVal (AppState::σs) (Nat × Nat) := fun s => SVal.pure s
 
 @[spec]
-theorem mkFreshInt_spec [Monad m] [WPMonad m sh] :
+theorem mkFreshNat_spec [Monad m] [WPMonad m sh] :
   ⦃⌜(#st).1 = n ∧ (#st).2 = o⌝⦄
-  (mkFreshInt : StateT AppState m Nat)
+  (mkFreshNat : StateT AppState m Nat)
   ⦃⇓ r => ⌜r = n ∧ (#st).1 = n + 1 ∧ (#st).2 = o⌝⦄ := by
-  unfold mkFreshInt
+  unfold mkFreshNat
   mintro h ∀s
   mwp
   simp
 
 @[spec]
-theorem mkFreshInt_spec'' [Monad m] [WPMonad m sh] :
+theorem mkFreshNat_spec'' [Monad m] [WPMonad m sh] :
   ⦃fun s => Q.1 s.1 (s.1+1,s.2)⦄
-  (mkFreshInt : StateT AppState m Nat)
+  (mkFreshNat : StateT AppState m Nat)
   ⦃Q⦄ := by
-  unfold mkFreshInt
+  unfold mkFreshNat
   mintro h ∀s
   mwp
 
@@ -79,7 +79,7 @@ theorem mkFreshInt_spec'' [Monad m] [WPMonad m sh] :
 
 -- intrinsic verification
 
-def mkFreshInt' {m : Type → Type} [Monad m] : StateT AppState m Nat
+def mkFreshNat' {m : Type → Type} [Monad m] : StateT AppState m Nat
   forall {ps} [WPMonad m ps] (n o : Nat)
   requires s => ⌜s.1 = n ∧ s.2 = o⌝
   ensures r s => ⌜r = n ∧ s.1 = n + 1 ∧ s.2 = o⌝
@@ -88,7 +88,7 @@ def mkFreshInt' {m : Type → Type} [Monad m] : StateT AppState m Nat
   modify (fun s => (s.1 + 1, s.2))
   pure n
 
--- #print mkFreshInt'.spec
+-- #print mkFreshNat'.spec
 
 
 
@@ -113,8 +113,8 @@ def mkFreshInt' {m : Type → Type} [Monad m] : StateT AppState m Nat
 -- compositional proofs using Hoare triple specifications
 
 def mkFreshPair : StateM AppState (Nat × Nat) := do
-  let a ← mkFreshInt
-  let b ← mkFreshInt
+  let a ← mkFreshNat
+  let b ← mkFreshNat
   pure (a, b)
 
 @[spec]
@@ -124,10 +124,10 @@ theorem mkFreshPair_spec :
   ⦃⇓ (a, b) => ⌜a ≠ b⌝⦄ := by
   unfold mkFreshPair
   mintro - ∀s
-  mspec mkFreshInt_spec
+  mspec mkFreshNat_spec
   mintro ∀s
   mcases h with ⌜h₁⌝
-  mspec mkFreshInt_spec
+  mspec mkFreshNat_spec
   mintro ∀s
   mcases h with ⌜h₂⌝
   simp_all [h₁, h₂]
