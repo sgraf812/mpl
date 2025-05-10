@@ -28,22 +28,6 @@ def fib_impl (n : Nat) : Idd Nat
     b := a' + b
   return b
 
-def fib_impl_refined (n : Nat) : Idd Nat := 
-  MPL.requiresGadget (⌜True⌝) <| 
-  MPL.ensuresGadget (fun r => r = fib_spec n) <|
-  do
-  if n = 0 then return 0
-  let a := 0
-  let b := 1
-  MPL.invariantGadget2 fun (MProd.mk a b) _ _ xs => 
-    a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)
-  let ⟨a, b⟩ ← forIn [1:n] (MProd.mk a b) fun _ ⟨a, b⟩ => do
-    let a' := a
-    let a := b
-    let b := a' + b
-    return .yield ⟨a, b⟩
-  return b
-
 -- intrinsic, automated proof:
 #check fib_impl.spec
 
@@ -141,11 +125,11 @@ theorem prog.spec' : ⦃isValid⦄ prog n ⦃⇓r => ⌜r > 100⌝ ∧ isValid�
   unfold prog
   mintro h
   mspec op.spec
-  mcases h with ⟨⌜hr₁⌝, □h⟩
+  mcases h with ⟨hr₁, h⟩
   mspec op.spec
-  mcases h with ⟨⌜hr₂⌝, □h⟩
+  mcases h with ⟨hr₂, h⟩
   mspec op.spec
-  mcases h with ⟨⌜hr₃⌝, □h⟩
+  mcases h with ⟨hr₃, h⟩
   mspec
   mrefine ⟨?_, h⟩
   mpure_intro
@@ -223,7 +207,7 @@ theorem fib_impl_vcs
   simp only [*, reduceIte]
   mstart
   mwp
-  mspec -- Specs.forIn_list
+  mspec (Specs.forIn_list ?inv ?step)
   case inv => exact I n hn
   case pre => mpure_intro; exact loop_pre n hn
   case post.success => exact loop_post n hn r
@@ -232,6 +216,25 @@ theorem fib_impl_vcs
     mintro _;
     mwp;
     exact loop_step n hn _ _ _ _ h
+
+
+
+
+
+
+-- Recall from above:
+theorem fib_triple' : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ := by
+  unfold fib_impl
+  dsimp
+  mintro _
+  if h : n = 0 then simp [h] else
+  simp only [h]
+  mwp
+  mspec Specs.forIn_list (⇓ (⟨a, b⟩, xs) => a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)) ?step
+  case step => dsimp; intros; mintro _; mwp; simp_all
+  simp_all [Nat.sub_one_add_one]
+
+-- Now decompose:
 
 theorem fib_triple_vcs : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ := by
   intro _
@@ -252,40 +255,6 @@ theorem fib_triple_vcs : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n�
 
 
 
-
-def blah : ST σ Nat := do
-  let ref : ST.Ref σ Nat ← ST.mkRef 13
-  ref.modify (· + 1)
-  let n ← ref.get
-  return n
-
-def exp (x : Nat) : Idd Nat := do
-  let x ← pure (x + x)
-  let x ← pure (x + x)
-  let x ← pure (x + x)
-  let x ← pure (x + x)
-  let x ← pure (x + x)
-  let x ← pure (x + x)
-  let x ← pure (x + x)
-  let x ← pure (x + x)
-  let x ← pure (x + x)
-  let x ← pure (x + x)
-  let x ← pure (x + x)
-  let x ← pure (x + x)
-  let x ← pure (x + x)
-  let x ← pure (x + x)
-  let x ← pure (x + x)
-  let x ← pure (x + x)
-  let x ← pure (x + x)
-  let x ← pure (x + x)
-  return x
-
-theorem exp_spec : ⦃⌜x > 0⌝⦄ exp x ⦃⇓ r => ⌜r > 0⌝⦄ := by
-  unfold exp
-  mintro ⌜h⌝
-  wp_simp -zeta
-  intro _
-  grind
 
 
 structure File where
