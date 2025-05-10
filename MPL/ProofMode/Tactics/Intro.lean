@@ -18,18 +18,18 @@ syntax "∀" binderIdent : mintroPat
 theorem Intro.intro {σs : List Type} {P Q H T : SPred σs} (hand : Q ∧ H ⊣⊢ₛ P) (h : P ⊢ₛ T) : Q ⊢ₛ H → T :=
   SPred.imp_intro (hand.mp.trans h)
 
-partial def mIntro (goal : MGoal) (ident : TSyntax ``binderIdent) (k : MGoal → MetaM Expr) : MetaM Expr := do
+partial def mIntro (goal : MGoal) (ident : TSyntax ``binderIdent) (k : MGoal → MetaM (α × Expr)) : MetaM (α × Expr) := do
   let some (σs, H, T) := goal.target.app3? ``SPred.imp | throwError "Target not an implication {goal.target}"
   let (name, _ref) ← getFreshHypName ident
   let Q := goal.hyps
   let H := (Hyp.mk name H).toExpr
   let (P, hand) := mkAnd goal.σs goal.hyps H
-  let prf ← k { goal with hyps := P, target := T }
+  let (a, prf) ← k { goal with hyps := P, target := T }
   let prf := mkApp7 (mkConst ``Intro.intro) σs P Q H T hand prf
-  return prf
+  return (a, prf)
 
 -- This is regular MVar.intro, but it takes care not to leave the proof mode by preserving metadata
-partial def mIntroForall (goal : MGoal) (ident : TSyntax ``binderIdent) (k : MGoal → MetaM Expr) : MetaM Expr := do
+partial def mIntroForall (goal : MGoal) (ident : TSyntax ``binderIdent) (k : MGoal → MetaM (α × Expr)) : MetaM (α × Expr) := do
   let some (_type, σ, σs') := (← whnf goal.σs).app3? ``List.cons | throwError "Ambient state list not a cons {goal.σs}"
   let name ← match ident with
   | `(binderIdent| $name:ident) => pure name.getId
@@ -37,8 +37,9 @@ partial def mIntroForall (goal : MGoal) (ident : TSyntax ``binderIdent) (k : MGo
   withLocalDeclD name σ fun s => do
     let H := betaRevPreservingHypNames σs' goal.hyps #[s]
     let T := goal.target.betaRev #[s]
-    let prf ← mkLambdaFVars #[s] (← k { σs:=σs', hyps:=H, target:=T })
-    return mkApp5 (mkConst ``SPred.entails_cons_intro) σ σs' goal.hyps goal.target prf
+    let (a, prf) ← k { σs:=σs', hyps:=H, target:=T }
+    let prf ← mkLambdaFVars #[s] prf
+    return (a, mkApp5 (mkConst ``SPred.entails_cons_intro) σ σs' goal.hyps goal.target prf)
 
 /--
   Like `rcases`, but operating on stateful hypotheses.
@@ -91,10 +92,10 @@ elab_rules : tactic
   mvar.withContext do
 
   let goals ← IO.mkRef []
-  mvar.assign (← mIntro goal ident fun newGoal => do
+  mvar.assign (← Prod.snd <$> mIntro goal ident fun newGoal => do
     let m ← mkFreshExprSyntheticOpaqueMVar newGoal.toExpr
     goals.modify (m.mvarId! :: ·)
-    return m)
+    return ((), m))
   replaceMainGoal (← goals.get)
 
 example {σs : List Type} (Q : SPred σs) (H : Q ⊢ₛ Q) : Q ⊢ₛ Q := by
@@ -110,10 +111,10 @@ elab_rules : tactic
   mvar.withContext do
 
   let goals ← IO.mkRef []
-  mvar.assign (← mIntroForall goal ident fun newGoal => do
+  mvar.assign (← Prod.snd <$> mIntroForall goal ident fun newGoal => do
     let m ← mkFreshExprSyntheticOpaqueMVar newGoal.toExpr
     goals.modify (m.mvarId! :: ·)
-    return m)
+    return ((), m))
   replaceMainGoal (← goals.get)
 
 example {σ : Type} {σs : List Type} (Q : SPred (σ::σs)) (H : ∀ s, Q s ⊢ₛ Q s) : Q ⊢ₛ Q := by

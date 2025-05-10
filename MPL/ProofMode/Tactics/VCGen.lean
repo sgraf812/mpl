@@ -27,33 +27,55 @@ initialize registerTraceClass `mpl.tactics.vcgen
 
 namespace VC
 
-def step (goal : MGoal) (subst : Array Expr) (discharge : MGoal → Array Expr → MetaM Expr) : MetaM Expr := do
+inductive ProofTerm where
+| rfl
+| nonrfl (e : Expr)
+
+inductive Fuel where
+| limited (n : Nat)
+| unlimited
+deriving DecidableEq
+
+def Fuel.burnOne (fuel : Fuel) : Option Fuel :=
+  match fuel with
+  | Fuel.limited 0 => none
+  | Fuel.limited n => some (Fuel.limited (n - 1))
+  | Fuel.unlimited => Fuel.unlimited
+
+partial def step (fuel : Fuel) (goal : MGoal) (subst : Array Expr) (discharge : MGoal → Array Expr → MetaM Expr) : MetaM (Fuel × Expr) := do
+  let some fuel := fuel.burnOne | return (fuel, ← discharge goal subst)
   let T := goal.target.consumeMData
   trace[mpl.tactics.vcgen] "target: {T}"
   logInfo m!"target: {T}"
   if let some _ := T.app3? ``SPred.imp then
-    return ← mIntro goal (← `(binderIdent| _)) (fun g => discharge g subst)
+    return ← onImp
   if T.isAppOf ``PredTrans.apply then
-    let args := T.getAppArgs
+    return ← onApply
+  return (fuel, ← discharge goal subst)
+where
+  onImp := do mIntro goal (← `(binderIdent| _)) (fun g => step fuel g subst discharge)
+
+  onApply := do
+    let args := goal.target.getAppArgs
     let wp := args[2]!
     let Q := args[3]!
     match_expr wp with
     | WP.wp m ps instWP α e =>
       let us := wp.getAppFn.constLevels!
       if let .letE x ty val body _nonDep := e then
-        return ← withLetDecl x ty val fun fv => do
+        return (fuel, ← withLetDecl x ty val fun fv => do
         let subst := subst.push fv
         let wp' := mkApp5 (mkConst ``WP.wp us) m ps instWP α body
         let args' := args.set! 2 wp'
         let goal := { goal with target := mkAppN (mkConst ``PredTrans.apply) args' }
-        mkLetFVars #[fv] (← discharge goal subst)
+        mkLetFVars #[fv] (← discharge goal subst))
       logInfo m!"hyps: {(← getLocalHyps)}"
       logInfo m!"e: {e}"
       if e.isIte then
         let ite_args := e.getAppArgs
         -- TODO: Only do this if Q is not already a var
         let Qty := mkApp2 (mkConst ``PostCond) α ps
-        return ← withLetDecl `Q Qty Q fun Q => do
+        return (fuel, ← withLetDecl `Q Qty Q fun Q => do
         let t := mkApp5 (mkConst ``WP.wp us) m ps instWP α (e.getArg! 3)
         let e := mkApp5 (mkConst ``WP.wp us) m ps instWP α (e.getArg! 4)
         let tapplyQ := mkAppN (mkConst ``PredTrans.apply) (args.set! 2 t |>.set! 3 Q)
@@ -63,11 +85,11 @@ def step (goal : MGoal) (subst : Array Expr) (discharge : MGoal → Array Expr �
         let ite_args' := ite_args.set! 0 (← inferType tapplyQ) |>.set! 3 tapplyQ |>.set! 4 eapplyQ
         let ite := mkAppN (mkConst ``ite [u]) ite_args'
         let goal := { goal with target := ite }
-        mkLetFVars #[Q] (← discharge goal subst)
+        mkLetFVars #[Q] (← discharge goal subst))
       if e.isAppOf ``Pure.pure then
-        return ← withLetDecl `a α (e.getArg! 3) fun a => do
+        return (fuel, ← withLetDecl `a α (e.getArg! 3) fun a => do
         let goal := { goal with target := mkAppN (mkApp (mkProj ``Prod 0 Q) a) args }
-        mkLetFVars #[a] (← discharge goal subst)
+        mkLetFVars #[a] (← discharge goal subst))
       -- Split match-expressions
       if let some info := isMatcherAppCore? (← getEnv) e then
         let candidate ← id do
@@ -82,44 +104,35 @@ def step (goal : MGoal) (subst : Array Expr) (discharge : MGoal → Array Expr �
           -- for the match statements instead of the `split` tactic.
           -- For now using `splitMatch` works fine.
           -- return ← Split.splitMatch goal e
-          return ← discharge goal subst
-    | _ => return ← discharge goal subst
+          return (fuel, ← discharge goal subst)
+    | _ => return (fuel, ← discharge goal subst)
 --    if wp.isAppOf ``WP.wp then
 --      let_expr WP.wp m ps instWP α x := wp | throwError "target not a wp application {wp}"
 --    match
-  return ← discharge goal subst
-
-partial def loop (goal : MGoal) (subst : Array Expr) (discharge : MGoal → Array Expr → MetaM Expr) : MetaM Expr := do
-  VC.step goal subst fun hyp subst' => do
-    logInfo m!"goal: {goal.toExpr}, hyp: {hyp.toExpr}"
-    if subst.size = subst'.size && (← isDefEq goal.toExpr hyp.toExpr) then
-      return ← discharge hyp subst'
-    return ← discharge hyp subst'
-    --loop goal subst' discharge
+  return (fuel, ← discharge goal subst)
 
 end VC
 
-elab "mvcgen_step" : tactic => do
+elab "mvcgen_step" n:(num)? : tactic => do
+  let n := n.map (·.raw.toNat) |>.getD 1
   let (mvar, goal) ← mStart (← getMainGoal)
   mvar.withContext do
   let goals ← IO.mkRef []
-  mvar.assign (← VC.step goal #[] fun hyp subst => do
+  mvar.assign (← Prod.snd <$> VC.step (fuel := .limited n) goal #[] fun hyp subst => do
     let m ← mkFreshExprSyntheticOpaqueMVar (hyp.toExpr.instantiateRev subst)
     goals.modify (m.mvarId! :: ·)
     return m)
   replaceMainGoal (← goals.get)
 
-elab "mvcgen'" : tactic => do
+elab "mvcgen" : tactic => do
   let (mvar, goal) ← mStart (← getMainGoal)
   mvar.withContext do
   let goals ← IO.mkRef []
-  mvar.assign (← VC.loop goal #[] fun hyp subst => do
+  mvar.assign (← Prod.snd <$> VC.step (fuel := .unlimited) goal #[] fun hyp subst => do
     let m ← mkFreshExprSyntheticOpaqueMVar (hyp.toExpr.instantiateRev subst)
     goals.modify (m.mvarId! :: ·)
     return m)
   replaceMainGoal (← goals.get)
-
-macro "mvcgen" : tactic => `(tactic| repeat mvcgen_step)
 
 def fib_impl (n : Nat) : Idd Nat := do
   if n = 0 then return 0
@@ -149,12 +162,7 @@ theorem fib_triple : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ :
 
 theorem fib_triple_vc : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ := by
   unfold fib_impl
-  mvcgen'
-  mvcgen_step
-  intro h
-  mvcgen_step
-  mvcgen_step
-  mvcgen_step
+  mvcgen_step 3
 --  dsimp
 --  mintro _
 --  if h : n = 0 then simp [h] else
