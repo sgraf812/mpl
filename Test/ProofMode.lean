@@ -153,6 +153,11 @@ theorem pure_mixed (y : Nat) (P Q : SPred σs) (Ψ : Nat → SPred σs) (hP : �
   mspecialize_pure (hΨ (y + 1)) hP HQ as HΨ
   mexact HΨ
 
+theorem pure_with_local (c : Prop) (P : SPred σs) (hc : c) : (⌜c⌝ → P) ⊢ₛ P := by
+  mintro HP
+  mspecialize HP hc
+  mexact HP
+
 end specialize
 
 namespace havereplace

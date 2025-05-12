@@ -35,8 +35,8 @@ app_unexpand_rule Triple
     | _ => do
       `(⦃$(← SPred.Notation.unpack P)⦄ $x ⦃$(← SPred.Notation.unpack Q)⦄)
 
-instance [WP m ps] (x : m α) : ProofMode.PropAsEntails (Triple x P Q) spred(P → wp⟦x⟧.apply Q) where
-  prop_as_entails := (SPred.entails_true_intro P (wp⟦x⟧.apply Q)).symm
+instance [WP m ps] (x : m α) : PropAsSPredTautology (Triple x P Q) spred(P → wp⟦x⟧.apply Q) where
+  iff := (SPred.entails_true_intro P (wp⟦x⟧.apply Q)).symm
 
 theorem pure [Monad m] [MonadMorphism m (PredTrans ps) wp] {α} {Q : PostCond α ps} (a : α) (himp : P.entails (Q.1 a)) :
   Triple (pure (f:=m) a) P Q := himp.trans (by simp only [pure_pure, PredTrans.pure_apply, SPred.entails.refl])

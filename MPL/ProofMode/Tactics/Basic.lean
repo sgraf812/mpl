@@ -23,7 +23,7 @@ def mStart (mvar : MVarId) : MetaM (MVarId × MGoal) := mvar.withContext do
   let listType := mkApp (mkConst ``List [.succ .zero]) (mkSort (.succ .zero))
   let σs ← mkFreshExprMVar listType
   let P ← mkFreshExprMVar (mkApp (mkConst ``SPred) σs)
-  let inst ← synthInstance (mkApp3 (mkConst ``PropAsEntails) goal σs P)
+  let inst ← synthInstance (mkApp3 (mkConst ``PropAsSPredTautology) goal σs P)
   let prf := mkApp4 (mkConst ``ProofMode.start_entails) σs P goal inst
 
   let goal : MGoal := { σs,  hyps := emptyHyp σs, target := P }

@@ -18,15 +18,17 @@ syntax "∀" binderIdent : mintroPat
 theorem Intro.intro {σs : List Type} {P Q H T : SPred σs} (hand : Q ∧ H ⊣⊢ₛ P) (h : P ⊢ₛ T) : Q ⊢ₛ H → T :=
   SPred.imp_intro (hand.mp.trans h)
 
-partial def mIntro (goal : MGoal) (ident : TSyntax ``binderIdent) (k : MGoal → MetaM (α × Expr)) : MetaM (α × Expr) := do
+partial def mIntro [Monad m] [MonadControlT MetaM m] (goal : MGoal) (ident : TSyntax ``binderIdent) (k : MGoal → m (α × Expr)) : m (α × Expr) :=
+  controlAt MetaM fun map => do
   let some (σs, H, T) := goal.target.app3? ``SPred.imp | throwError "Target not an implication {goal.target}"
   let (name, _ref) ← getFreshHypName ident
   let Q := goal.hyps
   let H := (Hyp.mk name H).toExpr
   let (P, hand) := mkAnd goal.σs goal.hyps H
-  let (a, prf) ← k { goal with hyps := P, target := T }
-  let prf := mkApp7 (mkConst ``Intro.intro) σs P Q H T hand prf
-  return (a, prf)
+  map do
+    let (a, prf) ← k { goal with hyps := P, target := T }
+    let prf := mkApp7 (mkConst ``Intro.intro) σs P Q H T hand prf
+    return (a, prf)
 
 -- This is regular MVar.intro, but it takes care not to leave the proof mode by preserving metadata
 partial def mIntroForall (goal : MGoal) (ident : TSyntax ``binderIdent) (k : MGoal → MetaM (α × Expr)) : MetaM (α × Expr) := do

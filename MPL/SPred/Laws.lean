@@ -74,6 +74,10 @@ theorem pure_intro {σs : List Type} {φ : Prop} {P : SPred σs} : φ → P ⊢�
 theorem pure_elim' {σs : List Type} {φ : Prop} {P : SPred σs} : (φ → ⌜True⌝ ⊢ₛ P) → ⌜φ⌝ ⊢ₛ P := by
   induction σs <;> simp_all [entails]
 
+-- Ideally, we'd like to prove the following theorem:
+-- theorem pure_elim' {σs : List Type} {φ : Prop} : SPred.entails (σs:=σs) ⌜True⌝ ⌜φ⌝ → φ
+-- Unfortunately, this is only true if all `σs` are Inhabited.
+
 /-! # Conjunction -/
 
 theorem and_intro {σs : List Type} {P Q R : SPred σs} (h1 : P ⊢ₛ Q) (h2 : P ⊢ₛ R) : P ⊢ₛ Q ∧ R := by

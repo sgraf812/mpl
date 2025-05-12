@@ -6,6 +6,7 @@ Authors: Lars König, Mario Carneiro, Sebastian Graf
 import MPL.ProofMode.MGoal
 import MPL.ProofMode.Focus
 import MPL.ProofMode.Tactics.Basic
+import MPL.ProofMode.Tactics.Pure
 
 namespace MPL.ProofMode.Tactics
 
@@ -22,17 +23,20 @@ theorem Specialize.imp_stateful {P P' Q R : SPred σs}
     _ ⊢ₛ (P' ∧ Q) ∧ R := SPred.and_assoc.mpr
     _ ⊢ₛ P ∧ R := SPred.and_mono_l (hrefocus.mpr.trans SPred.and_elim_l)
 
-theorem Specialize.imp_pure {P Q R : SPred σs}
-  (h : ⊢ₛ Q) : P ∧ (Q → R) ⊢ₛ P ∧ R := by
+theorem Specialize.imp_pure {P Q R : SPred σs} [PropAsSPredTautology φ Q]
+  (h : φ) : P ∧ (Q → R) ⊢ₛ P ∧ R := by
   calc spred(P ∧ (Q → R))
-    _ ⊢ₛ P ∧ (Q ∧ (Q → R)) := SPred.and_mono_r (SPred.and_intro (SPred.true_intro.trans h) .rfl)
+    _ ⊢ₛ P ∧ (Q ∧ (Q → R)) := SPred.and_mono_r (SPred.and_intro (SPred.true_intro.trans (PropAsSPredTautology.iff.mp h)) .rfl)
     _ ⊢ₛ P ∧ R := SPred.and_mono_r (SPred.mp SPred.and_elim_r SPred.and_elim_l)
 
 theorem Specialize.forall {P : SPred σs} {ψ : α → SPred σs}
   (a : α) : P ∧ (∀ x, ψ x) ⊢ₛ P ∧ ψ a := SPred.and_mono_r (SPred.forall_elim a)
 
-theorem Specialize.pure_start {φ : Prop} {H P T : SPred σs} [PropAsEntails φ H] (hpure : φ) (hgoal : P ∧ H ⊢ₛ T) : P ⊢ₛ T :=
-  (SPred.and_intro .rfl (SPred.true_intro.trans (PropAsEntails.prop_as_entails.mp hpure))).trans hgoal
+theorem Specialize.pure_start {φ : Prop} {H P T : SPred σs} [PropAsSPredTautology φ H] (hpure : φ) (hgoal : P ∧ H ⊢ₛ T) : P ⊢ₛ T :=
+  (SPred.and_intro .rfl (SPred.true_intro.trans (PropAsSPredTautology.iff.mp hpure))).trans hgoal
+
+theorem Specialize.pure_taut {σs} {φ} {P : SPred σs} [IsPure P φ] (h : φ) : ⊢ₛ P :=
+  (SPred.pure_intro h).trans IsPure.to_pure.mpr
 
 def mSpecializeImpStateful (σs : Expr) (P : Expr) (QR : Expr) (arg : TSyntax `term) : OptionT TacticM (Expr × Expr) := do
   guard (arg.raw.isIdent)
@@ -57,14 +61,26 @@ def mSpecializeImpStateful (σs : Expr) (P : Expr) (QR : Expr) (arg : TSyntax `t
 def mSpecializeImpPure (_σs : Expr) (P : Expr) (QR : Expr) (arg : TSyntax `term) : OptionT TacticM (Expr × Expr) := do
   let some specHyp := parseHyp? QR | panic! "Precondition of specializeImpPure violated"
   let mkApp3 (.const ``SPred.imp []) σs Q R := specHyp.p | failure
-  let (hQ, mvarIds) ← try
-    elabTermWithHoles arg.raw (mkApp2 (mkConst ``SPred.tautological) σs Q) `specialize (allowNaturalHoles := true)
+  let mut φ ← mkFreshExprMVar (mkSort .zero)
+  let mut (hφ, mvarIds) ← try
+    elabTermWithHoles arg.raw φ `specialize (allowNaturalHoles := true)
     catch _ => failure
+  -- We might have hφ : φ and Q = ⌜φ⌝. In this case, convert hφ to a proof of ⊢ₛ ⌜φ⌝,
+  -- so that we can infer an instance of `PropAsSPredTautology`.
+  -- NB: PropAsSPredTautology φ ⌜φ⌝ is unfortunately impossible because ⊢ₛ ⌜φ⌝ does not imply φ.
+  -- Hence this additional (lossy) conversion.
+  if let some inst ← synthInstance? (mkApp3 (mkConst ``IsPure) σs Q φ) then
+    hφ := mkApp5 (mkConst ``Specialize.pure_taut) σs φ Q inst hφ
+    φ := mkApp2 (mkConst ``SPred.tautological) σs Q
+
+  let some inst ← synthInstance? (mkApp3 (mkConst ``PropAsSPredTautology) φ σs Q)
+    | failure
+
   OptionT.mk do -- no OptionT failure after this point
   -- The goal is P ∧ (Q → R)
   -- we want to return (R, (proof : P ∧ (Q → R) ⊢ₛ P ∧ R))
   pushGoals mvarIds
-  let proof := mkApp5 (mkConst ``Specialize.imp_pure) σs P Q R hQ
+  let proof := mkApp7 (mkConst ``Specialize.imp_pure) σs φ P Q R inst hφ
   -- check proof
   trace[mpl.tactics.specialize] "Purely specialize {specHyp.p} with {Q}. New Goal: {mkAnd! σs P R}"
   -- logInfo m!"proof: {← inferType proof}"
@@ -143,7 +159,7 @@ elab "mspecialize_pure" head:(term:max) args:(colGt term:max)* " as " hyp:ident 
   let hφ ← elabTerm head none
   let φ ← inferType hφ
   let H ← mkFreshExprMVar (mkApp (mkConst ``SPred) σs)
-  let inst ← synthInstance (mkApp3 (mkConst ``PropAsEntails) φ σs H)
+  let inst ← synthInstance (mkApp3 (mkConst ``PropAsSPredTautology) φ σs H)
   let mut H := (Hyp.mk hyp.getId (← instantiateMVars H)).toExpr
 
   let goal : MGoal := { goal with hyps := mkAnd! σs P H }

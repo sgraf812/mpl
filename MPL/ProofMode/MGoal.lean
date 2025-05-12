@@ -9,26 +9,26 @@ open Lean Elab Meta
 
 namespace MPL.ProofMode
 
-class PropAsEntails (φ : Prop) {σs : outParam (List Type)} (P : outParam (SPred σs)) : Prop where
-  prop_as_entails : φ ↔ ⊢ₛ P
-
-instance : PropAsEntails (⊢ₛ P) P where
-  prop_as_entails := Iff.rfl
-
-instance : PropAsEntails (P ⊢ₛ Q) spred(P → Q) where
-  prop_as_entails := (SPred.entails_true_intro P Q).symm
-
-instance : PropAsEntails (σs := []) φ φ where
-  prop_as_entails := true_imp_iff.symm
-
-theorem start_entails (φ : Prop) [PropAsEntails φ P] : (⊢ₛ P) → φ :=
-  PropAsEntails.prop_as_entails.mpr
-
-theorem elim_entails (φ : Prop) [PropAsEntails φ P] : φ → (⊢ₛ P) :=
-  PropAsEntails.prop_as_entails.mp
-
 /-- Tautology in `SPred` as a definition. -/
 abbrev _root_.MPL.SPred.tautological {σs : List Type} (Q : SPred σs) : Prop := ⊢ₛ Q
+
+class _root_.MPL.PropAsSPredTautology (φ : Prop) {σs : outParam (List Type)} (P : outParam (SPred σs)) : Prop where
+  iff : φ ↔ ⊢ₛ P
+
+instance : PropAsSPredTautology (⊢ₛ P) P where
+  iff := Iff.rfl
+
+instance : PropAsSPredTautology (P ⊢ₛ Q) spred(P → Q) where
+  iff := (SPred.entails_true_intro P Q).symm
+
+instance : PropAsSPredTautology (σs := []) φ φ where
+  iff := true_imp_iff.symm
+
+theorem start_entails (φ : Prop) [PropAsSPredTautology φ P] : (⊢ₛ P) → φ :=
+  PropAsSPredTautology.iff.mpr
+
+theorem elim_entails (φ : Prop) [PropAsSPredTautology φ P] : φ → (⊢ₛ P) :=
+  PropAsSPredTautology.iff.mp
 
 @[match_pattern] def mgoalAnnotation := `mgoal
 @[match_pattern] def nameAnnotation := `name
