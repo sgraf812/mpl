@@ -29,8 +29,10 @@ partial def _root_.MPL.ProofMode.MGoal.assumption (goal : MGoal) : OptionT MetaM
     panic! s!"assumption: hypothesis without proper metadata: {goal.hyps}"
 
 def _root_.MPL.ProofMode.MGoal.assumptionPure (goal : MGoal) : OptionT MetaM Expr := do
-  let fvarId ← OptionT.mk (findLocalDeclWithType? (mkApp2 (mkConst ``SPred.tautological) goal.σs goal.target))
-  return mkApp4 (mkConst ``Exact.from_tautology) goal.σs goal.hyps goal.target (.fvar fvarId)
+  let φ := mkApp2 (mkConst ``SPred.tautological) goal.σs goal.target
+  let fvarId ← OptionT.mk (findLocalDeclWithType? φ)
+  let inst ← synthInstance? (mkApp3 (mkConst ``PropAsSPredTautology) φ goal.σs goal.target)
+  return mkApp6 (mkConst ``Exact.from_tautology) φ goal.σs goal.hyps goal.target inst (.fvar fvarId)
 
 elab "massumption" : tactic => do
   let mvar ← getMainGoal
