@@ -34,10 +34,27 @@ def mkDiscrTreeExtension [Inhabited α] [BEq α] (name : Name := by exact decl_n
     addEntryFn    := fun s n => s.insertCore n.1 n.2 ,
   }
 
+-- TODO SpecInfo is currently dead because we simply do the inference in `mSpec`
+structure SpecInfo where
+  /-- whether the precondition is schematic, i.e., ∀-bound variable. -/
+  preSchematic : Bool
+  /-- whether the postcondition is schematic, i.e., ∀-bound variable. -/
+  postSchematic : Bool
+  deriving Inhabited, BEq
+
+def mkSpecKeyAndInfo (ty : Expr) : MetaM (Expr × SpecInfo) := do
+  let (xs, _bis, body) ← forallMetaTelescope ty
+  let_expr Triple _m _ps _inst _α prog P Q := body | throwError s!"not a triple: {body}"
+  let f := prog.getAppFn'
+  unless f.isConst do throwError s!"not an application of a constant: {prog}"
+  let preSchematic := P.isMVar && xs.contains P
+  let postSchematic := Q.isMVar && xs.contains Q
+  return (prog, { preSchematic, postSchematic })
+
 -- spec attribute
 structure SpecAttr where
   attr : AttributeImpl
-  ext  : DiscrTreeExtension Name
+  ext  : DiscrTreeExtension (ConstantVal × SpecInfo)
   deriving Inhabited
 
 /-- For the attributes
@@ -66,14 +83,7 @@ def attrIgnoreAuxDef (name : Name) (default : AttrM α) (x : AttrM α) : AttrM �
     x
 
 initialize registerTraceClass `mpl (inherited := true)
-
-def getSpecKey (ty : Expr) : MetaM Expr := do
-  let (_xs, _bis, body) ← forallMetaTelescope ty
-  let_expr Triple _m _ps _inst _α x _P _Q := body | throwError s!"not a triple: {body}"
-  if x.getAppFn'.isConst then
-    return x
-  else
-    throwError s!"not an application of a constant: {x}"
+initialize registerTraceClass `mpl.spec.attr (inherited := true)
 
 /- The persistent map from expressions to pspec theorems. -/
 initialize specAttr : SpecAttr ← do
@@ -90,37 +100,37 @@ initialize specAttr : SpecAttr ← do
       let env ← getEnv
       -- Ignore some auxiliary definitions (see the comments for attrIgnoreMutRec)
       attrIgnoreAuxDef thName (pure ()) do
-        trace[mpl] "Registering spec theorem for {thName}"
+        trace[mpl.spec.attr] "Registering spec theorem for {thName}"
         let thDecl := env.constants.find! thName
-        let fKey ← MetaM.run' (do
+        let (fKey, specInfo) ← MetaM.run' do
           let mut ty := thDecl.type
-          trace[mpl] "Theorem: {ty}"
+          trace[mpl.spec.attr] "Theorem: {ty}"
           -- Normalize to eliminate the let-bindings
 --          ty ← zetaReduce ty
 --          trace[mpl] "Theorem after normalization (to eliminate the let bindings): {ty}"
-          let fExpr ← getSpecKey ty
-          trace[mpl] "Registering spec theorem for expr: {fExpr}"
+          let (fExpr, specInfo) ← mkSpecKeyAndInfo ty
+          trace[mpl.spec.attr] "Registering spec theorem for expr: {fExpr}"
           -- Convert the function expression to a discrimination tree key
-          DiscrTree.mkPath fExpr)
-        let env := ext.addEntry env (fKey, thName)
+          return (← DiscrTree.mkPath fExpr, specInfo)
+        let env := ext.addEntry env (fKey, (thDecl.toConstantVal, specInfo))
         setEnv env
-        trace[mpl] "Saved the environment"
+        trace[mpl.spec.attr] "Saved the environment"
         pure ()
   }
   registerBuiltinAttribute attrImpl
   pure { attr := attrImpl, ext := ext }
 
-def SpecAttr.find? (s : SpecAttr) (e : Expr) : MetaM (Array Name) := do
+def SpecAttr.find? (s : SpecAttr) (e : Expr) : MetaM (Array (ConstantVal × SpecInfo)) := do
   (s.ext.getState (← getEnv)).getMatch e
 
-def SpecAttr.getState (s : SpecAttr) : MetaM (DiscrTree Name) := do
+def SpecAttr.getState (s : SpecAttr) : MetaM (DiscrTree (ConstantVal × SpecInfo)) := do
   pure (s.ext.getState (← getEnv))
 
 def showStoredSpec : MetaM Unit := do
   let st ← specAttr.getState
   -- TODO: how can we iterate over (at least) the values stored in the tree?
   --let s := st.toList.foldl (fun s (f, th) => f!"{s}\n{f} → {th}") f!""
-  let s := f!"{st}"
+  let s := f!"{st.mapArrays fun arr => arr.map (·.fst.name)}"
   IO.println s
 
 end MPL

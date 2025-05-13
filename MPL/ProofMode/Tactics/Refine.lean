@@ -56,7 +56,7 @@ partial def mRefineCore (goal : MGoal) (pat : MRefinePat) (k : MGoal → TSyntax
 
 elab "mrefine" pat:mrefinePat : tactic => do
   let pat ← liftMacroM <| MRefinePat.parse pat
-  let (mvar, goal) ← mStart (← getMainGoal)
+  let (mvar, goal) ← mStartMVar (← getMainGoal)
   mvar.withContext do
 
   let goals ← IO.mkRef #[]

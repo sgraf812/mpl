@@ -104,7 +104,7 @@ theorem focus {P P' Q R : SPred σs} (hfocus : P ⊣⊢ₛ P' ∧ Q) (hnew : P' 
   hfocus.mp.trans hnew
 
 elab "mspecialize" hyp:ident args:(colGt term:max)* : tactic => do
-  let (mvar, goal) ← mStart (← getMainGoal)
+  let (mvar, goal) ← mStartMVar (← getMainGoal)
   mvar.withContext do
 
   -- Want to prove goal P ⊢ T, where hyp occurs in P.
@@ -141,7 +141,7 @@ elab "mspecialize" hyp:ident args:(colGt term:max)* : tactic => do
   replaceMainGoal [newMVar.mvarId!]
 
 elab "mspecialize_pure" head:(term:max) args:(colGt term:max)* " as " hyp:ident : tactic => do
-  let (mvar, goal) ← mStart (← getMainGoal)
+  let (mvar, goal) ← mStartMVar (← getMainGoal)
   mvar.withContext do
 
   -- Want to prove goal P ⊢ₛ T. `head` is a pure proof of type `φ` that turns into `⊢ₛ H` via `start_entails`.

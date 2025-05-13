@@ -7,6 +7,7 @@ import MPL.ProofMode.Tactics.Basic
 import MPL.ProofMode.Tactics.Intro
 import MPL.ProofMode.Tactics.Pure
 import MPL.ProofMode.Tactics.Assumption
+import MPL.ProofMode.Tactics.Utils
 import MPL.WP
 import MPL.Specs -- important for MPL.Specs.bind
 
@@ -25,20 +26,29 @@ theorem Spec.entails_total {α} {ps : PostShape} (p : α → Assertion ps) (q : 
 theorem Spec.entails_partial {α} {ps : PostShape} (p : PostCond α ps) (q : α → Assertion ps) :
   (∀ a, p.1 a ⊢ₛ q a) → p ⊢ₚ PostCond.partial q := (PostCond.entails_partial p q).mpr
 
+def findSpec (database : DiscrTree (ConstantVal × SpecInfo)) (prog : Expr) : MetaM (ConstantVal × SpecInfo) := do
+  unless prog.getAppFn'.isConst do throwError s!"not an application of a constant: {prog}"
+  let specs ← database.getMatch prog
+  if specs.isEmpty then throwError s!"no specs found for {prog}"
+  if specs.size > 1 then throwError s!"multiple specs found for {prog}: {specs.map (·.fst.name)}"
+  return specs[0]!
+
+def instantiateSpec (spec : Expr) (expectedTy : Expr) : MetaM (Expr × List MVarId) := do
+  let specTy ← inferType spec
+  trace[mpl.tactics.spec] "inferred specTy, pre instantiate telescope: {← instantiateMVars specTy}"
+  let (mvs, _bis, specTy) ← forallMetaTelescope specTy -- Perhaps this could be done more efficiently without MVars?
+  let spec := spec.beta mvs
+  trace[mpl.tactics.spec] "inferred specTy, post instantiate telescope: {← instantiateMVars specTy}"
+  -- withAssignableSyntheticOpaque below assigns the meta vars in expectedTy
+  unless (← withAssignableSyntheticOpaque <| isDefEq specTy expectedTy) do
+    Term.throwTypeMismatchError none expectedTy specTy spec
+  trace[mpl.tactics.spec] "inferred specTy, post defeq: {← instantiateMVars specTy}"
+  return (spec, mvs.toList.map (·.mvarId!))
+
 def elabTermForSpec (stx : TSyntax `term) (expectedTy : Expr) : TacticM (Expr × List MVarId) := do
   if stx.raw.isIdent then
     match (← Term.resolveId? stx.raw (withInfo := true)) with
-    | some spec =>
-      let specTy ← inferType spec
-      trace[mpl.tactics.spec] "inferred specTy, pre instantiate telescope: {← instantiateMVars specTy}"
-      let (mvs, _bis, specTy) ← forallMetaTelescope specTy -- This could be done more efficiently without MVars
-      let spec := spec.beta mvs
-      trace[mpl.tactics.spec] "inferred specTy, post instantiate telescope: {← instantiateMVars specTy}"
-      -- withAssignableSyntheticOpaque below assigns the meta vars in expectedTy
-      unless (← withAssignableSyntheticOpaque <| isDefEq specTy expectedTy) do
-        Term.throwTypeMismatchError none expectedTy specTy spec
-      trace[mpl.tactics.spec] "inferred specTy, post defeq: {← instantiateMVars specTy}"
-      return (spec, mvs.toList.map (·.mvarId!))
+    | some spec => return ← instantiateSpec spec expectedTy
     | _      => pure ()
   -- It is vital that we supply an expected type below,
   -- otherwise `ps` will be uninstantiated on the first elaboration try
@@ -50,31 +60,28 @@ def elabTermForSpec (stx : TSyntax `term) (expectedTy : Expr) : TacticM (Expr ×
     trace[mpl.tactics.spec] "internal error. This happens for example when the head symbol of the spec is wrong. Message:\n  {e.toMessageData}"
     throw e
 
-def mFindSpec (stx? : Option (TSyntax `term)) (u : Level) (m : Expr) (ps : Expr) (instWP : Expr) (α : Expr) (prog : Expr) : TacticM (Expr × List MVarId × Expr × Expr) := do
+def elabSpec (stx? : Option (TSyntax `term)) (wp : Expr) : TacticM (Expr × List MVarId × Expr × Expr) := do
+  let_expr WP.wp m ps instWP α prog := wp | throwError "target not a wp application {wp}"
+  let [u] := wp.getAppFn'.constLevels! | throwError "Internal error: wrong number of levels in wp application"
   let stx ← stx?.getDM do
-    unless prog.getAppFn'.isConst do throwError s!"not an application of a constant: {prog}"
-    let specs ← specAttr.find? prog
-    if specs.isEmpty then throwError s!"no specs found for {prog}"
-    if specs.size > 1 then throwError s!"multiple specs found for {prog}: {specs}"
-    return mkIdent specs[0]!
+    let (spec, _info) ← findSpec (← specAttr.getState) prog
+    return mkIdent spec.name
   trace[mpl.tactics.spec] "spec syntax: {stx}"
   let P ← mkFreshExprMVar (mkApp (mkConst ``Assertion) ps) (userName := `P)
   let Q ← mkFreshExprMVar (mkApp2 (mkConst ``PostCond) α ps) (userName := `Q)
   let expectedTy := mkApp7 (mkConst ``Triple [u]) m ps instWP α prog P Q
-  check expectedTy
   trace[mpl.tactics.spec] "expected type: {← instantiateMVars expectedTy}"
-  let (spec, mvarIds) ← elabTermForSpec stx expectedTy
+  let (spec, mvarIds) ← Term.withSynthesize (elabTermForSpec stx expectedTy)
   trace[mpl.tactics.spec] "inferred spec: {← instantiateMVars spec}"
-  Term.synthesizeSyntheticMVarsNoPostponing
-  trace[mpl.tactics.spec] "inferred spec, post synthesis: {← instantiateMVars spec}"
   let mvarIds ← mvarIds.filterM (not <$> ·.isAssigned)
+  let P ← instantiateMVars P
+  let Q ← instantiateMVars Q
   return (spec, mvarIds, P, Q)
 
-def mkProj' (n : Name) (i : Nat) (Q : Expr) : MetaM Expr := do
-  return (← projectCore? Q i).getD (mkProj n i Q)
+variable {n} [Monad n] [MonadControlT MetaM n] [MonadLiftT MetaM n]
 
 mutual
-partial def dischargePostEntails (α : Expr) (ps : Expr) (Q : Expr) (Q' : Expr) (goalTag : Name) (resultName : Name) (discharge : Expr → Name → MetaM Expr) : MetaM Expr := do
+partial def dischargePostEntails (α : Expr) (ps : Expr) (Q : Expr) (Q' : Expr) (goalTag : Name) (resultName : Name) (discharge : Expr → Name → n Expr) : n Expr := do
   -- Often, Q' is fully instantiated while Q contains metavariables. Try refl
   if (← isDefEq Q Q') then
     return mkApp3 (mkConst ``PostCond.entails.refl) α ps Q'
@@ -93,7 +100,7 @@ partial def dischargePostEntails (α : Expr) (ps : Expr) (Q : Expr) (Q' : Expr) 
   let prf₂ ← dischargeFailEntails ps (← mkProj' ``Prod 1 Q) (← mkProj' ``Prod 1 Q') (goalTag ++ `except) discharge
   mkAppM ``And.intro #[prf₁, prf₂] -- This is just a bit too painful to construct by hand
 
-partial def dischargeFailEntails (ps : Expr) (Q : Expr) (Q' : Expr) (goalTag : Name) (discharge : Expr → Name → MetaM Expr) : MetaM Expr := do
+partial def dischargeFailEntails (ps : Expr) (Q : Expr) (Q' : Expr) (goalTag : Name) (discharge : Expr → Name → n Expr) : n Expr := do
   if ps.isAppOf ``PostShape.pure then
     return mkConst ``True.intro
   if ← isDefEq Q Q' then
@@ -120,13 +127,13 @@ partial def dischargeFailEntails (ps : Expr) (Q : Expr) (Q' : Expr) (goalTag : N
   discharge (mkApp3 (mkConst ``FailConds.entails) ps Q Q') goalTag
 end
 
-def dischargeMGoal (goal : MGoal) (goalTag : Name) (discharge : Expr → Name → MetaM Expr) : MetaM Expr := do
-  trace[mpl.tactics.spec] "dischargeMGoal: {goal.target}"
+def dischargeMGoal (goal : MGoal) (goalTag : Name) (discharge : Expr → Name → n Expr) : n Expr := do
+  controlAt MetaM (fun map => do trace[mpl.tactics.spec] "dischargeMGoal: {(← reduceProj? goal.target).getD goal.target}"; map (pure ()))
   -- simply try one of the assumptions for now. Later on we might want to decompose conjunctions etc; full xsimpl
-  let some prf ← goal.assumption | discharge goal.toExpr goalTag
+  let some prf ← liftM (m:=MetaM) goal.assumption | discharge goal.toExpr goalTag
   return prf
 
-def mSpec (goal : MGoal) (spec : Option (TSyntax `term)) (discharge : Expr → Name → MetaM Expr) (resultName := `r) : TacticM (Expr × List MVarId) := do
+def mSpec (goal : MGoal) (elabSpecAtWP : Expr → n (Expr × List MVarId × Expr × Expr)) (discharge : Expr → Name → n Expr) (preTag := `pre) (resultName := `r) : n (Expr × List MVarId) := do
   -- First instantiate `fun s => ...` in the target.
   -- This is like repeated `mintro ∀s`.
   lambdaTelescope goal.target.consumeMData fun xs T => do
@@ -135,26 +142,50 @@ def mSpec (goal : MGoal) (spec : Option (TSyntax `term)) (discharge : Expr → N
       σs := ← dropStateList goal.σs xs.size,
       hyps := betaPreservingHypNames goal.σs goal.hyps xs }
 
-  -- Elaborate the spec, apply style
+  -- Elaborate the spec
   let mut (fn, args) := T.getAppFnArgs
-  unless fn == ``PredTrans.apply do throwError "target not a PredTrans.apply application {T}"
+  unless fn == ``PredTrans.apply do liftM (m:=MetaM) (throwError "target not a PredTrans.apply application {T}")
   let wp := args[2]!
+  let_expr WP.wp _m ps _instWP α _prog := wp | do liftM (m:=MetaM) (throwError "target not a wp application {wp}")
   let Q' := args[3]!
   let excessArgs := (args.extract 4 args.size).reverse
-  let_expr WP.wp m ps instWP α x := wp | throwError "target not a wp application {wp}"
-  let [u] := wp.getAppFn'.constLevels! | throwError "Internal error: wrong number of levels in wp application"
-  let (spec, specHoles, P, Q) ← mFindSpec spec u m ps instWP α x
-  let spec := spec.betaRev excessArgs
+  let (spec, specHoles, P, Q) ← controlAt MetaM fun map => map (elabSpecAtWP wp)
   let P := P.betaRev excessArgs
-  -- apply the spec
-  let h₁ := spec
-  let postPrf ← dischargePostEntails α ps Q Q' `post resultName discharge
-  let wpApplyQ  := mkApp4 (mkConst ``PredTrans.apply) ps α wp Q  -- wp⟦x⟧.apply Q; that is, T without excess args
-  let wpApplyQ' := mkApp4 (mkConst ``PredTrans.apply) ps α wp Q' -- wp⟦x⟧.apply Q'
-  let h₂ := mkApp6 (mkConst ``PredTrans.mono) ps α wp Q Q' postPrf
-  let PTPrf := mkApp6 (mkConst ``SPred.entails.trans) goal.σs P (wpApplyQ.betaRev excessArgs) (wpApplyQ'.betaRev excessArgs) h₁ (h₂.betaRev excessArgs)
-  let HPPrf ← dischargeMGoal { goal with target := P } `pre discharge
-  let prf := mkApp6 (mkConst ``SPred.entails.trans) goal.σs goal.hyps P goal.target HPPrf PTPrf
+  let spec := spec.betaRev excessArgs
+
+  -- first try instantiation if P or Q is schematic (i.e. an MVar app)
+  let mut HPRfl := false
+  let mut QQ'Rfl := false
+  let P ← instantiateMVarsIfMVarApp P
+  let Q ← instantiateMVarsIfMVarApp Q
+  if P.getAppFn.isMVar then
+    let _ ← withAssignableSyntheticOpaque <| isDefEq P goal.hyps
+    HPRfl := true
+  if Q.getAppFn.isMVar then
+    let _ ← withAssignableSyntheticOpaque <| isDefEq Q Q'
+    QQ'Rfl := true
+
+  -- Discharge the validity proof for the spec if not rfl
+  let mut prePrf : Expr → Expr := id
+  if !HPRfl then
+    let P ← instantiateMVarsIfMVarApp P
+    -- let P := (← reduceProjBeta? P).getD P
+    let HPPrf ← dischargeMGoal { goal with target := P } preTag discharge
+    prePrf := mkApp6 (mkConst ``SPred.entails.trans) goal.σs goal.hyps P goal.target HPPrf
+
+  -- Discharge the entailment on postconditions if not rfl
+  let mut postPrf : Expr → Expr := id
+  if !QQ'Rfl then
+    let wpApplyQ  := mkApp4 (mkConst ``PredTrans.apply) ps α wp Q  -- wp⟦x⟧.apply Q; that is, T without excess args
+    let wpApplyQ' := mkApp4 (mkConst ``PredTrans.apply) ps α wp Q' -- wp⟦x⟧.apply Q'
+    let QQ' ← dischargePostEntails α ps Q Q' `post resultName discharge
+    let QQ'mono := mkApp6 (mkConst ``PredTrans.mono) ps α wp Q Q' QQ'
+    postPrf := fun h =>
+      mkApp6 (mkConst ``SPred.entails.trans) goal.σs P (wpApplyQ.betaRev excessArgs) (wpApplyQ'.betaRev excessArgs)
+        h (QQ'mono.betaRev excessArgs)
+
+  -- finally build the proof; HPPrf.trans (spec.trans QQ'mono)
+  let prf := prePrf (postPrf spec)
   let prf ← mkLambdaFVars xs prf -- Close over the `mintro ∀s`'d vars
   return (prf, specHoles)
 
@@ -166,9 +197,9 @@ private def addMVar (mvars : IO.Ref (List MVarId)) (goal : Expr) (name : Name) :
 syntax "mspec_no_bind" (ppSpace colGt term)? : tactic
 
 elab "mspec_no_bind" spec:optional(term) : tactic => withMainContext do
-  let (mvar, goal) ← mStart (← getMainGoal)
+  let (mvar, goal) ← mStartMVar (← getMainGoal)
   let goals ← IO.mkRef []
-  let (prf, specHoles) ← mSpec goal spec (addMVar goals)
+  let (prf, specHoles) ← mSpec goal (elabSpec spec) (fun goal name => liftM (m:=MetaM) (addMVar goals goal name))
   check prf
   mvar.assign prf
   let goals ← goals.get

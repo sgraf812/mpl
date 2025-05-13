@@ -10,28 +10,36 @@ open Lean Elab.Tactic Meta
 
 namespace MPL.ProofMode.Tactics
 
-def mStart (mvar : MVarId) : MetaM (MVarId × MGoal) := mvar.withContext do
-  -- check if already in proof mode
-  let goal ← instantiateMVars <| ← mvar.getType
-  if let some mGoal := parseMGoal? goal then
-    return (mvar, mGoal)
+structure MStartResult where
+  goal : MGoal
+  proof? : Option Expr := none
 
-  let prop := mkSort .zero
-  unless ← isProp goal do
-    throwError "type mismatch\n{← mkHasTypeButIsExpectedMsg (← inferType goal) prop}"
+def mStart (goal : Expr) : MetaM MStartResult := do
+  -- check if already in proof mode
+  if let some mGoal := parseMGoal? goal then
+    return { goal := mGoal }
 
   let listType := mkApp (mkConst ``List [.succ .zero]) (mkSort (.succ .zero))
   let σs ← mkFreshExprMVar listType
   let P ← mkFreshExprMVar (mkApp (mkConst ``SPred) σs)
   let inst ← synthInstance (mkApp3 (mkConst ``PropAsSPredTautology) goal σs P)
   let prf := mkApp4 (mkConst ``ProofMode.start_entails) σs P goal inst
+  let goal : MGoal := { σs,  hyps := emptyHyp σs, target := ← instantiateMVars P }
+  return { goal, proof? := some prf }
 
-  let goal : MGoal := { σs,  hyps := emptyHyp σs, target := P }
-  let subgoal ←
-    mkFreshExprSyntheticOpaqueMVar goal.toExpr (← mvar.getTag)
-  mvar.assign (mkApp prf subgoal)
-  let goal := { goal with target := ← instantiateMVars goal.target }
-  pure (subgoal.mvarId!, goal)
+def mStartMVar (mvar : MVarId) : MetaM (MVarId × MGoal) := mvar.withContext do
+  let goal ← instantiateMVars <| ← mvar.getType
+  unless ← isProp goal do
+    throwError "type mismatch\n{← mkHasTypeButIsExpectedMsg (← inferType goal) (mkSort .zero)}"
+
+  let result ← mStart goal
+  if let some proof := result.proof? then
+    let subgoal ←
+      mkFreshExprSyntheticOpaqueMVar result.goal.toExpr (← mvar.getTag)
+    mvar.assign (mkApp proof subgoal)
+    return (subgoal.mvarId!, result.goal)
+  else
+    return (mvar, result.goal)
 
 /--
   Start the stateful proof mode of `mpl`.
@@ -41,7 +49,7 @@ def mStart (mvar : MVarId) : MetaM (MVarId × MGoal) := mvar.withContext do
   try `mstart` automatically if necessary.
 -/
 elab "mstart" : tactic => do
-  let (mvar, _) ← mStart (← getMainGoal)
+  let (mvar, _) ← mStartMVar (← getMainGoal)
   replaceMainGoal [mvar]
 
 elab "mstop" : tactic => do

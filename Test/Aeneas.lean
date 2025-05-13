@@ -37,8 +37,8 @@ instance : LawfulMonad Result := sorry
 
 instance Result.instWP : WP Result (.except Error .pure) where
   wp x := match x with
-  | .ok v => wp⟦pure v : Except Error _⟧
-  | .fail e => wp⟦throw e : Except Error _⟧
+  | .ok v => wp (pure v : Except Error _)
+  | .fail e => wp (throw e : Except Error _)
   | .div => PredTrans.const ⌜False⌝
 
 instance Result.instWPMonad : WPMonad Result (.except Error .pure) where
@@ -131,7 +131,7 @@ theorem mul2_add1_spec' (x : U32) (h : 2 * x.val + 1 ≤ U32.max)
 -- for more `progress` like automation, we can register a wp transformer:
 @[wp_simp]
 theorem U32.add_apply {x y : U32} {Q : PCond U32} :
-    wp⟦x + y⟧.apply Q =
+    wp⟦x + y⟧ Q =
     if h : ↑x + ↑y ≤ U32.max
     then Q.1 (UScalar.ofNatCore (↑x + ↑y) sorry) -- massage h
     else Q.2.1 integerOverflow := by
@@ -147,7 +147,7 @@ theorem U32.add_apply {x y : U32} {Q : PCond U32} :
       simp [this h, MonadExcept.throw_apply, Except.throw_apply]
 
 theorem mul2_add1_apply (x : U32) (h : 2 * x.val + 1 ≤ U32.max)
-  : wp⟦mul2_add1 x⟧.apply Q = Q.1 (UScalar.ofNatCore (2 * ↑x + (1 : Nat)) sorry) := by
+  : wp⟦mul2_add1 x⟧ Q = Q.1 (UScalar.ofNatCore (2 * ↑x + (1 : Nat)) sorry) := by
   rw[mul2_add1]
   mstart
   mwp

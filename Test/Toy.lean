@@ -52,12 +52,12 @@ theorem mkFreshNat_spec [Monad m] [WPMonad m sh] :
 
 @[wp_simp]
 theorem StateT.mkFreshNat_apply [Monad m] [LawfulMonad m] [WPMonad m sh] :
-  wp⟦(mkFreshNat : StateT (Nat × Nat) m Nat)⟧.apply Q = fun s => Q.1 s.1 (s.1 + 1, s.2) := by
+  wp⟦(mkFreshNat : StateT (Nat × Nat) m Nat)⟧ Q = fun s => Q.1 s.1 (s.1 + 1, s.2) := by
     unfold mkFreshNat; wp_simp
 
 @[wp_simp]
 theorem MonadStateOf.mkFreshNat_apply [Monad m] [MonadStateOf (Nat × Nat) m] [Monad n] [LawfulMonad m] [LawfulMonad n] [WP m psm] [WPMonad n psn] [MonadLift m n] [MonadMorphism m n MonadLift.monadLift] :
-  wp⟦mkFreshNat : n Nat⟧.apply Q = wp⟦MonadLift.monadLift (m:=m) mkFreshNat : n Nat⟧.apply Q := by
+  wp⟦mkFreshNat : n Nat⟧ Q = wp⟦MonadLift.monadLift (m:=m) mkFreshNat : n Nat⟧ Q := by
     unfold mkFreshNat; wp_simp; rfl
 
 @[spec]
@@ -238,9 +238,9 @@ theorem test_loop_early_return :
   case none => simp at h; (conv at h in (List.sum _) => whnf); exfalso; have ⟨h₁,h₂⟩ := h; subst_vars; contradiction -- omega -- WTF why doesn't omega
   case some r => simp_all
 
-example : wp⟦do try { throw 42; return 1 } catch _ => return 2 : Except Nat Nat⟧.apply Q
+example : wp⟦do try { throw 42; return 1 } catch _ => return 2 : Except Nat Nat⟧ Q
           ⊣⊢ₛ
-          wp⟦pure 2 : Except Nat Nat⟧.apply Q := by
+          wp⟦pure 2 : Except Nat Nat⟧ Q := by
   apply SPred.bientails.iff.mpr
   constructor
   all_goals mstart; mwp
@@ -296,7 +296,7 @@ theorem fib_impl_vcs
     (loop_post : ∀ n (hn : ¬n = 0) r, (I n hn).1 (r, List.Zipper.end _) ⊢ₛ (Q n).1 r.snd)
     (loop_step : ∀ n (hn : ¬n = 0) r rpref x suff (h : List.range' 1 (n - 1) 1 = rpref.reverse ++ x :: suff),
                   (I n hn).1 (r, ⟨rpref, x::suff, by simp[h]⟩) ⊢ₛ (I n hn).1 (⟨r.2, r.1+r.2⟩, ⟨x::rpref, suff, by simp[h]⟩))
-    : wp⟦fib_impl n⟧.apply (Q n) := by
+    : wp⟦fib_impl n⟧ (Q n) := by
   apply fib_impl.fun_cases _ ?case1 ?case2 n
   case case1 => unfold fib_impl; mstart; mwp; mpure_intro; exact ret
   case case2 =>

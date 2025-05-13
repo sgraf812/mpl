@@ -143,7 +143,7 @@ example [WP m ps] (x : m α)
    (hspec : ⦃P⦄ x ⦃Q⦄)
    (hpre : P' ⊢ₛ P)
    (hpost : Q ⊢ₚ Q')
-   : P' ⊢ₛ wp⟦x⟧.apply Q' := by
+   : P' ⊢ₛ wp⟦x⟧ Q' := by
   mintro h
   mspec hspec
   case pre => exact hpre
@@ -153,7 +153,7 @@ example [WP m ps] (x : m α) (Q : α → Assertion ps)
    (hspec : ⦃P⦄ x ⦃⇓ v => Q v⦄)
    (hpre : P' ⊢ₛ P)
    (hpost : ∀ v, Q v ⊢ₛ Q'.1 v)
-   : P' ⊢ₛ wp⟦x⟧.apply Q' := by
+   : P' ⊢ₛ wp⟦x⟧ Q' := by
   mintro h
   mspec hspec
   case pre => exact hpre
@@ -173,12 +173,12 @@ example :
       catch _ =>
         set false
         get : ReaderT Char (StateT Bool (ExceptT Nat Id)) Bool
-      ⟧.apply Q
+      ⟧ Q
     ⊣⊢ₛ
     wp⟦do
       set false
       get : ReaderT Char (StateT Bool (ExceptT Nat Id)) Bool
-    ⟧.apply Q := by
+    ⟧ Q := by
   apply SPred.bientails.iff.mpr
   constructor <;> mwp
 
@@ -198,7 +198,7 @@ theorem fib_impl_vcs
     (loop_post : ∀ n (hn : ¬n = 0) r, (I n hn).1 (r, List.Zipper.end _) ⊢ₛ (Q n).1 r.snd)
     (loop_step : ∀ n (hn : ¬n = 0) r rpref x suff (h : List.range' 1 (n - 1) 1 = rpref.reverse ++ x :: suff),
                   (I n hn).1 (r, ⟨rpref, x::suff, by simp[h]⟩) ⊢ₛ (I n hn).1 (⟨r.2, r.1+r.2⟩, ⟨x::rpref, suff, by simp[h]⟩))
-    : wp⟦fib_impl n⟧.apply (Q n) := by
+    : wp⟦fib_impl n⟧ (Q n) := by
   apply fib_impl.fun_cases _ ?case1 ?case2 n
   case case1 => unfold fib_impl; mstart; mwp; mpure_intro; exact ret
   case case2 =>

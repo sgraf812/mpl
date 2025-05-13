@@ -33,7 +33,7 @@ open Lean Elab Tactic Meta
   specifications (which can be lossy) instead of information preserving rewrites.
 -/
 elab "mwp" : tactic => do
-  let (mvar, _) ← mStart (← getMainGoal)
+  let (mvar, _) ← mStartMVar (← getMainGoal)
   -- Somehow, conv in ... => rfl breaks the use of `withCollectingNewGoalsFrom` in `mspec`.
   -- I won't investigate because wp_simp will be replaced anyway.
   --  let (mvars, _) ← runTactic mvar (← `(tactic| conv in SPred.entails _ _ => arg 2; tactic => wp_simp))

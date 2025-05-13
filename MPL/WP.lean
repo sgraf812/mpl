@@ -51,16 +51,31 @@ export WP (wp)
 open Lean.Parser.Term in
 syntax:max "wp⟦" term:min optType "⟧" : term
 macro_rules
-  | `(wp⟦$x:term⟧) => `(WP.wp $x)
-  | `(wp⟦$x:term : $ty⟧) => `(WP.wp ($x : $ty))
+  | `(wp⟦$x:term⟧) => `((WP.wp $x).apply)
+  | `(wp⟦$x:term : $ty⟧) => `((WP.wp ($x : $ty)).apply)
 
 open Lean.PrettyPrinter in
-@[app_unexpander WP.wp]
+@[app_unexpander PredTrans.apply]
 protected def unexpandWP : Unexpander
   | `($_ $e) => match e with
-    | `(($x : $ty)) => `(wp⟦$x : $ty⟧)
-    | _ => `(wp⟦$e⟧)
-  | _ => (throw () : UnexpandM _)
+    | `(wp ($x : $ty)) => `(wp⟦$x : $ty⟧)
+    | `(wp $e) => `(wp⟦$e⟧)
+    | _ => throw ()
+  | _ => throw ()
+
+-- Tried to make it a delaborator but then realized I don't need to
+--open Lean PrettyPrinter Delaborator SubExpr in
+--@[app_delab PredTrans.apply]
+--protected def delabWPApply : Delab := do
+--  let e ← getExpr
+--  let n := e.getAppNumArgs
+--  unless n >= 3 do failure
+--  let_expr WP.wp _ _ _ _ _prog := e.getArg! 2 | failure
+--  let prog ← withNaryArg 2 <| withNaryArg 4 delab
+--  let mut excess := #[]
+--  for i in [3:n] do
+--    excess := excess.push (← withNaryArg i delab)
+--  `(wp⟦$prog⟧ $excess*)
 
 section Instances
 
@@ -70,22 +85,22 @@ instance Id.instWP : WP Id .pure where
   wp x := PredTrans.pure x.run
 
 theorem Id.by_wp {α} {x : α} {prog : Id α} (h : x = Id.run prog) (P : α → Prop) :
-  (⌜True⌝ ⊢ₛ (wp prog).apply (PostCond.total P)) → P x := h ▸ (fun h => h True.intro)
+  (⌜True⌝ ⊢ₛ wp⟦prog⟧ (PostCond.total P)) → P x := h ▸ (fun h => h True.intro)
 
 instance Idd.instWP : WP Idd .pure where
   wp x := PredTrans.pure x.run
 
 theorem Idd.by_wp {α} {x : α} {prog : Idd α} (h : Idd.run prog = x) (P : α → Prop) :
-  (wp prog).apply (PostCond.total P) → P x := h ▸ id
+  wp⟦prog⟧ (PostCond.total P) → P x := h ▸ id
 
 instance StateT.instWP [WP m ps] : WP (StateT σ m) (.arg σ ps) where
-  wp x := PredTrans.pushArg (fun s => wp⟦x s⟧)
+  wp x := PredTrans.pushArg (fun s => wp (x s))
 
 instance ReaderT.instWP [WP m ps] : WP (ReaderT ρ m) (.arg ρ ps) where
-  wp x := PredTrans.pushArg (fun s => (·, s) <$> wp⟦x s⟧)
+  wp x := PredTrans.pushArg (fun s => (·, s) <$> wp (x s))
 
 instance ExceptT.instWP [WP m ps] : WP (ExceptT ε m) (.except ε ps) where
-  wp x := PredTrans.pushExcept wp⟦x⟧
+  wp x := PredTrans.pushExcept (wp x)
 
 instance EStateM.instWP : WP (EStateM ε σ) (.except ε (.arg σ .pure)) where
   wp x := -- Could define as PredTrans.mkExcept (PredTrans.modifyGetM (fun s => pure (EStateM.Result.toExceptState (x s))))
@@ -108,7 +123,7 @@ instance Except.instWP : WP (Except ε) (.except ε .pure) :=
   inferInstanceAs (WP (ExceptT ε Id) (.except ε .pure))
 
 theorem StateM.by_wp {α} {x : α × σ} {prog : StateM σ α} (h : StateT.run prog s = x) (P : α × σ → Prop) :
-  (wp⟦prog⟧.apply (PostCond.total (fun a s' => P (a, s'))) s) → P x := by
+  (wp⟦prog⟧ (PostCond.total (fun a s' => P (a, s'))) s) → P x := by
     intro hspec
     simp [wp, PredTrans.pure] at hspec
     exact h ▸ hspec
@@ -122,29 +137,29 @@ theorem EStateM.by_wp {α} {x : EStateM.Result ε σ α} {prog : EStateM ε σ �
     case h_2 => contradiction
 
 theorem WP.ReaderT_run_apply [WP m ps] (x : ReaderT ρ m α) :
-  wp⟦x.run r⟧.apply Q = wp⟦x⟧.apply (fun a _ => Q.1 a, Q.2) r := rfl
+  wp⟦x.run r⟧ Q = wp⟦x⟧ (fun a _ => Q.1 a, Q.2) r := rfl
 
 theorem WP.StateT_run_apply [WP m ps] (x : StateT σ m α) :
-  wp⟦x.run s⟧.apply Q = wp⟦x⟧.apply (fun a s => Q.1 (a, s), Q.2) s := rfl
+  wp⟦x.run s⟧ Q = wp⟦x⟧ (fun a s => Q.1 (a, s), Q.2) s := rfl
 
 theorem WP.ExceptT_run_apply [WP m ps] (x : ExceptT ε m α) :
-  wp⟦x.run⟧.apply Q = wp⟦x⟧.apply (fun a => Q.1 (.ok a), fun e => Q.1 (.error e), Q.2) := by
+  wp⟦x.run⟧ Q = wp⟦x⟧ (fun a => Q.1 (.ok a), fun e => Q.1 (.error e), Q.2) := by
     simp [wp, ExceptT.run]
     congr
     (ext x; cases x) <;> rfl
 
 theorem WP.dite_apply {ps} {Q : PostCond α ps} (c : Prop) [Decidable c] [WP m ps] (t : c → m α) (e : ¬ c → m α) :
-  wp⟦if h : c then t h else e h⟧.apply Q = if h : c then wp⟦t h⟧.apply Q else wp⟦e h⟧.apply Q := by split <;> rfl
+  wp⟦if h : c then t h else e h⟧ Q = if h : c then wp⟦t h⟧ Q else wp⟦e h⟧ Q := by split <;> rfl
 
 theorem WP.ite_apply {ps} {Q : PostCond α ps} (c : Prop) [Decidable c] [WP m ps] (t : m α) (e : m α) :
-  wp⟦if c then t else e⟧.apply Q = if c then wp⟦t⟧.apply Q else wp⟦e⟧.apply Q := by split <;> rfl
+  wp⟦if c then t else e⟧ Q = if c then wp⟦t⟧ Q else wp⟦e⟧ Q := by split <;> rfl
 
 end Instances
 
 open Lean Elab Meta Term Command
 
 theorem congr_apply_Q {α : Type} {m : Type → Type u} (a b : m α) (h : a = b) {ps : PostShape} [WP m ps] (Q : PostCond α ps) :
-  wp⟦a⟧.apply Q = wp⟦b⟧.apply Q := by congr
+  wp⟦a⟧ Q = wp⟦b⟧ Q := by congr
 
 -- the following function is vendored from Mathlib for now.  TODO: Specialize, simplify
 /-- If `e` is a projection of the structure constructor, reduce the projection.

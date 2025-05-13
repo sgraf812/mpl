@@ -20,10 +20,10 @@ It is thus defined in terms of an instance `WP m ps`.
 namespace MPL
 
 universe u
-variable {m : Type → Type u} {ps : PostShape} [WP m ps]
+variable {m : Type → Type u} {ps : PostShape}
 
-def Triple {α} (x : m α) (P : Assertion ps) (Q : PostCond α ps) : Prop :=
-  P ⊢ₛ wp⟦x⟧.apply Q
+def Triple [WP m ps] {α} (x : m α) (P : Assertion ps) (Q : PostCond α ps) : Prop :=
+  P ⊢ₛ wp⟦x⟧ Q
 
 namespace Triple
 
@@ -35,24 +35,24 @@ app_unexpand_rule Triple
     | _ => do
       `(⦃$(← SPred.Notation.unpack P)⦄ $x ⦃$(← SPred.Notation.unpack Q)⦄)
 
-instance [WP m ps] (x : m α) : PropAsSPredTautology (Triple x P Q) spred(P → wp⟦x⟧.apply Q) where
-  iff := (SPred.entails_true_intro P (wp⟦x⟧.apply Q)).symm
+instance [WP m ps] (x : m α) : PropAsSPredTautology (Triple x P Q) spred(P → wp⟦x⟧ Q) where
+  iff := (SPred.entails_true_intro P (wp⟦x⟧ Q)).symm
 
-theorem pure [Monad m] [MonadMorphism m (PredTrans ps) wp] {α} {Q : PostCond α ps} (a : α) (himp : P.entails (Q.1 a)) :
-  Triple (pure (f:=m) a) P Q := himp.trans (by simp only [pure_pure, PredTrans.pure_apply, SPred.entails.refl])
+theorem pure [Monad m] [WPMonad m ps] {α} {Q : PostCond α ps} (a : α) (himp : P ⊢ₛ Q.1 a) :
+  ⦃P⦄ pure (f:=m) a ⦃Q⦄ := himp.trans (by simp only [pure_pure, PredTrans.pure_apply, SPred.entails.refl])
 
-theorem bind [Monad m] [MonadMorphism m (PredTrans ps) wp] {α β} {P : Assertion ps} {Q : α → Assertion ps} {R : PostCond β ps} (x : m α) (f : α → m β)
-    (hx : Triple x P (Q, R.2))
-    (hf : ∀ b, Triple (f b) (Q b) R) :
-    Triple (x >>= f) P R := by
+theorem bind [Monad m] [WPMonad m ps] {α β} {P : Assertion ps} {Q : α → Assertion ps} {R : PostCond β ps} (x : m α) (f : α → m β)
+    (hx : ⦃P⦄ x ⦃(Q, R.2)⦄)
+    (hf : ∀ b, ⦃Q b⦄ f b ⦃R⦄) :
+    ⦃P⦄ (x >>= f) ⦃R⦄ := by
   apply SPred.entails.trans hx
   simp only [bind_bind]
-  apply wp⟦x⟧.mono _ _
+  apply (wp x).mono _ _
   simp only [PostCond.entails, Assertion, FailConds.entails.refl, and_true]
   exact hf
 
-theorem and (x : m α) (h₁ : ⦃P₁⦄ x ⦃Q₁⦄) (h₂ : ⦃P₂⦄ x ⦃Q₂⦄) : ⦃P₁ ∧ P₂⦄ x ⦃Q₁ ∧ₚ Q₂⦄ :=
-  (SPred.and_mono h₁ h₂).trans (wp⟦x⟧.conjunctive Q₁ Q₂).mpr
+theorem and [WP m ps] (x : m α) (h₁ : ⦃P₁⦄ x ⦃Q₁⦄) (h₂ : ⦃P₂⦄ x ⦃Q₂⦄) : ⦃P₁ ∧ P₂⦄ x ⦃Q₁ ∧ₚ Q₂⦄ :=
+  (SPred.and_mono h₁ h₂).trans ((wp x).conjunctive Q₁ Q₂).mpr
 
 end Triple
 

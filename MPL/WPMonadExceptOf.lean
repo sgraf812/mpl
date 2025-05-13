@@ -23,51 +23,51 @@ universe u
 variable {m : Type → Type u} {ps : PostShape}
 
 theorem MonadExcept.throw_apply [MonadExceptOf ε m] [WP m ps] :
-  wp⟦throw e : m α⟧.apply Q = wp⟦MonadExceptOf.throw e : m α⟧.apply Q := rfl
+  wp⟦throw e : m α⟧ Q = wp⟦MonadExceptOf.throw e : m α⟧ Q := rfl
 
 theorem MonadExcept.throwThe_apply [MonadExceptOf ε m] [WP m ps] :
-  wp⟦throwThe ε e : m α⟧.apply Q = wp⟦MonadExceptOf.throw e : m α⟧.apply Q := rfl
+  wp⟦throwThe ε e : m α⟧ Q = wp⟦MonadExceptOf.throw e : m α⟧ Q := rfl
 
 theorem Except.throw_apply :
-  wp⟦MonadExceptOf.throw e : Except ε α⟧.apply Q = Q.2.1 e := by
+  wp⟦MonadExceptOf.throw e : Except ε α⟧ Q = Q.2.1 e := by
     simp only [wp, PredTrans.pure, Id.run, MonadExceptOf.throw, PredTrans.pushExcept_apply]
 
 theorem ExceptT.throw_apply [Monad m] [WPMonad m ps] :
-  wp⟦MonadExceptOf.throw e : ExceptT ε m α⟧.apply Q = Q.2.1 e := by
+  wp⟦MonadExceptOf.throw e : ExceptT ε m α⟧ Q = Q.2.1 e := by
     simp only [wp, MonadExceptOf.throw, ExceptT.mk, pure_pure, pure, PredTrans.pure,
       PredTrans.pushExcept_apply]
 
 theorem EStateM.throw_apply :
-  wp⟦MonadExceptOf.throw e : EStateM ε σ α⟧.apply Q = Q.2.1 e := by
+  wp⟦MonadExceptOf.throw e : EStateM ε σ α⟧ Q = Q.2.1 e := by
     simp only [wp, MonadExceptOf.throw, EStateM.throw]
 
 theorem ReaderT.throw_apply [WP m sh] [Monad m] [MonadExceptOf ε m] :
-  wp⟦MonadExceptOf.throw (ε:=ε) e : ReaderT ρ m α⟧.apply Q = wp⟦MonadLift.monadLift (MonadExceptOf.throw (ε:=ε) e : m α) : ReaderT ρ m α⟧.apply Q := rfl
+  wp⟦MonadExceptOf.throw (ε:=ε) e : ReaderT ρ m α⟧ Q = wp⟦MonadLift.monadLift (MonadExceptOf.throw (ε:=ε) e : m α) : ReaderT ρ m α⟧ Q := rfl
 
 theorem StateT.throw_apply [WP m sh] [Monad m] [MonadExceptOf ε m] :
-  wp⟦MonadExceptOf.throw (ε:=ε) e : StateT ρ m α⟧.apply Q = wp⟦MonadLift.monadLift (MonadExceptOf.throw (ε:=ε) e : m α) : StateT ρ m α⟧.apply Q := rfl
+  wp⟦MonadExceptOf.throw (ε:=ε) e : StateT ρ m α⟧ Q = wp⟦MonadLift.monadLift (MonadExceptOf.throw (ε:=ε) e : m α) : StateT ρ m α⟧ Q := rfl
 
 theorem ExceptT.lift_throw_apply [WP m sh] [Monad m] [MonadExceptOf ε m] :
-  wp⟦MonadExceptOf.throw (ε:=ε) e : ExceptT ε' m α⟧.apply Q = wp⟦MonadExceptOf.throw (ε:=ε) e : m (Except ε' α)⟧.apply (fun | .ok a => Q.1 a | .error e => Q.2.1 e, Q.2.2) := by
+  wp⟦MonadExceptOf.throw (ε:=ε) e : ExceptT ε' m α⟧ Q = wp⟦MonadExceptOf.throw (ε:=ε) e : m (Except ε' α)⟧ (fun | .ok a => Q.1 a | .error e => Q.2.1 e, Q.2.2) := by
     simp only [wp, MonadExceptOf.throw, throwThe, PredTrans.pushExcept_apply]
     congr
     ext x
     split <;> rfl
 
 theorem MonadExcept.tryCatch_apply [MonadExceptOf ε m] [WP m ps] :
-  wp⟦tryCatch x h : m α⟧.apply Q = wp⟦MonadExceptOf.tryCatch x h : m α⟧.apply Q := rfl
+  wp⟦tryCatch x h : m α⟧ Q = wp⟦MonadExceptOf.tryCatch x h : m α⟧ Q := rfl
 
 theorem MonadExcept.tryCatchThe_apply [MonadExceptOf ε m] [WP m ps] :
-  wp⟦tryCatchThe ε x h : m α⟧.apply Q = wp⟦MonadExceptOf.tryCatch x h : m α⟧.apply Q := rfl
+  wp⟦tryCatchThe ε x h : m α⟧ Q = wp⟦MonadExceptOf.tryCatch x h : m α⟧ Q := rfl
 
 theorem Except.tryCatch_apply :
-  wp⟦MonadExceptOf.tryCatch x h : Except ε α⟧.apply Q = wp⟦x⟧.apply (Q.1, fun e => wp⟦h e⟧.apply Q, Q.2.2) := by
+  wp⟦MonadExceptOf.tryCatch x h : Except ε α⟧ Q = wp⟦x⟧ (Q.1, fun e => wp⟦h e⟧ Q, Q.2.2) := by
     simp only [wp, PredTrans.pure, Id.run, MonadExceptOf.tryCatch, Except.tryCatch,
       PredTrans.pushExcept_apply]
     cases x <;> simp
 
 theorem ExceptT.tryCatch_apply [Monad m] [WPMonad m ps] :
-  wp⟦MonadExceptOf.tryCatch x h : ExceptT ε m α⟧.apply Q = wp⟦x⟧.apply (Q.1, fun e => wp⟦h e⟧.apply Q, Q.2.2) := by
+  wp⟦MonadExceptOf.tryCatch x h : ExceptT ε m α⟧ Q = wp⟦x⟧ (Q.1, fun e => wp⟦h e⟧ Q, Q.2.2) := by
     simp only [wp, MonadExceptOf.tryCatch, ExceptT.tryCatch, ExceptT.mk, bind_bind,
       PredTrans.pushExcept_apply, PredTrans.bind_apply]
     congr
@@ -76,23 +76,23 @@ theorem ExceptT.tryCatch_apply [Monad m] [WPMonad m ps] :
 
 open EStateM.Backtrackable in
 theorem EStateM.tryCatch_apply {ε σ δ α x h Q} [EStateM.Backtrackable δ σ]:
-  wp⟦MonadExceptOf.tryCatch x h : EStateM ε σ α⟧.apply Q = fun s => wp⟦x⟧.apply (Q.1, fun e s' => wp⟦h e⟧.apply Q (restore s' (save s)), Q.2.2) s := by
+  wp⟦MonadExceptOf.tryCatch x h : EStateM ε σ α⟧ Q = fun s => wp⟦x⟧ (Q.1, fun e s' => wp⟦h e⟧ Q (restore s' (save s)), Q.2.2) s := by
     ext s;
     simp only [wp, MonadExceptOf.tryCatch, EStateM.tryCatch, bind_bind,
       PredTrans.pushExcept_apply, PredTrans.bind_apply]
     cases x s <;> simp
 
 theorem ReaderT.tryCatch_apply [WP m sh] [Monad m] [MonadExceptOf ε m] :
-  wp⟦MonadExceptOf.tryCatch (ε:=ε) x h : ReaderT ρ m α⟧.apply Q = fun r => wp⟦MonadExceptOf.tryCatch (ε:=ε) (x.run r) (fun e => (h e).run r) : m α⟧.apply (fun a => Q.1 a r, Q.2) := by
+  wp⟦MonadExceptOf.tryCatch (ε:=ε) x h : ReaderT ρ m α⟧ Q = fun r => wp⟦MonadExceptOf.tryCatch (ε:=ε) (x.run r) (fun e => (h e).run r) : m α⟧ (fun a => Q.1 a r, Q.2) := by
     simp only [wp, MonadExceptOf.tryCatch, tryCatchThe, PredTrans.pushArg_apply,
       PredTrans.map_apply, ReaderT.run]
 
 theorem StateT.tryCatch_apply [WP m sh] [Monad m] [MonadExceptOf ε m] :
-  wp⟦MonadExceptOf.tryCatch (ε:=ε) x h : StateT σ m α⟧.apply Q = fun s => wp⟦MonadExceptOf.tryCatch (ε:=ε) (x.run s) (fun e => (h e).run s) : m (α × σ)⟧.apply (fun as => Q.1 as.1 as.2, Q.2) := by
+  wp⟦MonadExceptOf.tryCatch (ε:=ε) x h : StateT σ m α⟧ Q = fun s => wp⟦MonadExceptOf.tryCatch (ε:=ε) (x.run s) (fun e => (h e).run s) : m (α × σ)⟧ (fun as => Q.1 as.1 as.2, Q.2) := by
     simp only [wp, MonadExceptOf.tryCatch, tryCatchThe, PredTrans.pushArg_apply, StateT.run]
 
 theorem ExceptT.lift_tryCatch_apply [WP m sh] [Monad m] [MonadExceptOf ε m] :
-  wp⟦MonadExceptOf.tryCatch (ε:=ε) x h : ExceptT ε' m α⟧.apply Q = wp⟦MonadExceptOf.tryCatch (ε:=ε) x h : m (Except ε' α)⟧.apply (fun | .ok a => Q.1 a | .error e => Q.2.1 e, Q.2.2) := by
+  wp⟦MonadExceptOf.tryCatch (ε:=ε) x h : ExceptT ε' m α⟧ Q = wp⟦MonadExceptOf.tryCatch (ε:=ε) x h : m (Except ε' α)⟧ (fun | .ok a => Q.1 a | .error e => Q.2.1 e, Q.2.2) := by
     simp only [wp, MonadExceptOf.tryCatch, tryCatchThe, PredTrans.pushExcept_apply, ExceptT.mk]
     congr
     ext x

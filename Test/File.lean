@@ -170,7 +170,7 @@ decreasing_by (repeat sorry)
 --derive_wp_simp FileM.append
 @[wp_simp]
 theorem FileM.append_apply :
-    wp⟦FileM.append bs⟧.apply Q = fun f => Q.1 ⟨⟩ (f.append bs) := by
+    wp⟦FileM.append bs⟧ Q = fun f => Q.1 ⟨⟩ (f.append bs) := by
   unfold FileM.append
   mstart
   mwp
@@ -227,7 +227,7 @@ def byteSize {s : Schema} (v : s.interp) : Nat :=
   | .array _, a => a.foldl (init := 0) (fun acc v => acc + byteSize v)
 
 theorem EStateM.wp_to_tuple {ε σ α} {x : EStateM ε σ α} {Q : PostCond α (.except ε (.arg σ .pure))} {s : σ}
-  (h : wp⟦x⟧.apply Q s) : ⦃(· = s)⦄ x ⦃Q⦄ := by intro _ hs; subst hs; exact h
+  (h : wp⟦x⟧ Q s) : ⦃(· = s)⦄ x ⦃Q⦄ := by intro _ hs; subst hs; exact h
 
 theorem serialize_byteSize {s : Schema} (v : s.interp) (f : File) :
   match s.serialize v f with
@@ -269,7 +269,7 @@ theorem test {s : Schema} (v : s.interp) (f : File)
              ∧ (∀ (xs : List.Zipper v.toList) (b : Schema.byte.interp) (f : File), I.1 ((), xs) (f.append #[b]))
              ∧ (∀ (xs : List.Zipper v.toList) (w : Schema.word.interp) (f : File), I.1 ((), xs) (f.append <| #[w >>> 24, w >>> 16, w >>> 8, w].map (·.toUInt8))))
   :
-  wp⟦s.serialize v⟧.apply Q f := by
+  wp⟦s.serialize v⟧ Q f := by
   apply Schema.serialize.fun_cases _ ?case1 ?case2 ?case3 ?case4 s v
   case case1 => unfold Schema.serialize; mstart; mwp; mpure_intro; intro v; apply case1
   case case2 => unfold Schema.serialize; mstart; mwp; mpure_intro; intro v; apply case2
@@ -308,7 +308,7 @@ theorem test {s : Schema} (v : s.interp) (f : File)
         refine ⟨I, hpre, hpost, hexcept, hcase1, hcase2⟩
 
 def serialized {s : Schema} (v : s.interp) (f : File) : Prop :=
-  wp⟦s.serialize v⟧.apply
+  wp⟦s.serialize v⟧
     (⇓ _ f' => f'.bytes.size = byteSize v ∧ f.bytes.extract f.pos.val (f.pos.val + byteSize v) = f'.bytes)
     File.mkEmpty
 
@@ -406,12 +406,12 @@ example :
   = (
   (fun f' => ⌜canRead n f' ∧ f' = f⌝)
   ⊢ₛ
-  wp⟦FileM.read n⟧.apply (⇓ v f' => hasRead v f f')
+  wp⟦FileM.read n⟧ (⇓ v f' => hasRead v f f')
   )
   := rfl
 
 example :
-  wp⟦FileM.read n⟧.apply (⇓ v f' => hasRead v f f') f
+  wp⟦FileM.read n⟧ (⇓ v f' => hasRead v f f') f
   = (
   match FileM.read n f with
   | .ok v f' => hasRead v f f'

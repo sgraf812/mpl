@@ -20,12 +20,12 @@ namespace MPL
 open Lean Meta Elab Tactic
 
 theorem wp_apply_triple_conseq {m : Type → Type} {ps : PostShape} [WP m ps] {α} {x : m α} {P : Assertion ps} {Q Q' : PostCond α ps}
-  (h : ⦃P⦄ x ⦃Q⦄) (hpost : SPred.entails (wp⟦x⟧.apply Q) (wp⟦x⟧.apply Q')) :
-  P.entails (wp⟦x⟧.apply Q') := SPred.entails.trans h hpost
+  (h : ⦃P⦄ x ⦃Q⦄) (hpost : SPred.entails (wp⟦x⟧ Q) (wp⟦x⟧ Q')) :
+  P.entails (wp⟦x⟧ Q') := SPred.entails.trans h hpost
 
 theorem wp_apply_triple_conseq_mono {m : Type → Type} {ps : PostShape} [WP m ps] {α} {x : m α} {P : Assertion ps} {Q Q' : PostCond α ps}
   (h : ⦃P⦄ x ⦃Q⦄) (hpost : Q.entails Q') :
-  P.entails (wp⟦x⟧.apply Q') := wp_apply_triple_conseq h (wp⟦x⟧.mono _ _ hpost)
+  P.entails (wp⟦x⟧ Q') := wp_apply_triple_conseq h ((wp x).mono _ _ hpost)
 
 macro "xstart" : tactic => `(tactic| unfold triple)
 
@@ -63,9 +63,9 @@ def xapp_n_no_xbind (goal : MVarId) (spec : Option (TSyntax `term)) (thm : Name)
       if specs.isEmpty then
         throwError s!"no specs found for {x}"
       if specs.size > 1 then
-        throwError s!"multiple specs found for {x}: {specs}"
+        throwError s!"multiple specs found for {x}: {specs.map (·.fst.name)}"
       else
-        let gs ← triple_goal.apply (← mkConstWithFreshMVarLevels specs[0]!)
+        let gs ← triple_goal.apply (← mkConstWithFreshMVarLevels specs[0]!.fst.name)
         pushGoals gs
         pruneSolvedGoals
     else

@@ -50,31 +50,31 @@ instance ExceptT.instMapMonadMorphism [Monad m] [MonadMorphism m m f] :
 -- I found that relying on specialised lemmas is both much simpler and more reliable.
 theorem StateT.monadMap_apply (m : Type → Type u) [Monad m] [WP m psm]
   (f : ∀{β}, m β → m β) {α} (x : StateT σ m α) (Q : PostCond α (.arg σ psm)) :
-    wp⟦mmap (m:=m) f x⟧.apply Q = fun s => wp⟦f (x.run s)⟧.apply (fun (a, s) => Q.1 a s, Q.2) := by
+    wp⟦mmap (m:=m) f x⟧ Q = fun s => wp⟦f (x.run s)⟧ (fun (a, s) => Q.1 a s, Q.2) := by
   simp only [wp, MonadFunctor.monadMap, PredTrans.pushArg_apply, StateT.run]
 
 theorem ReaderT.monadMap_apply (m : Type → Type u) [Monad m] [WP m psm]
   (f : ∀{β}, m β → m β) {α} (x : ReaderT ρ m α) (Q : PostCond α (.arg ρ psm)) :
-    wp⟦mmap (m:=m) f x⟧.apply Q = fun s => wp⟦f (x.run s)⟧.apply (fun a => Q.1 a s, Q.2) := by
+    wp⟦mmap (m:=m) f x⟧ Q = fun s => wp⟦f (x.run s)⟧ (fun a => Q.1 a s, Q.2) := by
   simp only [wp, MonadFunctor.monadMap, PredTrans.pushArg_apply, PredTrans.map_apply, ReaderT.run]
 
 theorem ExceptT.monadMap_apply (m : Type → Type u) [Monad m] [WP m psm]
   (f : ∀{β}, m β → m β) {α} (x : ExceptT ε m α) (Q : PostCond α (.except ε psm)) :
-    wp⟦mmap (m:=m) f x⟧.apply Q = wp⟦f x.run⟧.apply (fun | .ok a => Q.1 a | .error e => Q.2.1 e, Q.2.2) := by
+    wp⟦mmap (m:=m) f x⟧ Q = wp⟦f x.run⟧ (fun | .ok a => Q.1 a | .error e => Q.2.1 e, Q.2.2) := by
   simp only [wp, MonadFunctor.monadMap, PredTrans.pushExcept_apply, ExceptT.run]
   congr; ext; split <;> rfl
 
 theorem ReaderT.withReader_apply [WP m psm] :
-  wp⟦MonadWithReaderOf.withReader f x : ReaderT ρ m α⟧.apply Q = fun r => wp⟦x⟧.apply (fun a _ => Q.1 a r, Q.2) (f r) := rfl
+  wp⟦MonadWithReaderOf.withReader f x : ReaderT ρ m α⟧ Q = fun r => wp⟦x⟧ (fun a _ => Q.1 a r, Q.2) (f r) := rfl
 
 theorem MonadWithReaderOf.withReader_apply [MonadWithReaderOf ρ m] [WP m msh] [WP n nsh] [MonadFunctor m n] [MonadFunctor (PredTrans msh) (PredTrans nsh)] (f : ρ → ρ) (x : n α) :
-  wp⟦MonadWithReaderOf.withReader f x⟧.apply Q = wp⟦mmap (m:=m) (MonadWithReaderOf.withReader f) x⟧.apply Q := rfl
+  wp⟦MonadWithReaderOf.withReader f x⟧ Q = wp⟦mmap (m:=m) (MonadWithReaderOf.withReader f) x⟧ Q := rfl
 
 theorem MonadWithReaderOf.withTheReader_apply [MonadWithReaderOf ρ m] [WP m sh] (f : ρ → ρ) (x : m α) :
-  wp⟦withTheReader ρ f x⟧.apply Q = wp⟦MonadWithReaderOf.withReader f x⟧.apply Q := rfl
+  wp⟦withTheReader ρ f x⟧ Q = wp⟦MonadWithReaderOf.withReader f x⟧ Q := rfl
 
 theorem MonadWithReader.withReader_apply [MonadWithReaderOf ρ m] [WP m sh] (f : ρ → ρ) (x : m α) :
-  wp⟦MonadWithReader.withReader f x⟧.apply Q = wp⟦MonadWithReaderOf.withReader f x⟧.apply Q := rfl
+  wp⟦MonadWithReader.withReader f x⟧ Q = wp⟦MonadWithReaderOf.withReader f x⟧ Q := rfl
 
 example :
   wp (m:= ExceptT Nat (StateT Nat (ReaderT Bool Id))) (withTheReader Bool not (do if (← read) then return 0 else return 1)) =

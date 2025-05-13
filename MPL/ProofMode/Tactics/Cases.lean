@@ -210,7 +210,7 @@ private theorem blah3 {σs} {P Q H T : SPred σs}
 elab_rules : tactic
   | `(tactic| mcases $hyp:ident with $pat:mcasesPat) => do
   let pat ← liftMacroM <| MCasesPat.parse pat
-  let (mvar, goal) ← mStart (← getMainGoal)
+  let (mvar, goal) ← mStartMVar (← getMainGoal)
   mvar.withContext do
 
   let some focus := goal.focusHyp hyp.getId | throwError "unknown hypothesis '{hyp}'"

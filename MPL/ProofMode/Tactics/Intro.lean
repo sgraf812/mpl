@@ -90,7 +90,7 @@ macro_rules
 elab_rules : tactic
   | `(tactic| mintro $ident:binderIdent) => do
 
-  let (mvar, goal) ← mStart (← getMainGoal)
+  let (mvar, goal) ← mStartMVar (← getMainGoal)
   mvar.withContext do
 
   let goals ← IO.mkRef []
@@ -109,7 +109,7 @@ example {σs : List Type} (Q : SPred σs) (H : Q ⊢ₛ Q) : Q ⊢ₛ Q := by
 elab_rules : tactic
   | `(tactic| mintro ∀$ident:binderIdent) => do
 
-  let (mvar, goal) ← mStart (← getMainGoal)
+  let (mvar, goal) ← mStartMVar (← getMainGoal)
   mvar.withContext do
 
   let goals ← IO.mkRef []

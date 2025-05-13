@@ -12,6 +12,13 @@ import MPL.SpecAttr
 This module contains Hoare triple specifications for some functions in Core.
 -/
 
+namespace Std.Range
+
+abbrev toList (r : Std.Range) : List Nat :=
+  List.range' r.start ((r.stop - r.start + r.step - 1) / r.step) r.step
+
+end Std.Range
+
 namespace MPL
 
 namespace List
@@ -53,13 +60,33 @@ theorem Zipper.tail_suff {l : List α} {s : Zipper l} (h : s.suff = hd::tl) : (s
 
 end List
 
+theorem Specs.pure' [Monad m] [WPMonad m ps] {P : Assertion ps} {Q : PostCond α ps}
+    (h : P ⊢ₛ Q.1 a) :
+    ⦃P⦄ Pure.pure (f:=m) a ⦃Q⦄ := Triple.pure a h
+
 @[spec]
 theorem Specs.pure {m : Type → Type} {ps : PostShape} [Monad m] [WPMonad m ps] {α} {a : α} {Q : PostCond α ps} :
-  ⦃Q.1 a⦄ (pure (f:=m) a) ⦃Q⦄ := Triple.pure a .rfl
+  ⦃Q.1 a⦄ Pure.pure (f:=m) a ⦃Q⦄ := Specs.pure' .rfl
+
+theorem Specs.bind' [Monad m] [WPMonad m ps] {x : m α} {f : α → m β} {P : Assertion ps} {Q : PostCond β ps}
+    (h : ⦃P⦄ x ⦃(fun a => wp⟦f a⟧ Q, Q.2)⦄) :
+    ⦃P⦄ (x >>= f) ⦃Q⦄ := Triple.bind x f h (fun _ => .rfl)
 
 @[spec]
 theorem Specs.bind {m : Type → Type} {ps : PostShape} [Monad m] [WPMonad m ps] {α β} {x : m α} {f : α → m β} {Q : PostCond β ps} :
-  ⦃wp⟦x⟧.apply (fun a => wp⟦f a⟧.apply Q, Q.2)⦄ (x >>= f) ⦃Q⦄ := Triple.bind x f .rfl (fun _ => .rfl)
+  ⦃wp⟦x⟧ (fun a => wp⟦f a⟧ Q, Q.2)⦄ (x >>= f) ⦃Q⦄ := Specs.bind' .rfl
+
+@[spec]
+theorem Specs.ite {α m ps} {P : Assertion ps} {Q : PostCond α ps} (c : Prop) [Decidable c] [WP m ps] (t : m α) (e : m α)
+    (ifTrue : c → ⦃P⦄ t ⦃Q⦄) (ifFalse : ¬c → ⦃P⦄ e ⦃Q⦄) :
+    ⦃P⦄ if c then t else e ⦃Q⦄ := by
+  split <;> apply_rules
+
+@[spec]
+theorem Specs.dite {α m ps} {P : Assertion ps} {Q : PostCond α ps} (c : Prop) [Decidable c] [WP m ps] (t : c → m α) (e : ¬ c → m α)
+    (ifTrue : (h : c) → ⦃P⦄ t h ⦃Q⦄) (ifFalse : (h : ¬ c) → ⦃P⦄ e h ⦃Q⦄) :
+    ⦃P⦄ if h : c then t h else e h ⦃Q⦄ := by
+  split <;> apply_rules
 
 @[spec]
 theorem Specs.forIn'_list {α : Type} {β : Type} {m : Type → Type v} {ps : PostShape}
@@ -162,6 +189,36 @@ theorem Specs.foldlM_list_const_inv {α : Type} {β : Type} {m : Type → Type v
       ⦃(fun b' => inv.1 b', inv.2)⦄) :
   ⦃inv.1 init⦄ List.foldlM f init xs ⦃inv⦄ :=
     Specs.foldlM_list (fun p => inv.1 p.1, inv.2) (fun b _ hd _ _ => step hd b)
+
+@[spec]
+theorem Specs.forIn'_range {β : Type} {m : Type → Type v} {ps : PostShape}
+    [Monad m] [WPMonad m ps]
+    {xs : Std.Range} {init : β} {f : (a : Nat) → a ∈ xs → β → m (ForInStep β)}
+    (inv : PostCond (β × List.Zipper xs.toList) ps)
+    (step : ∀ b rpref x (hx : x ∈ xs) suff (h : xs.toList = rpref.reverse ++ x :: suff),
+        ⦃inv.1 (b, ⟨rpref, x::suff, by simp [h]⟩)⦄
+        f x hx b
+        ⦃(fun r => match r with
+                   | .yield b' => inv.1 (b', ⟨x::rpref, suff, by simp [h]⟩)
+                   | .done b' => inv.1 (b', ⟨xs.toList.reverse, [], by simp⟩), inv.2)⦄) :
+    ⦃inv.1 (init, ⟨[], xs.toList, by simp⟩)⦄ forIn' xs init f ⦃(fun b => inv.1 (b, ⟨xs.toList.reverse, [], by simp⟩), inv.2)⦄ := by
+  simp only [Std.Range.forIn'_eq_forIn'_range', Std.Range.size, Std.Range.size.eq_1]
+  apply Specs.forIn'_list inv (fun b rpref x hx suff h => step b rpref x (Std.Range.mem_of_mem_range' hx) suff h)
+
+@[spec]
+theorem Specs.forIn_range {β : Type} {m : Type → Type v} {ps : PostShape}
+    [Monad m] [WPMonad m ps]
+    {xs : Std.Range} {init : β} {f : Nat → β → m (ForInStep β)}
+    (inv : PostCond (β × List.Zipper xs.toList) ps)
+    (step : ∀ b rpref x suff (h : xs.toList = rpref.reverse ++ x :: suff),
+        ⦃inv.1 (b, ⟨rpref, x::suff, by simp [h]⟩)⦄
+        f x b
+        ⦃(fun r => match r with
+                   | .yield b' => inv.1 (b', ⟨x::rpref, suff, by simp [h]⟩)
+                   | .done b' => inv.1 (b', ⟨xs.toList.reverse, [], by simp⟩), inv.2)⦄) :
+    ⦃inv.1 (init, ⟨[], xs.toList, by simp⟩)⦄ forIn xs init f ⦃(fun b => inv.1 (b, ⟨xs.toList.reverse, [], by simp⟩), inv.2)⦄ := by
+  simp only [Std.Range.forIn_eq_forIn_range', Std.Range.size]
+  apply Specs.forIn_list inv step
 
 @[spec]
 theorem Specs.forIn'_array {α : Type} {β : Type} {m : Type → Type v} {ps : PostShape}

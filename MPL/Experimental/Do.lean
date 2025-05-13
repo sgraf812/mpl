@@ -42,7 +42,7 @@ syntax "invariant " withPosition(basicFun) ("by " withPosition(Tactic.tacticSeqI
 -- Reasons for why assert and invariant should ultimately be elaborated as part of do-notation:
 -- 1. It would be far simpler to elaborate `invariant` with the correct binding of let-mut vars.
 -- 2. We could attach the syntax of `by ?prf` blocks as metadata to the elaborated construct (something like `forInWithInvariant`, resp. `assertGadget`).
---    This metadata could then be elaborated by the `xapp` tactic or a specialized simproc for proving `wp⟦forInWithInvariant⟧.apply Q` and `wp⟦assertGadget⟧.apply Q`.
+--    This metadata could then be elaborated by the `xapp` tactic or a specialized simproc for proving `wp⟦forInWithInvariant⟧ Q` and `wp⟦assertGadget⟧ Q`.
 --    Presently I do not know how to achieve this with a simple `invariant` macro.
 -- 3. We could then elaborate `invariant` together with the `doElem` that follows (or precedes).
 --    (Currently, we can only expand to another `doElem`, but not elab to an `Expr` and a `doElem`.)
@@ -66,11 +66,11 @@ abbrev ensuresGadget {α : Type} {m : Type → Type u} {ps : PostShape} [WP m ps
 
 @[wp_simp]
 theorem requiresGadget_apply [WP m sh] (x : m α) :
-  wp⟦requiresGadget P x⟧.apply Q = wp⟦x⟧.apply Q := rfl
+  wp⟦requiresGadget P x⟧ Q = wp⟦x⟧ Q := rfl
 
 @[wp_simp]
 theorem ensuresGadget_apply [WP m sh] (x : m α) :
-  wp⟦ensuresGadget P x⟧.apply Q = wp⟦x⟧.apply Q := rfl
+  wp⟦ensuresGadget P x⟧ Q = wp⟦x⟧ Q := rfl
 
 def assertGadget {m : Type → Type u} {ps : PostShape} [Monad m] [WP m ps] (_p : Assertion ps) : m Unit :=
   pure ()
@@ -85,15 +85,15 @@ def invariantGadget2.{u,v} {β : Type v} {m : Type → Type u} {ps : PostShape} 
 
 @[wp_simp]
 theorem assertGadget_apply {m : Type → Type u} {ps : PostShape} [Monad m] [WP m ps] {P : Assertion ps} {Q : PostCond Unit ps} : -- (h : Q.1 () ≤ P) :
-  wp⟦assertGadget P : m Unit⟧.apply Q = wp⟦pure () : m Unit⟧.apply Q := rfl
+  wp⟦assertGadget P : m Unit⟧ Q = wp⟦pure () : m Unit⟧ Q := rfl
 
 @[wp_simp]
 theorem invariantGadget_apply {m : Type → Type u₂} {ps : PostShape} {α : Type} {β : Type} [Monad m] [WPMonad m ps]
   (xs : List α) (init : β) (f : α → β → m (ForInStep β)) (inv : β → {α : Type} → {xs : List α} → List.Zipper xs → Assertion ps) (Q : PostCond β ps) :
-  wp⟦invariantGadget2 inv : m Unit⟧.apply (no_index (fun _ => wp⟦forIn xs init f⟧.apply Q, Q.2)) = wp⟦forInWithInvariant xs init f (PostCond.total fun (β, xs) => (inv β xs))⟧.apply Q := by
+  wp⟦invariantGadget2 inv : m Unit⟧ (no_index (fun _ => wp⟦forIn xs init f⟧ Q, Q.2)) = wp⟦forInWithInvariant xs init f (PostCond.total fun (β, xs) => (inv β xs))⟧ Q := by
     calc
-      _ = wp⟦invariantGadget2 inv >>= fun _ => forIn xs init f⟧.apply Q := by simp
-      _ = wp⟦forInWithInvariant xs init f (PostCond.total fun (β, xs) => (inv β xs))⟧.apply Q := rfl
+      _ = wp⟦invariantGadget2 inv >>= fun _ => forIn xs init f⟧ Q := by simp
+      _ = wp⟦forInWithInvariant xs init f (PostCond.total fun (β, xs) => (inv β xs))⟧ Q := rfl
 
 macro_rules
   | `(doElem| assert $xs* => $p) => `(doElem| assertGadget (fun $xs* => $p))

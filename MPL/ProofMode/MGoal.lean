@@ -24,10 +24,10 @@ instance : PropAsSPredTautology (P ⊢ₛ Q) spred(P → Q) where
 instance : PropAsSPredTautology (σs := []) φ φ where
   iff := true_imp_iff.symm
 
-theorem start_entails (φ : Prop) [PropAsSPredTautology φ P] : (⊢ₛ P) → φ :=
+theorem start_entails {φ : Prop} [PropAsSPredTautology φ P] : (⊢ₛ P) → φ :=
   PropAsSPredTautology.iff.mpr
 
-theorem elim_entails (φ : Prop) [PropAsSPredTautology φ P] : φ → (⊢ₛ P) :=
+theorem elim_entails {φ : Prop} [PropAsSPredTautology φ P] : φ → (⊢ₛ P) :=
   PropAsSPredTautology.iff.mp
 
 @[match_pattern] def mgoalAnnotation := `mgoal

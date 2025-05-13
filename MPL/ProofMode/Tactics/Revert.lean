@@ -27,7 +27,7 @@ partial def mRevertStep (goal : MGoal) (ref : TSyntax `ident) (k : MGoal → Met
 syntax (name := mrevert) "mrevert" colGt ident : tactic
 
 elab "mrevert" colGt h:ident : tactic => do
-  let (mvar, goal) ← mStart (← getMainGoal)
+  let (mvar, goal) ← mStartMVar (← getMainGoal)
   mvar.withContext do
 
   let goals ← IO.mkRef []

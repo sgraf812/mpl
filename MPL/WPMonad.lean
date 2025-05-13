@@ -25,46 +25,46 @@ class WPMonad (m : Type → Type u) (ps : outParam PostShape) [Monad m]
   extends LawfulMonad m, WP m ps, MonadMorphism m (PredTrans ps) wp where
 
 theorem WP.pure_apply [Monad m] [WPMonad m ps] (a : α) (Q : PostCond α ps) :
-  wp⟦pure (f:=m) a⟧.apply Q = let x := a; Q.1 x := by
+  wp⟦pure (f:=m) a⟧ Q = let x := a; Q.1 x := by
     simp only [pure_pure, PredTrans.pure_apply]
 
 theorem WP.bind_apply [Monad m] [WPMonad m ps] (x : m α) (f : α → m β) (Q : PostCond β ps) :
-  wp⟦x >>= f⟧.apply Q = wp⟦x⟧.apply (fun a => wp⟦f a⟧.apply Q, Q.2) := by
+  wp⟦x >>= f⟧ Q = wp⟦x⟧ (fun a => wp⟦f a⟧ Q, Q.2) := by
     simp only [bind_bind, PredTrans.bind_apply]
 
 theorem WP.map_apply [Monad m] [WPMonad m ps] (f : α → β) (x : m α) (Q : PostCond β ps) :
-  wp⟦f <$> x⟧.apply Q = wp⟦x⟧.apply (fun a => Q.1 (f a), Q.2) := by
+  wp⟦f <$> x⟧ Q = wp⟦x⟧ (fun a => Q.1 (f a), Q.2) := by
     simp only [map_map, PredTrans.map_apply]
 
 theorem WP.seq_apply [Monad m] [WPMonad m ps] (f : m (α → β)) (x : m α) (Q : PostCond β ps) :
-  wp⟦f <*> x⟧.apply Q = wp⟦f⟧.apply (fun f => wp⟦x⟧.apply (fun a => Q.1 (f a), Q.2), Q.2) := by
+  wp⟦f <*> x⟧ Q = wp⟦f⟧ (fun f => wp⟦x⟧ (fun a => Q.1 (f a), Q.2), Q.2) := by
     simp only [seq_seq, PredTrans.seq_apply]
 
 theorem WP.morph_pure_apply [Monad m] [Monad n] [LawfulMonad m] [MonadMorphism m n morph] [WPMonad n ps]
   (a : α) (Q : PostCond α ps) :
-  wp⟦morph (pure a) : n α⟧.apply Q = wp⟦pure a : n α⟧.apply Q := by
+  wp⟦morph (pure a) : n α⟧ Q = wp⟦pure a : n α⟧ Q := by
     simp only [pure_pure]
 
 theorem WP.morph_bind_apply [Monad m] [Monad n] [LawfulMonad m] [MonadMorphism m n morph] [WPMonad n ps]
   (x : m α) (f : α → m β) (Q : PostCond β ps) :
-  wp⟦morph (x >>= f) : n β⟧.apply Q = wp⟦morph x >>= fun a => morph (f a) : n β⟧.apply Q := by
+  wp⟦morph (x >>= f) : n β⟧ Q = wp⟦morph x >>= fun a => morph (f a) : n β⟧ Q := by
     simp only [bind_bind]
 
 theorem WP.morph_map_apply [Monad m] [Monad n] [LawfulMonad m] [MonadMorphism m n morph] [WPMonad n ps]
   (f : α → β) (x : m α) (Q : PostCond β ps) :
-  wp⟦morph (f <$> x) : n β⟧.apply Q = wp⟦f <$> morph x : n β⟧.apply Q := by
+  wp⟦morph (f <$> x) : n β⟧ Q = wp⟦f <$> morph x : n β⟧ Q := by
     simp only [map_map]
 
 theorem WP.morph_seq_apply [Monad m] [Monad n] [LawfulMonad m] [MonadMorphism m n morph] [WPMonad n ps]
   (f : m (α → β)) (x : m α) (Q : PostCond β ps) :
-  wp⟦morph (f <*> x) : n β⟧.apply Q = wp⟦morph f <*> morph x : n β⟧.apply Q := by
+  wp⟦morph (f <*> x) : n β⟧ Q = wp⟦morph f <*> morph x : n β⟧ Q := by
     simp only [seq_seq]
 
 theorem WP.morph_dite_apply {ps} {Q : PostCond α ps} (c : Prop) [Decidable c] [Monad m] [Monad n] [MonadMorphism m n morph] [WP n ps] (t : c → m α) (e : ¬ c → m α) :
-  wp⟦morph (if h : c then t h else e h)⟧.apply Q = if h : c then wp⟦morph (t h)⟧.apply Q else wp⟦morph (e h)⟧.apply Q := by split <;> rfl
+  wp⟦morph (if h : c then t h else e h)⟧ Q = if h : c then wp⟦morph (t h)⟧ Q else wp⟦morph (e h)⟧ Q := by split <;> rfl
 
 theorem WP.morph_ite_apply {ps} {Q : PostCond α ps} (c : Prop) [Decidable c] [Monad m] [Monad n] [MonadMorphism m n morph] [WP n ps] (t : m α) (e : m α) :
-  wp⟦morph (if c then t else e)⟧.apply Q = if c then wp⟦morph t⟧.apply Q else wp⟦morph e⟧.apply Q := by split <;> rfl
+  wp⟦morph (if c then t else e)⟧ Q = if c then wp⟦morph t⟧ Q else wp⟦morph e⟧ Q := by split <;> rfl
 
 instance Idd.instWPMonad : WPMonad Idd .pure where
   pure_pure a := by ext; simp only [wp, Idd.run_pure, instMonadPredTrans]
