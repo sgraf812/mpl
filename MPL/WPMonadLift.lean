@@ -88,6 +88,9 @@ theorem EStateM.get_apply :
 theorem MonadStateOf.get_apply [MonadStateOf σ m] [MonadLift m n] [WP n _] :
   wp⟦MonadStateOf.get : n σ⟧ Q = wp⟦MonadLift.monadLift (MonadStateOf.get : m σ) : n σ⟧ Q := rfl
 
+#discr_tree_simp_key StateT.get_apply
+#discr_tree_simp_key MonadStateOf.get_apply
+
 theorem MonadStateOf.getThe_apply [WP m sh] [MonadStateOf σ m] :
   wp⟦getThe σ : m σ⟧ Q = wp⟦MonadStateOf.get : m σ⟧ Q := rfl
 

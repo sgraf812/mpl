@@ -27,11 +27,18 @@ theorem Spec.entails_partial {α} {ps : PostShape} (p : PostCond α ps) (q : α 
   (∀ a, p.1 a ⊢ₛ q a) → p ⊢ₚ PostCond.partial q := (PostCond.entails_partial p q).mpr
 
 def findSpec (database : SpecTheorems) (prog : Expr) : MetaM Name := do
-  unless prog.getAppFn'.isConst do throwError s!"not an application of a constant: {prog}"
-  let specs ← database.specs.getMatch prog
-  logInfo s!"found {specs.map (·.proof)} for {prog}"
-  if specs.isEmpty then throwError s!"no specs found for {prog}"
-  if specs.size > 1 then throwError s!"multiple specs found for {prog}: {specs.map (·.proof)}"
+  unless prog.getAppFn'.isConst do throwError m!"not an application of a constant: {prog}"
+  let candidates ← database.specs.getMatch prog
+  let candidates := candidates.insertionSort fun s₁ s₂ => s₁.priority < s₂.priority
+  let specs ← candidates.filterM fun spec => do
+    let specProg := spec.prog.instantiateLevelParams spec.levelParams (← mkFreshLevelMVars spec.levelParams.length)
+    let (_, _, specProg) ← forallMetaTelescope specProg
+    -- logInfo m!"param: {specProg.hasLevelParam}, mvar: {specProg.hasLevelMVar}"
+    let b ← withAssignableSyntheticOpaque <| isDefEq prog specProg
+    -- logInfo s!"specProg: {specProg}, prog: {prog}, b: {b}"
+    return b
+  if specs.isEmpty then throwError m!"No specs found for {indentExpr prog}\nCandidates: {candidates.map (·.proof)}"
+  -- if specs.size > 1 then throwError s!"multiple specs found for {prog}: {specs.map (·.proof)}"
   return specs[0]!.proof
 
 def instantiateSpec (spec : Expr) (expectedTy : Expr) : MetaM (Expr × List MVarId) := do

@@ -31,17 +31,19 @@ partial def mIntro [Monad m] [MonadControlT MetaM m] (goal : MGoal) (ident : TSy
     return (a, prf)
 
 -- This is regular MVar.intro, but it takes care not to leave the proof mode by preserving metadata
-partial def mIntroForall (goal : MGoal) (ident : TSyntax ``binderIdent) (k : MGoal → MetaM (α × Expr)) : MetaM (α × Expr) := do
-  let some (_type, σ, σs') := (← whnf goal.σs).app3? ``List.cons | throwError "Ambient state list not a cons {goal.σs}"
+partial def mIntroForall [Monad m] [MonadControlT MetaM m] [MonadLiftT MetaM m] (goal : MGoal) (ident : TSyntax ``binderIdent) (k : MGoal → m (α × Expr)) : m (α × Expr) :=
+  controlAt MetaM fun map => do
+  let some (_type, σ, σs') := (← whnf goal.σs).app3? ``List.cons | liftMetaM <| throwError "Ambient state list not a cons {goal.σs}"
   let name ← match ident with
   | `(binderIdent| $name:ident) => pure name.getId
-  | `(binderIdent| $_) => mkFreshUserName `s
+  | `(binderIdent| $_) => liftMetaM <| mkFreshUserName `s
   withLocalDeclD name σ fun s => do
     let H := betaRevPreservingHypNames σs' goal.hyps #[s]
     let T := goal.target.betaRev #[s]
-    let (a, prf) ← k { σs:=σs', hyps:=H, target:=T }
-    let prf ← mkLambdaFVars #[s] prf
-    return (a, mkApp5 (mkConst ``SPred.entails_cons_intro) σ σs' goal.hyps goal.target prf)
+    map do
+      let (a, prf) ← k { σs:=σs', hyps:=H, target:=T }
+      let prf ← mkLambdaFVars #[s] prf
+      return (a, mkApp5 (mkConst ``SPred.entails_cons_intro) σ σs' goal.hyps goal.target prf)
 
 /--
   Like `rcases`, but operating on stateful hypotheses.

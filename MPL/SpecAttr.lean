@@ -15,6 +15,8 @@ initialize registerTraceClass `mpl.spec.attr (inherited := true)
 
 structure SpecTheorem where
   keys : Array DiscrTree.Key
+  levelParams : List Name -- Level oparams of the theorem definition
+  prog : Expr -- the expr key test for matching, in ∀-quantified form. keys = (← mkPath (← forallMetaTelescope prog).3)
   proof : Name -- TODO: Could be Expr, as for `SimpTheorem`
   priority : Nat  := eval_prio default -- TODO: unused
   origin : Origin
@@ -30,18 +32,19 @@ structure SpecTheorems where
 
 abbrev SpecExtension := SimpleScopedEnvExtension SpecEntry SpecTheorems
 
-private def mkSpecTheorem (origin : Origin) (type : Expr) (proof : Name) (prio : Nat) : MetaM SpecTheorem := do
+private def mkSpecTheorem (origin : Origin) (type : Expr) (levelParams : List Name) (proof : Name) (prio : Nat) : MetaM SpecTheorem := do
   -- cf. mkSimpTheoremCore
   let type ← instantiateMVars type
   withNewMCtxDepth do
-  let (_, _, type) ← forallMetaTelescopeReducing type
+  let (xs, _, type) ← forallMetaTelescopeReducing type
   let type ← whnfR type
   let_expr Triple _m _ps _inst _α prog _P _Q := type
     | throwError "unexpected kind of spec theorem; not a triple{indentExpr type}"
   let f := prog.getAppFn'
   unless f.isConst do throwError s!"not an application of a constant: {prog}"
   let keys ← DiscrTree.mkPath prog (noIndexAtArgs := false)
-  return { keys, proof, origin, rfl := false, priority := prio }
+  -- logInfo m!"mkSpecTheorem: {keys}, proof: {proof}"
+  return { keys, levelParams, prog := (← mkForallFVars xs prog), proof, origin, rfl := false, priority := prio }
 
 private def mkSpecTheoremFromConst (declName : Name) (prio : Nat) : MetaM SpecTheorem := do
   -- cf. mkSimpTheoremsFromConst
@@ -53,13 +56,18 @@ private def mkSpecTheoremFromConst (declName : Name) (prio : Nat) : MetaM SpecTh
     let type ← inferType val
     unless (← isProp type) do
       throwError "invalid 'spec', proposition expected{indentExpr type}"
-    mkSpecTheorem origin type declName prio
-
-def addSpecTheorem (ext : SpecExtension) (declName : Name) (prio : Nat) (attrKind : AttributeKind) : MetaM Unit := do
-  ext.add (← mkSpecTheoremFromConst declName prio) attrKind
+    mkSpecTheorem origin type cinfo.levelParams declName prio
 
 def addSpecTheoremEntry (d : SpecTheorems) (e : SpecTheorem) : SpecTheorems :=
   { d with specs := d.specs.insertCore e.keys e }
+
+def addSpecTheorem (ext : SpecExtension) (declName : Name) (prio : Nat) (attrKind : AttributeKind) : MetaM Unit := do
+  let thm ← mkSpecTheoremFromConst declName prio
+  -- logInfo m!"addSpecTheorem: {thm.keys}, proof: {thm.proof}"
+  -- let thms := ext.getState (← getEnv)
+  -- let grps := thms.specs.values.groupByKey (·.keys)
+  -- logInfo m!"thms: {grps.map (fun k v => v.map (·.proof)) |>.toList}"
+  ext.add thm attrKind
 
 def mkSpecExt : IO SpecExtension :=
   registerSimpleScopedEnvExtension {

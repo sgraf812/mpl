@@ -28,8 +28,8 @@ theorem mkFreshNat_spec [Monad m] [WPMonad m sh] :
   ⦃⇓ r => ⌜r = n ∧ #fst = n + 1 ∧ #snd = o⌝⦄ := by
   unfold mkFreshNat
   mintro _
-  set_option trace.mpl.tactics.spec true in
-  mvcgen
+  -- set_option trace.mpl.tactics.spec true in
+  mvcgen <;> simp_all
 
 theorem mkFreshNat_triple : ⦃⌜True⌝⦄ mkFreshNat ⦃⇓ r => ⌜r = n⌝⦄ := by
   unfold mkFreshNat

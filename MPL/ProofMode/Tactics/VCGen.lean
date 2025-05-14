@@ -96,10 +96,12 @@ where
     -- trace[mpl.tactics.vcgen] "target: {T}"
     let T := goal.target
     let T := (← reduceProjBeta? T).getD T -- very slight simplification
-    -- logInfo m!"target {name}: {T}"
+    logInfo m!"target {name}: {T}"
     let goal := { goal with target := T }
 
     let f := T.getAppFn
+    if f.isLambda then
+      return ← onLambda goal name
     if f.isConstOf ``SPred.imp then
       return ← onImp goal name
     else if f.isConstOf ``PredTrans.apply then
@@ -109,6 +111,11 @@ where
   onImp goal name : VCGenM Expr := ifOutOfFuel (onFail goal name) do
     burnOne
     (·.2) <$> mIntro goal (← `(binderIdent| _)) (fun g =>
+        do return ((), ← onGoal g name))
+
+  onLambda goal name : VCGenM Expr := ifOutOfFuel (onFail goal name) do
+    burnOne
+    (·.2) <$> mIntroForall goal (← `(binderIdent| _)) (fun g =>
         do return ((), ← onGoal g name))
 
   onWPApp goal name : VCGenM Expr := ifOutOfFuel (onFail goal name) do
