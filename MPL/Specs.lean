@@ -4,6 +4,11 @@ Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Sebastian Graf
 -/
 import MPL.Triple
+import MPL.WP
+import MPL.WPMonad
+import MPL.WPMonadLift
+import MPL.WPMonadFunctor
+import MPL.WPMonadExceptOf
 import MPL.SpecAttr
 
 /-!
@@ -60,21 +65,7 @@ theorem Zipper.tail_suff {l : List α} {s : Zipper l} (h : s.suff = hd::tl) : (s
 
 end List
 
-theorem Specs.pure' [Monad m] [WPMonad m ps] {P : Assertion ps} {Q : PostCond α ps}
-    (h : P ⊢ₛ Q.1 a) :
-    ⦃P⦄ Pure.pure (f:=m) a ⦃Q⦄ := Triple.pure a h
-
-@[spec]
-theorem Specs.pure {m : Type → Type} {ps : PostShape} [Monad m] [WPMonad m ps] {α} {a : α} {Q : PostCond α ps} :
-  ⦃Q.1 a⦄ Pure.pure (f:=m) a ⦃Q⦄ := Specs.pure' .rfl
-
-theorem Specs.bind' [Monad m] [WPMonad m ps] {x : m α} {f : α → m β} {P : Assertion ps} {Q : PostCond β ps}
-    (h : ⦃P⦄ x ⦃(fun a => wp⟦f a⟧ Q, Q.2)⦄) :
-    ⦃P⦄ (x >>= f) ⦃Q⦄ := Triple.bind x f h (fun _ => .rfl)
-
-@[spec]
-theorem Specs.bind {m : Type → Type} {ps : PostShape} [Monad m] [WPMonad m ps] {α β} {x : m α} {f : α → m β} {Q : PostCond β ps} :
-  ⦃wp⟦x⟧ (fun a => wp⟦f a⟧ Q, Q.2)⦄ (x >>= f) ⦃Q⦄ := Specs.bind' .rfl
+/-! # If/Then/Else -/
 
 @[spec]
 theorem Specs.ite {α m ps} {P : Assertion ps} {Q : PostCond α ps} (c : Prop) [Decidable c] [WP m ps] (t : m α) (e : m α)
@@ -87,6 +78,357 @@ theorem Specs.dite {α m ps} {P : Assertion ps} {Q : PostCond α ps} (c : Prop) 
     (ifTrue : (h : c) → ⦃P⦄ t h ⦃Q⦄) (ifFalse : (h : ¬ c) → ⦃P⦄ e h ⦃Q⦄) :
     ⦃P⦄ if h : c then t h else e h ⦃Q⦄ := by
   split <;> apply_rules
+
+/-! # `Monad` -/
+
+universe u
+variable {m : Type → Type u} {ps : PostShape}
+
+theorem Specs.pure' [Monad m] [WPMonad m ps] {P : Assertion ps} {Q : PostCond α ps}
+    (h : P ⊢ₛ Q.1 a) :
+    ⦃P⦄ Pure.pure (f:=m) a ⦃Q⦄ := Triple.pure a h
+
+@[spec]
+theorem Specs.pure {m : Type → Type u} {ps : PostShape} [Monad m] [WPMonad m ps] {α} {a : α} {Q : PostCond α ps} :
+  ⦃Q.1 a⦄ Pure.pure (f:=m) a ⦃Q⦄ := Specs.pure' .rfl
+
+theorem Specs.bind' [Monad m] [WPMonad m ps] {x : m α} {f : α → m β} {P : Assertion ps} {Q : PostCond β ps}
+    (h : ⦃P⦄ x ⦃(fun a => wp⟦f a⟧ Q, Q.2)⦄) :
+    ⦃P⦄ (x >>= f) ⦃Q⦄ := Triple.bind x f h (fun _ => .rfl)
+
+@[spec]
+theorem Specs.bind {m : Type → Type u} {ps : PostShape} [Monad m] [WPMonad m ps] {α β} {x : m α} {f : α → m β} {Q : PostCond β ps} :
+  ⦃wp⟦x⟧ (fun a => wp⟦f a⟧ Q, Q.2)⦄ (x >>= f) ⦃Q⦄ := Specs.bind' .rfl
+
+@[spec]
+theorem Specs.map {m : Type → Type u} {ps : PostShape} [Monad m] [WPMonad m ps] {α β} {x : m α} {f : α → β} {Q : PostCond β ps} :
+  ⦃wp⟦x⟧ (fun a => Q.1 (f a), Q.2)⦄ (f <$> x) ⦃Q⦄ := by simp only [Triple, WP.map_apply, SPred.entails.refl]
+
+@[spec]
+theorem Specs.seq {m : Type → Type u} {ps : PostShape} [Monad m] [WPMonad m ps] {α β} {x : m (α → β)} {y : m α} {Q : PostCond β ps} :
+  ⦃wp⟦x⟧ (fun f => wp⟦y⟧ (fun a => Q.1 (f a), Q.2), Q.2)⦄ (x <*> y) ⦃Q⦄ := by simp only [Triple, WP.seq_apply, SPred.entails.refl]
+
+/-! # `MonadLift` -/
+
+@[spec]
+theorem Specs.monadLift_StateT [Monad m] [WPMonad m ps] (x : m α) (Q : PostCond α (.arg σ ps)) :
+  ⦃fun s => wp⟦x⟧ (fun a => Q.1 a s, Q.2)⦄ (MonadLift.monadLift x : StateT σ m α) ⦃Q⦄ := by simp only [Triple, StateT.monadLift_apply, SPred.entails.refl]
+
+@[spec]
+theorem Specs.monadLift_ReaderT [Monad m] [WPMonad m ps] (x : m α) (Q : PostCond α (.arg ρ ps)) :
+  ⦃fun s => wp⟦x⟧ (fun a => Q.1 a s, Q.2)⦄ (MonadLift.monadLift x : ReaderT ρ m α) ⦃Q⦄ := by simp only [Triple, ReaderT.monadLift_apply, SPred.entails.refl]
+
+@[spec]
+theorem Specs.monadLift_ExceptT [Monad m] [WPMonad m ps] (x : m α) (Q : PostCond α (.except ε ps)) :
+-- strange elab error; apparently tries hard to instantiate ps to ps instead of `.except ε ps`
+--  ⦃(wp⟦x⟧ (fun a => Q.1 a, Q.2.2) : Assertion (.except ε ps))⦄ (MonadLift.monadLift x : ExceptT ε m α) ⦃Q⦄ := by simp only [Triple, ExceptT.monadLift_apply, SPred.entails.refl]
+  Triple (ps:=.except ε ps) (MonadLift.monadLift x : ExceptT ε m α) (wp⟦x⟧ (fun a => Q.1 a, Q.2.2)) Q := by simp only [Triple, ExceptT.monadLift_apply, SPred.entails.refl]
+
+/-! # `MonadLiftT` -/
+
+@[spec]
+theorem Specs.monadLift_trans [WP o ps] [MonadLift n o] [MonadLiftT m n] :
+  ⦃wp⟦MonadLift.monadLift (m:=n) (MonadLiftT.monadLift (m:=m) x) : o α⟧ Q⦄ (MonadLiftT.monadLift x : o α) ⦃Q⦄ := by
+    simp only [Triple, MonadLiftT.monadLift_trans_apply, SPred.entails.refl]
+
+@[spec]
+theorem Specs.monadLift_refl [WP m ps] :
+  ⦃wp⟦x : m α⟧ Q⦄ (MonadLiftT.monadLift x : m α) ⦃Q⦄ := by
+    simp only [Triple, MonadLiftT.monadLift_refl_apply, SPred.entails.refl]
+
+/-! # `MonadFunctor` -/
+
+@[spec]
+theorem Specs.monadMap_StateT [Monad m] [WP m psm]
+    (f : ∀{β}, m β → m β) {α} (x : StateT σ m α) (Q : PostCond α (.arg σ psm)) :
+    ⦃fun s => wp⟦f (x.run s)⟧ (fun (a, s) => Q.1 a s, Q.2)⦄ (MonadFunctor.monadMap (m:=m) f x) ⦃Q⦄ := by
+  simp only [Triple, StateT.monadMap_apply, SPred.entails.refl]
+
+@[spec]
+theorem Specs.monadMap_ReaderT [Monad m] [WP m psm]
+    (f : ∀{β}, m β → m β) {α} (x : ReaderT ρ m α) (Q : PostCond α (.arg ρ psm)) :
+    ⦃fun s => wp⟦f (x.run s)⟧ (fun a => Q.1 a s, Q.2)⦄ (MonadFunctor.monadMap (m:=m) f x) ⦃Q⦄ := by
+  simp only [Triple, ReaderT.monadMap_apply, SPred.entails.refl]
+
+@[spec]
+theorem Specs.monadMap_ExceptT [Monad m] [WP m psm]
+    (f : ∀{β}, m β → m β) {α} (x : ExceptT ε m α) (Q : PostCond α (.except ε psm)) :
+    Triple (ps:=.except ε psm) (MonadFunctor.monadMap (m:=m) f x) (wp⟦f x.run⟧ (fun | .ok a => Q.1 a | .error e => Q.2.1 e, Q.2.2)) Q := by
+  simp only [Triple, ExceptT.monadMap_apply, SPred.entails.refl]; rfl
+
+/-! # `MonadFunctorT` -/
+
+@[spec]
+theorem Specs.monadMap_trans [WP o ps] [MonadFunctor n o] [MonadFunctorT m n] :
+  ⦃wp⟦MonadFunctor.monadMap (m:=n) (MonadFunctorT.monadMap (m:=m) f) x : o α⟧ Q⦄
+  (MonadFunctorT.monadMap f x : o α)
+  ⦃Q⦄ := by simp only [Triple, MonadFunctorT.monadMap, SPred.entails.rfl]
+
+@[spec]
+theorem Specs.monadMap_refl [WP m ps] :
+  ⦃wp⟦f x : m α⟧ Q⦄
+  (MonadFunctorT.monadMap f x : m α)
+  ⦃Q⦄ := by simp only [Triple, MonadFunctorT.monadMap, SPred.entails.rfl]
+
+/-! # `ReaderT` -/
+
+@[spec]
+theorem Specs.run_ReaderT [WP m ps] (x : ReaderT ρ m α) :
+  ⦃wp⟦x⟧ (fun a _ => Q.1 a, Q.2) r⦄ x.run r ⦃Q⦄ := by simp only [Triple, WP.ReaderT_run_apply, SPred.entails.rfl]
+
+@[spec]
+theorem Specs.read_ReaderT [Monad m] [WPMonad m psm] :
+  ⦃fun r => Q.1 r r⦄ (MonadReaderOf.read : ReaderT ρ m ρ) ⦃Q⦄ := by simp only [Triple, ReaderT.read_apply, SPred.entails.rfl]
+
+@[spec]
+theorem Specs.withReader_ReaderT [Monad m] [WPMonad m psm] :
+    ⦃fun r => wp⟦x⟧ (fun a _ => Q.1 a r, Q.2) (f r)⦄
+    (MonadWithReaderOf.withReader f x : ReaderT ρ m α)
+    ⦃Q⦄ := by
+  simp only [Triple, ReaderT.withReader_apply, SPred.entails.rfl]
+
+/-! # `StateT` -/
+
+@[spec]
+theorem Specs.run_StateT [WP m ps] (x : StateT σ m α) :
+  ⦃wp⟦x⟧ (fun a s => Q.1 (a, s), Q.2) s⦄ x.run s ⦃Q⦄ := by simp only [Triple, WP.StateT_run_apply, SPred.entails.rfl]
+
+@[spec]
+theorem Specs.get_StateT [Monad m] [WPMonad m psm] :
+  ⦃fun s => Q.1 s s⦄ (MonadStateOf.get : StateT σ m σ) ⦃Q⦄ := by simp only [Triple, StateT.get_apply, SPred.entails.rfl]
+
+@[spec]
+theorem Specs.set_StateT [Monad m] [WPMonad m psm] :
+  ⦃fun _ => Q.1 () s⦄ (MonadStateOf.set s : StateT σ m PUnit) ⦃Q⦄ := by simp only [Triple, StateT.set_apply, SPred.entails.rfl]
+
+@[spec]
+theorem Specs.modifyGet_StateT [Monad m] [WPMonad m ps] :
+  ⦃fun s => Q.1 (f s).1 (f s).2⦄ (MonadStateOf.modifyGet f : StateT σ m α) ⦃Q⦄ := by
+    simp only [Triple, StateT.modifyGet_apply, SPred.entails.rfl]
+
+/-! # `ExceptT` -/
+
+@[spec]
+theorem Specs.run_ExceptT [WP m ps] (x : ExceptT ε m α) :
+    Triple (ps:=ps) x.run (wp⟦x⟧ (fun a => Q.1 (.ok a), fun e => Q.1 (.error e), Q.2)) Q := by
+  simp only [Triple, WP.ExceptT_run_apply, SPred.entails.rfl]
+
+@[spec]
+theorem Specs.throw_ExceptT [Monad m] [WPMonad m ps] :
+    ⦃Q.2.1 e⦄ (MonadExceptOf.throw e : ExceptT ε m α) ⦃Q⦄ := by
+  simp only [Triple, ExceptT.throw_apply, SPred.entails.rfl]
+
+@[spec]
+theorem Specs.tryCatch_ExceptT [Monad m] [WPMonad m ps] (Q : PostCond α (.except ε ps)) :
+    ⦃wp⟦x⟧ (Q.1, fun e => wp⟦h e⟧ Q, Q.2.2)⦄ (MonadExceptOf.tryCatch x h : ExceptT ε m α) ⦃Q⦄ := by
+  simp only [Triple, ExceptT.tryCatch_apply, SPred.entails.rfl]
+
+/-! # `Except` -/
+
+@[spec]
+theorem Specs.throw_Except [Monad m] [WPMonad m ps] :
+    ⦃Q.2.1 e⦄ (MonadExceptOf.throw e : Except ε α) ⦃Q⦄ := SPred.entails.rfl
+
+@[spec]
+theorem Specs.tryCatch_Except (Q : PostCond α (.except ε .pure)) :
+    ⦃wp⟦x⟧ (Q.1, fun e => wp⟦h e⟧ Q, Q.2.2)⦄ (MonadExceptOf.tryCatch x h : Except ε α) ⦃Q⦄ := by
+  simp only [Triple, Except.tryCatch_apply, SPred.entails.rfl]
+
+/-! # `EStateM` -/
+
+@[spec]
+theorem Specs.get_EStateM [Monad m] [WPMonad m psm] :
+  ⦃fun s => Q.1 s s⦄ (MonadStateOf.get : EStateM ε σ σ) ⦃Q⦄ := SPred.entails.rfl
+
+@[spec]
+theorem Specs.set_EStateM [Monad m] [WPMonad m psm] :
+  ⦃fun _ => Q.1 () s⦄ (MonadStateOf.set s : EStateM ε σ PUnit) ⦃Q⦄ := SPred.entails.rfl
+
+@[spec]
+theorem Specs.modifyGet_EStateM [Monad m] [WPMonad m psm] :
+    ⦃fun s => Q.1 (f s).1 (f s).2⦄ (MonadStateOf.modifyGet f : EStateM ε σ α) ⦃Q⦄ := SPred.entails.rfl
+
+@[spec]
+theorem Specs.throw_EStateM [Monad m] [WPMonad m psm] :
+    ⦃Q.2.1 e⦄ (MonadExceptOf.throw e : EStateM ε σ α) ⦃Q⦄ := SPred.entails.rfl
+
+open EStateM.Backtrackable in
+@[spec]
+theorem Specs.tryCatch_EStateM (Q : PostCond α (.except ε (.arg σ .pure))) :
+    ⦃fun s => wp⟦x⟧ (Q.1, fun e s' => wp⟦h e⟧ Q (restore s' (save s)), Q.2.2) s⦄ (MonadExceptOf.tryCatch x h : EStateM ε σ α) ⦃Q⦄ := by
+  simp only [Triple, EStateM.tryCatch_apply, SPred.entails.rfl]
+
+/-! # Lifting `MonadStateOf` -/
+
+@[spec]
+theorem Specs.get_MonadStateOf [MonadStateOf σ m] [MonadLift m n] [WP n _]:
+    ⦃wp⟦MonadLift.monadLift (MonadStateOf.get : m σ) : n σ⟧ Q⦄
+    (MonadStateOf.get : n σ)
+    ⦃Q⦄ := SPred.entails.rfl
+
+@[spec]
+theorem Specs.getThe_MonadStateOf [MonadStateOf σ m] [MonadLift m n] [WP n _]:
+    ⦃wp⟦MonadLift.monadLift (MonadStateOf.get : m σ) : n σ⟧ Q⦄
+    (getThe σ : n σ)
+    ⦃Q⦄ := Specs.get_MonadStateOf
+
+@[spec]
+theorem Specs.get_MonadState [MonadStateOf σ m] [MonadLift m n] [WP n _]:
+    ⦃wp⟦MonadLift.monadLift (MonadStateOf.get : m σ) : n σ⟧ Q⦄
+    (MonadState.get : n σ)
+    ⦃Q⦄ := Specs.get_MonadStateOf
+
+@[spec]
+theorem Specs.set_MonadStateOf [MonadStateOf σ m] [MonadLift m n] [WP n _]:
+    ⦃wp⟦MonadLift.monadLift (MonadStateOf.set (σ:=σ) s : m PUnit) : n PUnit⟧ Q⦄
+    (MonadStateOf.set s : n PUnit)
+    ⦃Q⦄ := SPred.entails.rfl
+
+@[spec]
+theorem Specs.set_MonadState [MonadStateOf σ m] [MonadLift m n] [WP n _]:
+    ⦃wp⟦MonadLift.monadLift (MonadStateOf.set (σ:=σ) s : m PUnit) : n PUnit⟧ Q⦄
+    (MonadState.set s : n PUnit)
+    ⦃Q⦄ := SPred.entails.rfl
+
+@[spec]
+theorem Specs.modifyGet_MonadStateOf [MonadStateOf σ m] [MonadLift m n] [WP n _]:
+    ⦃wp⟦MonadLift.monadLift (MonadStateOf.modifyGet (σ:=σ) f : m α) : n α⟧ Q⦄
+    (MonadStateOf.modifyGet f : n α)
+    ⦃Q⦄ := SPred.entails.rfl
+
+@[spec]
+theorem Specs.modifyGet_MonadState [MonadStateOf σ m] [MonadLift m n] [WP n _]:
+    ⦃wp⟦MonadLift.monadLift (MonadStateOf.modifyGet (σ:=σ) f : m α) : n α⟧ Q⦄
+    (MonadState.modifyGet f : n α)
+    ⦃Q⦄ := SPred.entails.rfl
+
+@[spec]
+theorem Specs.modify_MonadStateOf [MonadStateOf σ m] [MonadLift m n] [WP n _]:
+    ⦃wp⟦MonadLift.monadLift (MonadStateOf.modifyGet fun s => ((), f s) : m PUnit) : n PUnit⟧ Q⦄
+    (modify f : n PUnit)
+    ⦃Q⦄ := SPred.entails.rfl
+
+@[spec]
+theorem Specs.modify_MonadState [MonadStateOf σ m] [MonadLift m n] [WP n _]:
+    ⦃wp⟦MonadLift.monadLift (MonadStateOf.modifyGet fun s => ((), f s) : m PUnit) : n PUnit⟧ Q⦄
+    (modifyThe σ f : n PUnit)
+    ⦃Q⦄ := SPred.entails.rfl
+
+/-! # Lifting `MonadReaderOf` -/
+
+@[spec]
+theorem Specs.read_MonadReaderOf [MonadReaderOf ρ m] [MonadLift m n] [WP n _]:
+    ⦃wp⟦MonadLift.monadLift (MonadReaderOf.read : m ρ) : n ρ⟧ Q⦄
+    (MonadReaderOf.read : n ρ)
+    ⦃Q⦄ := SPred.entails.rfl
+
+@[spec]
+theorem Specs.readThe_MonadReaderOf [MonadReaderOf ρ m] [MonadLift m n] [WP n _]:
+    ⦃wp⟦MonadLift.monadLift (MonadReaderOf.read : m ρ) : n ρ⟧ Q⦄
+    (readThe ρ : n ρ)
+    ⦃Q⦄ := Specs.read_MonadReaderOf
+
+@[spec]
+theorem Specs.read_MonadReader [MonadReaderOf ρ m] [MonadLift m n] [WP n _]:
+    ⦃wp⟦MonadLift.monadLift (MonadReaderOf.read : m ρ) : n ρ⟧ Q⦄
+    (MonadReader.read : n ρ)
+    ⦃Q⦄ := Specs.read_MonadReaderOf
+
+@[spec]
+theorem Specs.withReader_MonadReaderOf [MonadWithReaderOf ρ m] [MonadFunctor m n] [WP n _] (f : ρ → ρ) (x : n α) :
+    ⦃wp⟦MonadFunctor.monadMap (m:=m) (MonadWithReaderOf.withReader f) x : n α⟧ Q⦄
+    (MonadWithReaderOf.withReader f x : n α)
+    ⦃Q⦄ := SPred.entails.rfl
+
+@[spec]
+theorem Specs.withTheReader_MonadReaderOf [MonadWithReaderOf ρ m] [MonadFunctor m n] [WP n _] (f : ρ → ρ) (x : n α) :
+    ⦃wp⟦MonadFunctor.monadMap (m:=m) (MonadWithReaderOf.withReader f) x : n α⟧ Q⦄
+    (withTheReader ρ f x : n α)
+    ⦃Q⦄ := SPred.entails.rfl
+
+@[spec]
+theorem Specs.withReader_MonadReader [MonadWithReaderOf ρ m] [MonadFunctor m n] [WP n _] (f : ρ → ρ) (x : n α) :
+    ⦃wp⟦MonadFunctor.monadMap (m:=m) (MonadWithReaderOf.withReader f) x : n α⟧ Q⦄
+    (MonadWithReader.withReader f x : n α)
+    ⦃Q⦄ := SPred.entails.rfl
+
+/-! # Lifting `MonadExceptOf` -/
+
+@[spec]
+theorem Specs.throw_MonadExcept [MonadExceptOf ε m] [WP m _]:
+    ⦃wp⟦MonadExceptOf.throw e : m α⟧ Q⦄
+    (throw e : m α)
+    ⦃Q⦄ := SPred.entails.rfl
+
+@[spec]
+theorem Specs.throwThe_MonadExcept [MonadExceptOf ε m] [WP m _]:
+    ⦃wp⟦MonadExceptOf.throw e : m α⟧ Q⦄
+    (throwThe ε e : m α)
+    ⦃Q⦄ := SPred.entails.rfl
+
+@[spec]
+theorem Specs.tryCatch_MonadExcept [MonadExceptOf ε m] [WP m ps] (Q : PostCond α ps) :
+    ⦃wp⟦MonadExceptOf.tryCatch x h : m α⟧ Q⦄
+    (tryCatch x h : m α)
+    ⦃Q⦄ := SPred.entails.rfl
+
+@[spec]
+theorem Specs.tryCatchThe_MonadExcept [MonadExceptOf ε m] [WP m ps] (Q : PostCond α ps) :
+    ⦃wp⟦MonadExceptOf.tryCatch x h : m α⟧ Q⦄
+    (tryCatchThe ε x h : m α)
+    ⦃Q⦄ := SPred.entails.rfl
+
+@[spec]
+theorem Specs.throw_ReaderT  [WP m sh] [Monad m] [MonadExceptOf ε m] :
+    ⦃wp⟦MonadLift.monadLift (MonadExceptOf.throw (ε:=ε) e : m α) : ReaderT ρ m α⟧ Q⦄
+    (MonadExceptOf.throw e : ReaderT ρ m α)
+    ⦃Q⦄ := SPred.entails.rfl
+
+@[spec]
+theorem Specs.throw_StateT [WP m ps] [Monad m] [MonadExceptOf ε m] (Q : PostCond α (.arg σ ps)) :
+    ⦃wp⟦MonadLift.monadLift (MonadExceptOf.throw (ε:=ε) e : m α) : StateT σ m α⟧ Q⦄
+    (MonadExceptOf.throw e : StateT σ m α)
+    ⦃Q⦄ := SPred.entails.rfl
+
+@[spec]
+theorem Specs.throw_ExceptT_lift [WP m ps] [Monad m] [MonadExceptOf ε m] (Q : PostCond α (.except ε' ps)) :
+    Triple
+      (ps:=.except ε' ps)
+      (MonadExceptOf.throw e : ExceptT ε' m α)
+      (wp⟦MonadExceptOf.throw (ε:=ε) e : m (Except ε' α)⟧ (fun | .ok a => Q.1 a | .error e => Q.2.1 e, Q.2.2))
+      Q := by
+  simp only [Triple, ExceptT.lift_throw_apply, SPred.entails.rfl]
+  apply (wp _).mono
+  simp
+  intro x
+  split <;> rfl
+
+@[spec]
+theorem Specs.tryCatch_ReaderT [WP m ps] [Monad m] [MonadExceptOf ε m] (Q : PostCond α (.arg ρ ps)) :
+    ⦃fun r => wp⟦MonadExceptOf.tryCatch (ε:=ε) (x.run r) (fun e => (h e).run r) : m α⟧ (fun a => Q.1 a r, Q.2)⦄
+    (MonadExceptOf.tryCatch x h : ReaderT ρ m α)
+    ⦃Q⦄ := SPred.entails.rfl
+
+@[spec]
+theorem Specs.tryCatch_StateT [WP m ps] [Monad m] [MonadExceptOf ε m] (Q : PostCond α (.arg σ ps)) :
+    ⦃fun s => wp⟦MonadExceptOf.tryCatch (ε:=ε) (x.run s) (fun e => (h e).run s) : m (α × σ)⟧ (fun as => Q.1 as.1 as.2, Q.2)⦄
+    (MonadExceptOf.tryCatch x h : StateT σ m α)
+    ⦃Q⦄ := SPred.entails.rfl
+
+@[spec]
+theorem Specs.tryCatch_ExceptT_lift [WP m ps] [Monad m] [MonadExceptOf ε m] (Q : PostCond α (.except ε' ps)) :
+    Triple
+      (ps:=.except ε' ps)
+      (MonadExceptOf.tryCatch x h : ExceptT ε' m α)
+      (wp⟦MonadExceptOf.tryCatch (ε:=ε) x h : m (Except ε' α)⟧ (fun | .ok a => Q.1 a | .error e => Q.2.1 e, Q.2.2))
+      Q := by
+  simp only [Triple, ExceptT.lift_tryCatch_apply, SPred.entails.rfl]
+  apply (wp _).mono
+  simp
+  intro x
+  split <;> rfl
+
+/-! # `ForIn` -/
 
 @[spec]
 theorem Specs.forIn'_list {α : Type} {β : Type} {m : Type → Type v} {ps : PostShape}

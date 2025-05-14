@@ -5,7 +5,7 @@ Authors: Lars König, Sebastian Graf
 -/
 import Lean
 import MPL.SPred.SPred
-import MPL.Utils.UnexpandRule
+import MPL.Util.UnexpandRule
 
 namespace MPL.SPred.Notation
 

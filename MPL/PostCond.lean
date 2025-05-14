@@ -4,7 +4,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Sebastian Graf
 -/
 import MPL.SPred
-import MPL.Utils.UnexpandRule
+import MPL.Util.UnexpandRule
 
 /-!
 # Pre and postconditions

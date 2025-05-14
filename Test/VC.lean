@@ -1,29 +1,43 @@
 import MPL
+import MPL.ProofMode.Tactics.VCGen
+import Test.Code
 
 namespace MPL.Test.VC
 
-def fib_impl (n : Nat) : Idd Nat := do
-  if n = 0 then return 0
-  let mut a := 0
-  let mut b := 1
-  for _ in [1:n] do
-    let a' := a
-    a := b
-    b := a' + b
-  return b
-
-abbrev fib_spec : Nat → Nat
-| 0 => 0
-| 1 => 1
-| n+2 => fib_spec n + fib_spec (n+1)
+open MPL.Test.Code
 
 theorem fib_triple : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ := by
   unfold fib_impl
-  dsimp
+  mvcgen
+  case inv => exact ⇓ (⟨a, b⟩, xs) =>
+    a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)
+  all_goals simp_all +zetaDelta [Nat.sub_one_add_one]
+
+-- TODO: Use strongest post
+theorem ifs_triple : ⦃⌜True⌝⦄ ifs n ⦃⇓ r => ⌜r > 0⌝⦄ := by
+  unfold ifs
+  mvcgen <;> simp +zetaDelta
+
+private abbrev fst : SVal (AppState::σs) Nat := fun s => SVal.pure s.1
+private abbrev snd : SVal (AppState::σs) Nat := fun s => SVal.pure s.2
+
+@[spec]
+theorem mkFreshNat_spec [Monad m] [WPMonad m sh] :
+  ⦃⌜#fst = n ∧ #snd = o⌝⦄
+  (mkFreshNat : StateT AppState m Nat)
+  ⦃⇓ r => ⌜r = n ∧ #fst = n + 1 ∧ #snd = o⌝⦄ := by
+  unfold mkFreshNat
   mintro _
-  if h : n = 0 then simp [h] else
-  simp only [h]
-  mwp
-  mspec Specs.forIn_list (⇓ (⟨a, b⟩, xs) => a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)) ?step
-  case step => dsimp; intros; mintro _; mwp; simp_all
-  simp_all [Nat.sub_one_add_one]
+  set_option trace.mpl.tactics.spec true in
+  mvcgen
+
+theorem mkFreshNat_triple : ⦃⌜True⌝⦄ mkFreshNat ⦃⇓ r => ⌜r = n⌝⦄ := by
+  unfold mkFreshNat
+  mvcgen
+  case inv => exact ⇓ n =>
+    a ≠ b
+theorem mkFreshPair_triple : ⦃⌜True⌝⦄ mkFreshPair ⦃⇓ (a, b) => ⌜a ≠ b⌝⦄ := by
+  unfold mkFreshPair
+  mvcgen
+  case inv => exact ⇓ (a, b) =>
+    a ≠ b

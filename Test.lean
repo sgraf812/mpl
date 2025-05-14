@@ -8,3 +8,5 @@ import Test.ProofMode
 import Test.Toy
 import Test.Aeneas
 import Test.Demo
+import Test.VC
+import Test.Code

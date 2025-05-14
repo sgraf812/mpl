@@ -30,23 +30,6 @@ initialize registerTraceClass `mpl.tactics.vcgen
 
 namespace VC
 
-theorem Specs.ite_pre {m} (c : Prop) [Decidable c] (t : m α) (e : m α)
-    {ps} [WP m ps] {P : Assertion ps} {Q₁ Q₂ : PostCond α ps}
-    (ht : c → ⦃P⦄ t ⦃Q₁⦄) (he : ¬c → ⦃P⦄ e ⦃Q₂⦄) :
-    ⦃P⦄ if c then t else e ⦃if c then Q₁ else Q₂⦄ := by
-  split <;> apply_rules
-
-theorem Specs.ite_post {m} (c : Prop) [Decidable c] (t : m α) (e : m α)
-    {ps} [WP m ps] {P₁ P₂ : Assertion ps} {Q : PostCond α ps}
-    (ht : c → ⦃P₁⦄ t ⦃Q⦄) (he : ¬c → ⦃P₂⦄ e ⦃Q⦄) :
-    ⦃if c then P₁ else P₂⦄ if c then t else e ⦃Q⦄ := by
-  split <;> apply_rules
-
-theorem split_ite {α m ps} {P : Assertion ps} {Q : PostCond α ps} (c : Prop) [Decidable c] [WP m ps] (t : m α) (e : m α)
-    (ht : c → ⦃P⦄ t ⦃Q⦄) (he : ¬c → ⦃P⦄ e ⦃Q⦄) :
-    ⦃P⦄ if c then t else e ⦃Q⦄ := by
-  split <;> apply_rules
-
 inductive Fuel where
 | limited (n : Nat)
 | unlimited
@@ -69,10 +52,6 @@ def ifOutOfFuel (x : VCGenM α) (k : VCGenM α) : VCGenM α := do
   match s.fuel with
   | Fuel.limited 0 => x
   | _ => k
-
-structure Result where
---  expr : Expr
-  proof? : Option Expr := none
 
 def isTrivial (e : Expr) : Bool := match e with
   | .bvar .. => true
@@ -141,64 +120,15 @@ where
     | WP.wp m ps instWP α e =>
       let us := trans.getAppFn.constLevels!
       let u := us[0]!
-      if let .letE x ty val body _nonDep := e then
+      let f := e.getAppFn'
+      if let .letE x ty val body _nonDep := f then
         burnOne
         return ← withNonTrivialLetDecl x ty val fun fv leave => do
-        let wp' := mkApp5 (mkConst ``WP.wp us) m ps instWP α (body.instantiate1 fv)
+        let e' := ((body.instantiate1 fv).betaRev e.getAppRevArgs)
+        let wp' := mkApp5 (mkConst ``WP.wp us) m ps instWP α e'
         let args' := args.set! 2 wp'
         let goal := { goal with target := mkAppN (mkConst ``PredTrans.apply) args' }
         leave (← onWPApp goal name)
-      -- The following 3 matches are just "fast paths" to what mSpec does.
-      -- Premature optimization?
-      --let monad? ← OptionT.run do
-      --  let instMon ← OptionT.mk <| synthInstance? (mkApp (mkConst ``Monad [Level.zero, u])  m)
-      --  let instWPMon ← OptionT.mk <| synthInstance? (mkApp3 (mkConst ``WPMonad us) m ps instMon)
-      --  return (instMon, instWPMon)
-      --match_expr e with
-      --| ite _α c instDec th el =>
-      --  burnOne
-      --  -- TODO: This duplicates Q. We should compute the strongest post for goal.hyps in the future.
-      --  let tprf ← withLocalDeclD `h c fun hc => do
-      --    -- let subst := subst.push hc -- hc does not occur in the term
-      --    let wpt := mkApp5 (mkConst ``WP.wp us) m ps instWP α th
-      --    let tprf ← onWPApp { goal with target := mkAppN (mkConst ``PredTrans.apply) (args.set! 2 wpt) } (name ++ `ifTrue)
-      --    mkLambdaFVars #[hc] tprf
-      --  let eprf ← withLocalDeclD `h (mkApp (mkConst ``Not) c) fun hnc => do
-      --    -- let subst := subst.push hnc -- hnc does not occur in the term
-      --    let wpe := mkApp5 (mkConst ``WP.wp us) m ps instWP α el
-      --    let eprf ← onWPApp { goal with target := mkAppN (mkConst ``PredTrans.apply) (args.set! 2 wpe) } (name ++ `ifFalse)
-      --    mkLambdaFVars #[hnc] eprf
-      --  let prf := mkApp5 (mkConst ``split_ite us) α m ps goal.hyps Q
-      --  let prf := mkApp5 prf c instDec instWP th el
-      --  let prf := mkApp2 prf tprf eprf
-      --  --check (prf.instantiateRev subst)
-      --  return prf
-      --| Pure.pure _m _ _α a =>
-      --  burnOne
-      --  let some (instMon, instWPMon) := monad? | failure
-      --  withNonTrivialLetDecl `a α a fun a leave => do
-      --  let prf ← onGoal { goal with target := mkAppN ((← mkProj' ``Prod 0 (← whnf Q)).betaRev #[a]) args[4:] } name
-      --  let prf := mkApp9 (mkConst ``Specs.pure' us) m ps α a instMon instWPMon goal.hyps Q prf
-      --  leave prf
-      --| Bind.bind _m _inst α' _ x k =>
-      --  burnOne
-      --  let some (instMon, instWPMon) := monad? | failure
-      --  let Qty := mkApp2 (mkConst ``PostCond) α ps
-      --  withNonTrivialLetDecl `Q Qty Q fun Q leaveQ => do
-      --  let name := match k with | .lam n .. => n | _ => `a
-      --  let kapplyQ ← withLocalDeclD name α' fun a => do
-      --    let wpk := mkApp5 (mkConst ``WP.wp us) m ps instWP α (k.betaRev #[a])
-      --    let app := mkAppN (mkConst ``PredTrans.apply) (args.set! 1 α |>.set! 2 wpk |>.set! 3 Q)
-      --    mkLambdaFVars #[a] app
-      --      logInfo m!"app: {← mkLambdaFVars #[a] (app.instantiate subst)}"
-      --      mkLambdaFVars #[a] (← onWPApp { goal with target := mkAppN (mkConst ``PredTrans.apply) (args.set! 2 wpk |>.set! 3 Q) } subst)
-      --  let Q' ← mkAppM ``Prod.mk #[kapplyQ, ← mkProj' ``Prod 1 (← whnf Q)]
-      --  let wpx := mkApp5 (mkConst ``WP.wp us) m ps instWP α' x
-      --  let prf ← onWPApp { goal with target := mkAppN (mkConst ``PredTrans.apply) (args.set! 1 α' |>.set! 2 wpx |>.set! 3 Q') } name
-      --  let prf := mkApp (mkApp10 (mkConst ``Specs.bind' us) m ps α' α instMon instWPMon x k goal.hyps Q) prf
-      --  leaveQ prf
-      --| _ =>
-      let f := e.getAppFn'
       if let some (some val) ← f.fvarId?.mapM (·.getValue?) then
         burnOne
         -- TODO: We do not want to unconditionally unfold let bindings in the future :(
@@ -208,11 +138,11 @@ where
         return ← onWPApp { goal with target := mkAppN (mkConst ``PredTrans.apply) (args.set! 2 wpe) } name
       if f.isConst then
         burnOne
-        let (spec, _) ← findSpec (← specAttr.getState) e
+        let spec ← findSpec (← getSpecTheorems) e
         let P' ← mkFreshExprMVar (mkApp (mkConst ``Assertion) ps) (userName := `P)
         let Q' ← mkFreshExprMVar (mkApp2 (mkConst ``PostCond) α ps) (userName := `Q)
         let expectedTy := mkApp7 (mkConst ``Triple [u]) m ps instWP α e P' Q'
-        let (spec, mvars) ← instantiateSpec (← mkConstWithFreshMVarLevels spec.name) expectedTy
+        let (spec, mvars) ← instantiateSpec (← mkConstWithFreshMVarLevels spec) expectedTy
         let (prf, specHoles) ← mSpec goal (fun _wp => return (spec, mvars, P', Q')) tryGoal (preTag := name)
         -- TODO: Better story for the generates holes
         for mvar in specHoles do
@@ -250,7 +180,7 @@ elab "mvcgen_step" n:(num)? : tactic => do
     let m ← mkFreshExprSyntheticOpaqueMVar goal (tag := tag)
     goals.modify (m.mvarId! :: ·)
     return m)
-  replaceMainGoal (← goals.get)
+  replaceMainGoal (← goals.get).reverse
 
 elab "mvcgen" : tactic => do
   let (mvar, goal) ← mStartMVar (← getMainGoal)
@@ -285,14 +215,3 @@ theorem fib_triple_vc : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n�
     a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)
   all_goals dsimp
   all_goals simp_all +zetaDelta [Nat.sub_one_add_one]
-
-theorem fib_triple : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ := by
-  unfold fib_impl
-  dsimp
-  mintro _
-  if h : n = 0 then simp [h] else
-  simp only [h]
-  mwp
-  mspec Specs.forIn_list (⇓ (⟨a, b⟩, xs) => a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)) ?step
-  case step => dsimp; intros; mintro _; mwp; simp_all
-  simp_all [Nat.sub_one_add_one]

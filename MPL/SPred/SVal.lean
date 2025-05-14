@@ -5,6 +5,7 @@ Authors: Sebastian Graf
 -/
 import Lean
 import Init.Data.List
+import MPL.Util.Trace
 
 /-! # State-indexed values -/
 

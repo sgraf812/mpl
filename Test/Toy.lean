@@ -55,10 +55,11 @@ theorem StateT.mkFreshNat_apply [Monad m] [LawfulMonad m] [WPMonad m sh] :
   wp⟦(mkFreshNat : StateT (Nat × Nat) m Nat)⟧ Q = fun s => Q.1 s.1 (s.1 + 1, s.2) := by
     unfold mkFreshNat; wp_simp
 
+-- The following triggers the wp_simp rules for MonadMorphism:
 @[wp_simp]
 theorem MonadStateOf.mkFreshNat_apply [Monad m] [MonadStateOf (Nat × Nat) m] [Monad n] [LawfulMonad m] [LawfulMonad n] [WP m psm] [WPMonad n psn] [MonadLift m n] [MonadMorphism m n MonadLift.monadLift] :
   wp⟦mkFreshNat : n Nat⟧ Q = wp⟦MonadLift.monadLift (m:=m) mkFreshNat : n Nat⟧ Q := by
-    unfold mkFreshNat; wp_simp; rfl
+    unfold mkFreshNat; wp_simp [WP.morph_bind_apply, WP.morph_map_apply, WP.morph_pure_apply]; rfl
 
 @[spec]
 theorem mkFreshNat_lift_spec [Monad m] [LawfulMonad m] [WPMonad m sh] :

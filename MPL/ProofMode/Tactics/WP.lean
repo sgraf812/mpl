@@ -46,8 +46,6 @@ attribute [wp_simp]
   SPred.entails.refl SPred.imp_self_simp SPred.true_intro_simp SPred.true_intro_simp_nil
   FailConds.entails.refl FailConds.entails_false FailConds.entails_true FailConds.pure_def
   PostCond.entails PostCond.entails.refl PostCond.total PostCond.partial
-  -- Lawful monad normalization that we don't appear to be needing!
-  -- bind_pure_comp map_pure id_map' ExceptT.map_throw bind_map bind_map_left bind_pure pure_bind bind_assoc
   -- MonadMorphism and basic if/then/else:
   WP.pure_apply WP.bind_apply WP.map_apply WP.seq_apply
   WP.ite_apply WP.dite_apply
@@ -60,6 +58,8 @@ attribute [wp_simp]
   MonadLiftT.monadLift_trans_apply MonadLiftT.monadLift_refl_apply
   -- MonadFunctor implementation
   StateT.monadMap_apply ReaderT.monadMap_apply ExceptT.monadMap_apply
+  -- MonadFunctorT implementation
+  MonadFunctorT.monadMap_trans_apply MonadFunctorT.monadMap_refl_apply
 --  PredTrans.monadMapArg_apply PredTrans.monadMapExcept_apply
 --  WP.popArg_StateT_wp WP.popArg_ReaderT_wp WP.popExcept_ExceptT_wp
   WP.ReaderT_run_apply WP.StateT_run_apply WP.ExceptT_run_apply

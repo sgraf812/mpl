@@ -26,12 +26,13 @@ theorem Spec.entails_total {α} {ps : PostShape} (p : α → Assertion ps) (q : 
 theorem Spec.entails_partial {α} {ps : PostShape} (p : PostCond α ps) (q : α → Assertion ps) :
   (∀ a, p.1 a ⊢ₛ q a) → p ⊢ₚ PostCond.partial q := (PostCond.entails_partial p q).mpr
 
-def findSpec (database : DiscrTree (ConstantVal × SpecInfo)) (prog : Expr) : MetaM (ConstantVal × SpecInfo) := do
+def findSpec (database : SpecTheorems) (prog : Expr) : MetaM Name := do
   unless prog.getAppFn'.isConst do throwError s!"not an application of a constant: {prog}"
-  let specs ← database.getMatch prog
+  let specs ← database.specs.getMatch prog
+  logInfo s!"found {specs.map (·.proof)} for {prog}"
   if specs.isEmpty then throwError s!"no specs found for {prog}"
-  if specs.size > 1 then throwError s!"multiple specs found for {prog}: {specs.map (·.fst.name)}"
-  return specs[0]!
+  if specs.size > 1 then throwError s!"multiple specs found for {prog}: {specs.map (·.proof)}"
+  return specs[0]!.proof
 
 def instantiateSpec (spec : Expr) (expectedTy : Expr) : MetaM (Expr × List MVarId) := do
   let specTy ← inferType spec
@@ -63,9 +64,7 @@ def elabTermForSpec (stx : TSyntax `term) (expectedTy : Expr) : TacticM (Expr ×
 def elabSpec (stx? : Option (TSyntax `term)) (wp : Expr) : TacticM (Expr × List MVarId × Expr × Expr) := do
   let_expr WP.wp m ps instWP α prog := wp | throwError "target not a wp application {wp}"
   let [u] := wp.getAppFn'.constLevels! | throwError "Internal error: wrong number of levels in wp application"
-  let stx ← stx?.getDM do
-    let (spec, _info) ← findSpec (← specAttr.getState) prog
-    return mkIdent spec.name
+  let stx ← stx?.getDM <| do return mkIdent (← findSpec (← getSpecTheorems) prog)
   trace[mpl.tactics.spec] "spec syntax: {stx}"
   let P ← mkFreshExprMVar (mkApp (mkConst ``Assertion) ps) (userName := `P)
   let Q ← mkFreshExprMVar (mkApp2 (mkConst ``PostCond) α ps) (userName := `Q)

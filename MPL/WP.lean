@@ -79,6 +79,7 @@ protected def unexpandWP : Unexpander
 
 section Instances
 
+universe u
 variable {m : Type → Type u}
 
 instance Id.instWP : WP Id .pure where

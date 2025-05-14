@@ -5,7 +5,7 @@ Authors: Lars König, Mario Carneiro, Sebastian Graf
 -/
 import Lean
 
-namespace MPL.Utils
+namespace MPL.Util
 
 open Lean Macro Parser
 

@@ -47,6 +47,8 @@ theorem ReaderT.throw_apply [WP m sh] [Monad m] [MonadExceptOf ε m] :
 theorem StateT.throw_apply [WP m sh] [Monad m] [MonadExceptOf ε m] :
   wp⟦MonadExceptOf.throw (ε:=ε) e : StateT ρ m α⟧ Q = wp⟦MonadLift.monadLift (MonadExceptOf.throw (ε:=ε) e : m α) : StateT ρ m α⟧ Q := rfl
 
+-- The following lemma is structurally different to StateT and others because of weird definitions
+-- for lifting throw
 theorem ExceptT.lift_throw_apply [WP m sh] [Monad m] [MonadExceptOf ε m] :
   wp⟦MonadExceptOf.throw (ε:=ε) e : ExceptT ε' m α⟧ Q = wp⟦MonadExceptOf.throw (ε:=ε) e : m (Except ε' α)⟧ (fun | .ok a => Q.1 a | .error e => Q.2.1 e, Q.2.2) := by
     simp only [wp, MonadExceptOf.throw, throwThe, PredTrans.pushExcept_apply]

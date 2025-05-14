@@ -29,7 +29,7 @@ theorem ReaderT.monadLift_apply [Monad m] [WPMonad m ps] (x : m α) (Q : PostCon
   wp⟦MonadLift.monadLift x : ReaderT ρ m α⟧ Q = fun s => wp⟦x⟧ (fun a => Q.1 a s, Q.2) := by
     simp only [wp, MonadLift.monadLift, PredTrans.pushArg_apply, PredTrans.map_apply]
 
-theorem ExceptT.monadLift_apply [Monad m] [LawfulMonad m] [WPMonad m ps] (x : m α) (Q : PostCond α (.except ε ps)) :
+theorem ExceptT.monadLift_apply [Monad m] [WPMonad m ps] (x : m α) (Q : PostCond α (.except ε ps)) :
   wp⟦MonadLift.monadLift x : ExceptT ε m α⟧ Q = wp⟦x⟧ (fun a => Q.1 a, Q.2.2) := by
     simp only [wp, MonadLift.monadLift, ExceptT.lift, ExceptT.mk, map_map,
       PredTrans.pushExcept_apply, PredTrans.map_apply]
@@ -110,8 +110,7 @@ theorem MonadStateOf.set_apply [MonadStateOf σ m] [MonadLift m n] [WP n _] :
 theorem MonadState.set_apply [WP m sh] [MonadStateOf σ m] :
   wp⟦MonadState.set x : m PUnit⟧ Q = wp⟦MonadStateOf.set x : m PUnit⟧ Q := rfl
 
-theorem StateT.modifyGet_apply [WP m sh] [Monad m] [MonadMorphism m (PredTrans sh) wp]
-  (f : σ → α × σ) :
+theorem StateT.modifyGet_apply [Monad m] [WPMonad m ps] (f : σ → α × σ) :
   wp⟦MonadStateOf.modifyGet f : StateT σ m α⟧ Q = fun s => Q.1 (f s).1 (f s).2 := by
     simp only [wp, MonadStateOf.modifyGet, StateT.modifyGet, pure_pure, pure, PredTrans.pure,
       PredTrans.pushArg_apply]
