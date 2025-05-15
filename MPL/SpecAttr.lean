@@ -14,14 +14,14 @@ open Lean Meta
 initialize registerTraceClass `mpl.spec.attr (inherited := true)
 
 inductive SpecProof where
-  | global (declName : Name) (levelParams : List Name)
+  | global (declName : Name)
   | local (fvarId : FVarId)
   | stx (ref : Syntax) (proof : Expr)
   deriving Inhabited, BEq
 
 def SpecProof.instantiate (proof : SpecProof) : MetaM (Array Expr × Array BinderInfo × Expr × Expr) := do
   let prf ← match proof with
-    | .global declName _ => mkConstWithFreshMVarLevels declName
+    | .global declName => mkConstWithFreshMVarLevels declName
     | .local fvarId => pure <| mkFVar fvarId
     | .stx _ proof => pure proof -- TODO: Think about simp-like generalization
   let (xs, bs, type) ← forallMetaTelescope (← inferType prf)
@@ -29,7 +29,7 @@ def SpecProof.instantiate (proof : SpecProof) : MetaM (Array Expr × Array Binde
 
 instance : ToMessageData SpecProof where
   toMessageData := fun
-    | .global declName _ => m!"SpecProof.global {declName}"
+    | .global declName => m!"SpecProof.global {declName}"
     | .local fvarId => m!"SpecProof.local {mkFVar fvarId}"
     | .stx ref proof => m!"SpecProof.stx {ref} {proof}"
 
@@ -147,7 +147,7 @@ def mkSpecTheoremFromConst (declName : Name) (prio : Nat := eval_prio default) :
   let val := mkConst declName us
 --  withSimpGlobalConfig do -- This sets iota := false, which we do not want (for computeMVarBetaPotentialForSPred)
   let type ← inferType val
-  mkSpecTheorem type (.global declName cinfo.levelParams) prio
+  mkSpecTheorem type (.global declName) prio
 
 def mkSpecTheoremFromLocal (fvar : FVarId) (prio : Nat := eval_prio default) : MetaM SpecTheorem := do
   let some decl ← fvar.findDecl? | throwError "invalid 'spec', local constant not found"

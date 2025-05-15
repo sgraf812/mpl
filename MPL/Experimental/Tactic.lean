@@ -59,13 +59,14 @@ def xapp_n_no_xbind (goal : MVarId) (spec : Option (TSyntax `term)) (thm : Name)
     pruneSolvedGoals
   else
     if x.getAppFn'.isConst then
-      let specs ← specAttr.find? x
+      let specs ← (← getSpecTheorems).specs.getMatch x
       if specs.isEmpty then
-        throwError s!"no specs found for {x}"
+        throwError m!"no specs found for {x}"
       if specs.size > 1 then
-        throwError s!"multiple specs found for {x}: {specs.map (·.fst.name)}"
+        throwError m!"multiple specs found for {x}: {specs.map (·.proof)}"
       else
-        let gs ← triple_goal.apply (← mkConstWithFreshMVarLevels specs[0]!.fst.name)
+        let .global name := specs[0]!.proof | throwError "spec proof is not a global"
+        let gs ← triple_goal.apply (← mkConstWithFreshMVarLevels name)
         pushGoals gs
         pruneSolvedGoals
     else
