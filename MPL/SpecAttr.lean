@@ -13,24 +13,41 @@ open Lean Meta
 
 initialize registerTraceClass `mpl.spec.attr (inherited := true)
 
+inductive SpecProof where
+  | global (declName : Name) (levelParams : List Name)
+  | local (fvarId : FVarId)
+  | stx (ref : Syntax) (proof : Expr)
+  deriving Inhabited, BEq
+
+def SpecProof.instantiate (proof : SpecProof) : MetaM (Array Expr × Array BinderInfo × Expr × Expr) := do
+  let prf ← match proof with
+    | .global declName _ => mkConstWithFreshMVarLevels declName
+    | .local fvarId => pure <| mkFVar fvarId
+    | .stx _ proof => pure proof -- TODO: Think about simp-like generalization
+  let (xs, bs, type) ← forallMetaTelescope (← inferType prf)
+  return (xs, bs, prf.beta xs, type)
+
+instance : ToMessageData SpecProof where
+  toMessageData := fun
+    | .global declName _ => m!"SpecProof.global {declName}"
+    | .local fvarId => m!"SpecProof.local {mkFVar fvarId}"
+    | .stx ref proof => m!"SpecProof.stx {ref} {proof}"
+
 structure SpecTheorem where
   keys : Array DiscrTree.Key
-  /-- Level params of the theorem definition. -/
-  levelParams : List Name
   /--
   Expr key tested for matching, in ∀-quantified form.
   `keys = (← mkPath (← forallMetaTelescope prog).2.2)`.
   -/
   prog : Expr
-  /-- The name of the theorem that proves the spec. -/
-  proof : Name
+  /-- The proof for the theorem. -/
+  proof : SpecProof
   /--
   If `etaPotential` is non-zero, then the precondition contains meta variables that can be
   instantiated after applying `mintro ∀s` `etaPotential` many times.
   -/
   etaPotential : Nat := 0
   priority : Nat  := eval_prio default -- TODO: unused
-  origin : Origin
   /-- `rfl` is true if `proof` is by `SPred.entails.rfl`. -/
   rfl : Bool
   deriving Inhabited, BEq
@@ -43,119 +60,102 @@ structure SpecTheorems where
 
 abbrev SpecExtension := SimpleScopedEnvExtension SpecEntry SpecTheorems
 
-private partial def computeEtaPotentialForInstantiation (e : Expr) : MetaM Nat :=
-  Int.toNat <$> go e 0 -- Int.toNat turns any negative balance into 0, as required
+private partial def countBVarDependentMVars (xs : Array Expr) (e : Expr) : MetaM Nat :=
+  go e
   where
-    noMVar := -10000000000 -- "640k ought to be enough for anybody"
-    go (e : Expr) (balance : Int) : MetaM Int := do
-      if !e.hasExprMVar then return noMVar
+    go (e : Expr) : MetaM Nat := do
+      if !e.hasExprMVar then return 0
       match e with
-      | .mdata _ e => go e balance
-      | .app .. =>
-        if e.isAppOf ``SPred.and || e.isAppOf ``SPred.or then
-          let P := e.getArg! 1
-          let Q := e.getArg! 2
-          let balance := balance - (e.getAppNumArgs - 3)
-          return ← max <$> go P balance <*> go Q balance
-        if e.isAppOf ``And || e.isAppOf ``Or then
-          let P := e.getArg! 0
-          let Q := e.getArg! 1
-          let balance := balance - (e.getAppNumArgs - 2)
-          return ← max <$> go P balance <*> go Q balance
-        if e.isAppOf ``SVal.curry then
-          let P := e.getArg! 1
-          let Q := e.getArg! 2
-          let balance := balance - (e.getAppNumArgs - 3)
-          return ← max <$> go P balance <*> go Q balance
+      | .app f a =>
         if let some (_, lhs, rhs) := e.eq? then
-          if lhs.getAppFn'.isMVar || rhs.getAppFn'.isMVar then
-            return balance
-          return noMVar
-        go e.getAppFn (balance - e.getAppNumArgs)
-      | .lam .. =>
-        lambdaTelescope e fun xs e => go e (balance + xs.size)
-      | .proj .. =>
-        match (← reduceProj? e) with
-        | some e' => go e' balance
-        | none    => return noMVar
-      | .letE .. => lambdaLetTelescope e fun _ e => go e balance
-      | .forallE .. => return noMVar -- Not sure what to do here
-      | .mvar .. => return noMVar -- NB: A likely SPred-valued mvar. Not the case we look for!
-      | .lit .. | .fvar .. | .bvar .. | .sort .. | .const .. =>
-        unreachable!
+          let l := lhs.getAppFn'
+          let r := rhs.getAppFn'
+          if l.isMVar && rhs.hasLooseBVars && xs.contains l then return 1
+          if r.isMVar && lhs.hasLooseBVars && xs.contains r then return 1
+          return ← (· + ·) <$> go lhs <*> go rhs
+        return ← (· + ·) <$> go f <*> go a
+      | .mdata _ e => go e
+      | .lam _ ty b _ => (· + ·) <$> go ty <*> go b
+      | .letE _ ty v b _ => (· + · + ·) <$> go ty <*> go v <*> go b
+      | .forallE _ ty b _ => (· + ·) <$> go ty <*> go b
+      | .proj _ _ e => go e
+      | .mvar .. => return 0
+      | .lit .. | .fvar .. | .bvar .. | .sort .. | .const .. => return 0
 
-private partial def countBVarDependentMVars (e : Expr) : MetaM Nat := do
-  if !e.hasExprMVar then return 0
-  match e with
-  | .app f a =>
-    if let some (_, lhs, rhs) := e.eq? then
-      if lhs.getAppFn'.isMVar && rhs.hasLooseBVars then return 1
-      if rhs.getAppFn'.isMVar && lhs.hasLooseBVars then return 1
-      return ← (· + ·) <$> countBVarDependentMVars lhs <*> countBVarDependentMVars rhs
-    return ← (· + ·) <$> countBVarDependentMVars f <*> countBVarDependentMVars a
-  | .mdata _ e => countBVarDependentMVars e
-  | .lam _ ty b _ => (· + ·) <$> countBVarDependentMVars ty <*> countBVarDependentMVars b
-  | .letE _ ty v b _ => (· + · + ·) <$> countBVarDependentMVars ty <*> countBVarDependentMVars v <*> countBVarDependentMVars b
-  | .forallE _ ty b _ => (· + ·) <$> countBVarDependentMVars ty <*> countBVarDependentMVars b
-  | .proj _ _ e => countBVarDependentMVars e
-  | .mvar .. => return 0
-  | .lit .. | .fvar .. | .bvar .. | .sort .. | .const .. => return 0
+def simpSPredConfig : ConfigWithKey :=
+  { simpGlobalConfig.config with
+    iota := true,
+    beta := true,
+    zeta := true,
+    zetaDelta := true,
+    proj := .yesWithDelta }.toConfigWithKey
 
-
-private partial def computeEtaPotentialForInstantiation2 (σs : Expr) (e : Expr) : MetaM Nat :=
+/-- If `σs : List Type`, then `e : SPred σs`.
+Return the number of times `e` needs to be applied
+in order to assign closed solutions to meta variables. -/
+partial def computeMVarBetaPotentialForSPred (xs : Array Expr) (σs : Expr) (e : Expr) : MetaM Nat :=
   withNewMCtxDepth do
-  withConfig (fun cfg => { cfg with iota := true, beta := true, zeta := true, zetaDelta := true, proj := .yesWithDelta }) do
+  withConfigWithKey simpSPredConfig do
+  if xs.isEmpty then return 0
   let ctx ← Simp.Context.mkDefault
-  logInfo s!"{σs}"
   let mut σs ← whnfR σs
   let mut e := e
   let mut n : Nat := 0
   let mut lastSuccess := 0
-  let mut boundAssignments ← countBVarDependentMVars e
-  logInfo m!"comp σs: {σs}"
+  let mut boundAssignments ← countBVarDependentMVars xs e
   while σs.isAppOfArity ``List.cons 3 do
+    n := n+1
     let σ := σs.getArg! 1
-    logInfo m!"next {σ}, {n}: e: {e}"
     let s ← mkFreshExprMVar σ
     e := e.beta #[s]
     let (r, _) ← simp e ctx
+      -- In practice we only need to reduce `fun s => ...`, `SVal.curry` and functions that operate
+      -- on the state tuple bound by `SVal.curry`.
+      -- We could write a custom function should `simp` become a bottleneck.
     e := r.expr
-    let count ← countBVarDependentMVars e
-    logInfo m!"count {count}, {boundAssignments}"
+    let count ← countBVarDependentMVars xs e
     if count < boundAssignments then
       lastSuccess := n
       boundAssignments := count
-    n := n+1
     σs ← whnfR (σs.getArg! 2)
   return lastSuccess
 
-private def mkSpecTheorem (origin : Origin) (type : Expr) (levelParams : List Name) (proof : Name) (prio : Nat) : MetaM SpecTheorem := do
+private def mkSpecTheorem (type : Expr) (proof : SpecProof) (prio : Nat) : MetaM SpecTheorem := do
   -- cf. mkSimpTheoremCore
   let type ← instantiateMVars type
+  unless (← isProp type) do
+    throwError "invalid 'spec', proposition expected{indentExpr type}"
   withNewMCtxDepth do
-  let (xs, _, type) ← forallMetaTelescopeReducing type
+  let (xs, _, type) ← withSimpGlobalConfig (forallMetaTelescopeReducing type)
   let type ← whnfR type
   let_expr Triple _m ps _inst _α prog P _Q := type
     | throwError "unexpected kind of spec theorem; not a triple{indentExpr type}"
   let f := prog.getAppFn'
   unless f.isConst do throwError s!"not an application of a constant: {prog}"
   let keys ← DiscrTree.mkPath prog (noIndexAtArgs := false)
-  let etaPotential ← computeEtaPotentialForInstantiation2 (mkApp (mkConst ``PostShape.args) ps) P
-  logInfo m!"Eta potential of {P}: {etaPotential}"
+  -- beta potential of `P` describes how many times we want to `mintro ∀s`, that is,
+  -- *eta*-expand the goal.
+  let etaPotential ← computeMVarBetaPotentialForSPred xs (mkApp (mkConst ``PostShape.args) ps) P
+  -- logInfo m!"Beta potential {etaPotential} for {P}"
   -- logInfo m!"mkSpecTheorem: {keys}, proof: {proof}"
-  return { keys, levelParams, prog := (← mkForallFVars xs prog), proof, etaPotential, origin, rfl := false, priority := prio }
+  return { keys, prog := (← mkForallFVars xs prog), proof, etaPotential, rfl := false, priority := prio }
 
-private def mkSpecTheoremFromConst (declName : Name) (prio : Nat) : MetaM SpecTheorem := do
+def mkSpecTheoremFromConst (declName : Name) (prio : Nat := eval_prio default) : MetaM SpecTheorem := do
   -- cf. mkSimpTheoremsFromConst
   let cinfo ← getConstInfo declName
   let us := cinfo.levelParams.map mkLevelParam
-  let origin := Origin.decl declName
   let val := mkConst declName us
-  withSimpGlobalConfig do -- sounds like a good default here,
-    let type ← inferType val
-    unless (← isProp type) do
-      throwError "invalid 'spec', proposition expected{indentExpr type}"
-    mkSpecTheorem origin type cinfo.levelParams declName prio
+--  withSimpGlobalConfig do -- This sets iota := false, which we do not want (for computeMVarBetaPotentialForSPred)
+  let type ← inferType val
+  mkSpecTheorem type (.global declName cinfo.levelParams) prio
+
+def mkSpecTheoremFromLocal (fvar : FVarId) (prio : Nat := eval_prio default) : MetaM SpecTheorem := do
+  let some decl ← fvar.findDecl? | throwError "invalid 'spec', local constant not found"
+  mkSpecTheorem decl.type (.local fvar) prio
+
+def mkSpecTheoremFromStx (ref : Syntax) (proof : Expr) (prio : Nat := eval_prio default) : MetaM SpecTheorem := do
+  let type ← inferType proof
+  mkSpecTheorem type (.stx ref proof) prio
 
 def addSpecTheoremEntry (d : SpecTheorems) (e : SpecTheorem) : SpecTheorems :=
   { d with specs := d.specs.insertCore e.keys e }

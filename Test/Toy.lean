@@ -80,7 +80,7 @@ theorem mkFreshPair_spec :
   mkFreshPair
   ⦃⇓ (a, b) => ⌜a ≠ b⌝⦄ := by
   unfold mkFreshPair
-  mintro - ∀s
+  mintro -
   mspec mkFreshNat_spec
   mintro ∀s
   mcases h with ⌜h₁⌝
@@ -88,6 +88,17 @@ theorem mkFreshPair_spec :
   mintro ∀s
   mcases h with ⌜h₂⌝
   simp_all [h₁, h₂]
+
+theorem mkFreshPair_spec_no_eta :
+  ⦃⌜True⌝⦄
+  mkFreshPair
+  ⦃⇓ (a, b) => ⌜a ≠ b⌝⦄ := by
+  unfold mkFreshPair
+  mintro -
+  mspec mkFreshNat_spec
+  mspec mkFreshNat_spec
+  mspec
+  intro _; simp_all
 
 example : PostCond (Nat × List.Zipper (List.range' 1 3 1)) (PostShape.except Nat (PostShape.arg Nat PostShape.pure)) :=
   ⟨fun (r, xs) s => r ≤ 4 ∧ s = 4 ∧ r + xs.suff.sum > 4, fun e s => e = 42 ∧ s = 4, ()⟩

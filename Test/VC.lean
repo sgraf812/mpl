@@ -21,7 +21,6 @@ theorem ifs_triple : ⦃⌜True⌝⦄ ifs n ⦃⇓ r => ⌜r > 0⌝⦄ := by
 private abbrev fst : SVal (AppState::σs) Nat := fun s => SVal.pure s.1
 private abbrev snd : SVal (AppState::σs) Nat := fun s => SVal.pure s.2
 
---set_option trace.Meta.whnf true in
 @[spec]
 theorem mkFreshNat_spec [Monad m] [WPMonad m sh] :
   ⦃⌜#fst = n ∧ #snd = o⌝⦄
@@ -30,14 +29,11 @@ theorem mkFreshNat_spec [Monad m] [WPMonad m sh] :
   unfold mkFreshNat
   mvcgen <;> simp_all
 
-@[spec]
-theorem mkFreshNat_spec' [Monad m] [WPMonad m sh] :
-  ⦃⌜#fst = n ∧ #snd = o⌝⦄
-  (mkFreshNat : StateM AppState Nat)
-  ⦃⇓ r => ⌜r = n ∧ #fst = n + 1 ∧ #snd = o⌝⦄ := by
-  unfold mkFreshNat
-  mvcgen <;> simp_all
-
 theorem mkFreshPair_triple : ⦃⌜True⌝⦄ mkFreshPair ⦃⇓ (a, b) => ⌜a ≠ b⌝⦄ := by
   unfold mkFreshPair
   mvcgen
+  simp
+  trivial
+  simp_all
+  trivial
+  simp_all[SPred.entails_elim_cons]

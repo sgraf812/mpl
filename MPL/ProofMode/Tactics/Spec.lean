@@ -18,19 +18,6 @@ import MPL.Specs -- important for MPL.Specs.bind
 namespace MPL.ProofMode.Tactics
 open Lean Elab Tactic Meta
 
-open Lean Elab Term Tactic Command
-elab "test" : tactic => do
-  let (e, _) ← elabTermWithHoles (← `(PostShape.arg Nat .pure)) none `m
-  logInfo m!"iota: {(← getConfig).iota}"
-  logInfo m!"{e}"
-  let e ← whnfR (mkApp (mkConst ``PostShape.args) e)
-  logInfo m!"{e}"
-
-example : True := by
-  set_option trace.Meta.whnf true in
-  test
-  trivial
-
 initialize registerTraceClass `mpl.tactics.spec
 
 theorem Spec.entails_total {α} {ps : PostShape} (p : α → Assertion ps) (q : PostCond α ps) :
@@ -39,20 +26,27 @@ theorem Spec.entails_total {α} {ps : PostShape} (p : α → Assertion ps) (q : 
 theorem Spec.entails_partial {α} {ps : PostShape} (p : PostCond α ps) (q : α → Assertion ps) :
   (∀ a, p.1 a ⊢ₛ q a) → p ⊢ₚ PostCond.partial q := (PostCond.entails_partial p q).mpr
 
-def findSpec (database : SpecTheorems) (prog : Expr) : MetaM Name := do
+structure ElabSpecResult where
+  spec : Expr
+  specHoles : List MVarId
+  P : Expr
+  Q : Expr
+  etaPotential : Nat
+
+def findSpec (database : SpecTheorems) (prog : Expr) : MetaM SpecTheorem := do
+  let prog ← instantiateMVarsIfMVarApp prog
   unless prog.getAppFn'.isConst do throwError m!"not an application of a constant: {prog}"
   let candidates ← database.specs.getMatch prog
   let candidates := candidates.insertionSort fun s₁ s₂ => s₁.priority < s₂.priority
+  -- logInfo m!"candidates for {prog}: {candidates.map (·.proof)}"
   let specs ← candidates.filterM fun spec => do
-    let specProg := spec.prog.instantiateLevelParams spec.levelParams (← mkFreshLevelMVars spec.levelParams.length)
-    let (_, _, specProg) ← forallMetaTelescope specProg
-    -- logInfo m!"param: {specProg.hasLevelParam}, mvar: {specProg.hasLevelMVar}"
-    let b ← withAssignableSyntheticOpaque <| isDefEq prog specProg
-    -- logInfo s!"specProg: {specProg}, prog: {prog}, b: {b}"
-    return b
+    let (_, _, _, type) ← spec.proof.instantiate
+    let_expr Triple _m _ps _instWP _α specProg _P _Q := type | failure
+    isDefEq prog specProg
+  -- logInfo m!"specs for {prog}: {specs.map (·.proof)}"
   if specs.isEmpty then throwError m!"No specs found for {indentExpr prog}\nCandidates: {candidates.map (·.proof)}"
   -- if specs.size > 1 then throwError s!"multiple specs found for {prog}: {specs.map (·.proof)}"
-  return specs[0]!.proof
+  return specs[0]!
 
 def instantiateSpec (spec : Expr) (expectedTy : Expr) : MetaM (Expr × List MVarId) := do
   let specTy ← inferType spec
@@ -66,36 +60,43 @@ def instantiateSpec (spec : Expr) (expectedTy : Expr) : MetaM (Expr × List MVar
   trace[mpl.tactics.spec] "inferred specTy, post defeq: {← instantiateMVars specTy}"
   return (spec, mvs.toList.map (·.mvarId!))
 
-def elabTermForSpec (stx : TSyntax `term) (expectedTy : Expr) : TacticM (Expr × List MVarId) := do
+def findAndElabSpec (database : SpecTheorems) (wp : Expr) : MetaM (SpecTheorem × List MVarId) := do
+  -- logInfo m!"finding spec for {wp}"
+  let_expr WP.wp _m _ps _instWP _α prog := wp | throwError "target not a wp application {wp}"
+  return (← findSpec database prog, [])
+
+def elabTermIntoSpecTheorem (stx : TSyntax `term) (expectedTy : Expr) : TacticM (SpecTheorem × List MVarId) := do
   if stx.raw.isIdent then
     match (← Term.resolveId? stx.raw (withInfo := true)) with
-    | some spec => return ← instantiateSpec spec expectedTy
+    | some (.const declName _) => return (← mkSpecTheoremFromConst declName, [])
+    | some (.fvar fvarId) => return (← mkSpecTheoremFromLocal fvarId, [])
     | _      => pure ()
-  -- It is vital that we supply an expected type below,
-  -- otherwise `ps` will be uninstantiated on the first elaboration try
-  -- and we do not get to elaborate `fun a b => True` as `α → Assertion ps`,
-  -- even after instantiating `ps` to `.arg σ .pure` and retrying (a bug?).
   try
-    elabTermWithHoles stx expectedTy `mspec (allowNaturalHoles := true)
+    let (prf, mvars) ← Term.withSynthesize <|
+      elabTermWithHoles stx expectedTy `mspec (allowNaturalHoles := true)
+    let specThm ← mkSpecTheoremFromStx stx.raw prf
+    return (specThm, mvars)
   catch e : Exception =>
-    trace[mpl.tactics.spec] "internal error. This happens for example when the head symbol of the spec is wrong. Message:\n  {e.toMessageData}"
+    trace[mpl.tactics.spec] "Internal error. This happens for example when the head symbol of the spec is wrong. Message:\n  {e.toMessageData}"
     throw e
 
-def elabSpec (stx? : Option (TSyntax `term)) (wp : Expr) : TacticM (Expr × List MVarId × Expr × Expr) := do
-  let_expr WP.wp m ps instWP α prog := wp | throwError "target not a wp application {wp}"
-  let [u] := wp.getAppFn'.constLevels! | throwError "Internal error: wrong number of levels in wp application"
-  let stx ← stx?.getDM <| do return mkIdent (← findSpec (← getSpecTheorems) prog)
-  trace[mpl.tactics.spec] "spec syntax: {stx}"
+def elabSpec (stx? : Option (TSyntax `term)) (wp : Expr) : TacticM (SpecTheorem × List MVarId) := do
+  let_expr f@WP.wp m ps instWP α prog := wp | throwError "target not a wp application {wp}"
   let P ← mkFreshExprMVar (mkApp (mkConst ``Assertion) ps) (userName := `P)
   let Q ← mkFreshExprMVar (mkApp2 (mkConst ``PostCond) α ps) (userName := `Q)
-  let expectedTy := mkApp7 (mkConst ``Triple [u]) m ps instWP α prog P Q
+  let expectedTy := mkApp7 (mkConst ``Triple f.constLevels!) m ps instWP α prog P Q
+  trace[mpl.tactics.spec] "spec syntax: {stx?}"
   trace[mpl.tactics.spec] "expected type: {← instantiateMVars expectedTy}"
-  let (spec, mvarIds) ← Term.withSynthesize (elabTermForSpec stx expectedTy)
-  trace[mpl.tactics.spec] "inferred spec: {← instantiateMVars spec}"
-  let mvarIds ← mvarIds.filterM (not <$> ·.isAssigned)
-  let P ← instantiateMVars P
-  let Q ← instantiateMVars Q
-  return (spec, mvarIds, P, Q)
+  match stx? with
+  | none => pure (← findSpec (← getSpecTheorems) prog, [])
+  | some stx => Term.withSynthesize (elabTermIntoSpecTheorem stx expectedTy)
+ -- trace[mpl.tactics.spec] "inferred spec: {specThm.proof}"
+ -- let mvarIds ← mvarIds.filterM (not <$> ·.isAssigned)
+ -- let P ← instantiateMVars P
+ -- let Q ← instantiateMVars Q
+ -- let σs := mkApp (mkConst ``PostShape.args) ps
+ -- let etaPotential ← computeMVarBetaPotentialForSPred σs P
+ -- return { spec, specHoles := mvarIds, P, Q, etaPotential }
 
 variable {n} [Monad n] [MonadControlT MetaM n] [MonadLiftT MetaM n]
 
@@ -152,27 +153,59 @@ def dischargeMGoal (goal : MGoal) (goalTag : Name) (discharge : Expr → Name �
   let some prf ← liftM (m:=MetaM) goal.assumption | discharge goal.toExpr goalTag
   return prf
 
-def mSpec (goal : MGoal) (elabSpecAtWP : Expr → n (Expr × List MVarId × Expr × Expr)) (discharge : Expr → Name → n Expr) (preTag := `pre) (resultName := `r) : n (Expr × List MVarId) := do
-  -- First instantiate `fun s => ...` in the target.
-  -- This is like repeated `mintro ∀s`.
-  lambdaTelescope goal.target.consumeMData fun xs T => do
-  let goal : MGoal :=
-    { target := T,
-      σs := ← dropStateList goal.σs xs.size,
-      hyps := betaPreservingHypNames goal.σs goal.hyps xs }
+theorem Spec.frame [IsPure P φ] (h : φ → P ⊢ₛ T) : P ⊢ₛ T := by
+  apply SPred.pure_elim
+  · exact IsPure.to_pure.mp
+  · exact h
+
+def mTryFrame (goal : MGoal) (k : MGoal → n (α × Expr)) : n (α × Expr) := do
+  let φ ← mkFreshExprMVar (mkSort .zero)
+  if let some inst ← synthInstance? (mkApp3 (mkConst ``IsPure) goal.σs goal.hyps φ) then
+    withLocalDeclD `h φ fun hφ => do
+      let (a, prf) ← k goal
+      let prf ← mkLambdaFVars #[hφ] prf
+      let prf := mkApp6 (mkConst ``Spec.frame) goal.σs goal.hyps φ goal.target inst prf
+      return (a, prf)
+  else
+    k goal
+
+def mSpec (goal : MGoal) (elabSpecAtWP : Expr → n (SpecTheorem × List MVarId)) (discharge : Expr → Name → n Expr) (preTag := `pre) (resultName := `r) : n (Expr × List MVarId) := do
+  -- First instantiate `fun s => ...` in the target via repeated `mintro ∀s`.
+  Prod.swap <$> mIntroForallN goal goal.target.consumeMData.getNumHeadLambdas fun goal => do
 
   -- Elaborate the spec
-  let mut (fn, args) := T.getAppFnArgs
+  let T := goal.target.consumeMData
+  let fn := T.getAppFn.constName!
   unless fn == ``PredTrans.apply do liftM (m:=MetaM) (throwError "target not a PredTrans.apply application {T}")
-  let wp := args[2]!
-  let_expr WP.wp _m ps _instWP α _prog := wp | do liftM (m:=MetaM) (throwError "target not a wp application {wp}")
+  let wp := T.getArg! 2
+  let (specThm, elabMVars) ← controlAt MetaM fun map => map (elabSpecAtWP wp)
+
+  -- The precondition of `specThm` might look like `⌜?n = ‹Nat›ₛ ∧ ?m = ‹Bool›ₛ⌝`.
+  -- Further eta reduce according to `etaPotential` so that the solutions for `?n` and `?m` do not
+  -- depend on the bound variable that ‹_›ₛ expands to.
+  let residualEta := specThm.etaPotential - (T.getAppNumArgs - 4) -- 4 arguments expected for PredTrans.apply
+  mIntroForallN goal residualEta fun goal => do
+  let T := goal.target.consumeMData
+  let args := T.getAppArgs
   let Q' := args[3]!
   let excessArgs := (args.extract 4 args.size).reverse
-  let (spec, specHoles, P, Q) ← controlAt MetaM fun map => map (elabSpecAtWP wp)
-  let P := P.betaRev excessArgs
-  let spec := spec.betaRev excessArgs
 
-  -- first try instantiation if P or Q is schematic (i.e. an MVar app)
+  -- Now actually instantiate the specThm using the expected type computed from `wp`.
+  let (schematicMVars, _, spec, specTy) ← specThm.proof.instantiate
+  let_expr f@Triple m ps instWP α prog P Q := specTy | do liftM (m:=MetaM) (throwError "target not a Triple application {specTy}")
+  let wp' := mkApp5 (mkConst ``WP.wp f.constLevels!) m ps instWP α prog
+  unless (← withAssignableSyntheticOpaque <| isDefEq wp wp') do
+    Term.throwTypeMismatchError none wp wp' spec
+  let ctx ← Simp.Context.mkDefault
+  let P := P.betaRev excessArgs
+  let (P, _) ← dsimp P ctx
+  let spec := spec.betaRev excessArgs
+  -- Compute a frame of `P` that we duplicate into the pure context using `Spec.frame`
+  -- For now, frame = `P` or nothing at all
+  mTryFrame goal fun goal => do
+  -- Now we are all set for applying `spec`.
+
+  -- first try instantiation if P or Q are schematic (i.e. an MVar app)
   let mut HPRfl := false
   let mut QQ'Rfl := false
   let P ← instantiateMVarsIfMVarApp P
@@ -205,8 +238,7 @@ def mSpec (goal : MGoal) (elabSpecAtWP : Expr → n (Expr × List MVarId × Expr
 
   -- finally build the proof; HPPrf.trans (spec.trans QQ'mono)
   let prf := prePrf (postPrf spec)
-  let prf ← mkLambdaFVars xs prf -- Close over the `mintro ∀s`'d vars
-  return (prf, specHoles)
+  return (elabMVars ++ schematicMVars.toList.map (·.mvarId!), prf)
 
 private def addMVar (mvars : IO.Ref (List MVarId)) (goal : Expr) (name : Name) : MetaM Expr := do
   let m ← mkFreshExprSyntheticOpaqueMVar goal (tag := name)

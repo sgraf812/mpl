@@ -154,5 +154,7 @@ theorem and_right_comm : (P ∧ Q) ∧ R ⊣⊢ₛ (P ∧ R) ∧ Q := and_assoc.
 
 theorem entails_pure_intro {σs : List Type} (P Q : Prop) (h : P → Q) : SPred.entails ⌜P⌝ (σs := σs) ⌜Q⌝ := pure_elim' fun hp => pure_intro (h hp)
 
-@[simp] theorem entails_pure_elim {σ : Type} {σs : List Type} [Inhabited σ] (P Q : Prop) : SPred.entails ⌜P⌝ (σs := σ::σs) ⌜Q⌝ ↔ SPred.entails ⌜P⌝ (σs := σs) ⌜Q⌝:= by simp only [entails, SVal.curry_cons, forall_const]
+@[simp] theorem entails_elim_nil (P Q : SPred []) : SPred.entails P Q ↔ P → Q := iff_of_eq rfl
+@[simp] theorem entails_pure_elim_cons {σ : Type} {σs : List Type} [Inhabited σ] (P Q : Prop) : SPred.entails ⌜P⌝ (σs := σ::σs) ⌜Q⌝ ↔ SPred.entails ⌜P⌝ (σs := σs) ⌜Q⌝:= by simp only [entails, SVal.curry_cons, forall_const]
+theorem entails_elim_cons {σ : Type} {σs : List Type} (P Q : SPred (σ::σs)) : P ⊢ₛ Q ↔ ∀ s, (P s ⊢ₛ Q s) := by simp only [entails, SVal.curry_cons, forall_const]
 @[simp] theorem entails_true_intro {σs : List Type} (P Q : SPred σs) : ⊢ₛ P → Q ↔ P ⊢ₛ Q := Iff.intro (fun h => (and_intro true_intro .rfl).trans (imp_elim h)) (fun h => imp_intro (and_elim_r.trans h))

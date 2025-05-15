@@ -45,6 +45,12 @@ partial def mIntroForall [Monad m] [MonadControlT MetaM m] [MonadLiftT MetaM m] 
       let prf ← mkLambdaFVars #[s] prf
       return (a, mkApp5 (mkConst ``SPred.entails_cons_intro) σ σs' goal.hyps goal.target prf)
 
+def mIntroForallN [Monad m] [MonadControlT MetaM m] [MonadLiftT MetaM m] (goal : MGoal) (n : Nat) (k : MGoal → m (α × Expr)) : m (α × Expr) :=
+  match n with
+  | 0 => k goal
+  | n+1 => do mIntroForall goal (← liftM (m := MetaM) `(binderIdent| _)) fun g =>
+              mIntroForallN g n k
+
 /--
   Like `rcases`, but operating on stateful hypotheses.
   Example: Given a goal `h : (P ∧ (Q ∨ R) ∧ (Q → R)) ⊢ₛ R`,

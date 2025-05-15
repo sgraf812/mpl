@@ -96,6 +96,7 @@ where
     let T := goal.target
     let T := (← reduceProjBeta? T).getD T -- very slight simplification
     trace[mpl.tactics.vcgen] "target: {T}"
+    -- logInfo m!"onGoal: {T}"
     let goal := { goal with target := T }
 
     let f := T.getAppFn
@@ -122,10 +123,10 @@ where
     let trans := args[2]!
     --let Q := args[3]!
     -- logInfo m!"onWPApp: {trans}"
-    match_expr trans with
+    match_expr ← instantiateMVarsIfMVarApp trans with
     | WP.wp m ps instWP α e =>
       let us := trans.getAppFn.constLevels!
-      let u := us[0]!
+      let e ← instantiateMVarsIfMVarApp e
       let f := e.getAppFn'
       if let .letE x ty val body _nonDep := f then
         burnOne
@@ -144,12 +145,7 @@ where
         return ← onWPApp { goal with target := mkAppN (mkConst ``PredTrans.apply) (args.set! 2 wpe) } name
       if f.isConst then
         burnOne
-        let spec ← findSpec (← getSpecTheorems) e
-        let P' ← mkFreshExprMVar (mkApp (mkConst ``Assertion) ps) (userName := `P)
-        let Q' ← mkFreshExprMVar (mkApp2 (mkConst ``PostCond) α ps) (userName := `Q)
-        let expectedTy := mkApp7 (mkConst ``Triple [u]) m ps instWP α e P' Q'
-        let (spec, mvars) ← instantiateSpec (← mkConstWithFreshMVarLevels spec) expectedTy
-        let (prf, specHoles) ← mSpec goal (fun _wp => return (spec, mvars, P', Q')) tryGoal (preTag := name)
+        let (prf, specHoles) ← mSpec goal (liftM ∘ findAndElabSpec (← getSpecTheorems)) tryGoal (preTag := name)
         -- TODO: Better story for the generates holes
         for mvar in specHoles do
           -- logInfo m!"mvar: {← mvar.getTag} assigned: {← mvar.isAssigned}"
