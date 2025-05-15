@@ -93,10 +93,9 @@ where
       mkLambdaFVars xs prf
 
   onGoal goal name : VCGenM Expr := do
-    -- trace[mpl.tactics.vcgen] "target: {T}"
     let T := goal.target
     let T := (← reduceProjBeta? T).getD T -- very slight simplification
-    logInfo m!"target {name}: {T}"
+    trace[mpl.tactics.vcgen] "target: {T}"
     let goal := { goal with target := T }
 
     let f := T.getAppFn
@@ -158,7 +157,7 @@ where
             -- logInfo m!"assigning {mvar} : {← mvar.getType}"
             mvar.assign (← mvar.withContext (tryGoal (← mvar.getType) (← mvar.getTag)))
         return prf
-      return ← discharge goal.toExpr name
+      return ← onFail goal name
       -- Split match-expressions
       --if let some info := isMatcherAppCore? (← getEnv) e then
       --  let candidate ← id do
@@ -174,7 +173,7 @@ where
       --    -- For now using `splitMatch` works fine.
       --    -- return ← Split.splitMatch goal e
       --    return (fuel, ← discharge goal subst)
-    | _ => return ← discharge goal.toExpr name
+    | _ => return ← onFail goal name
 
 end VC
 
@@ -220,5 +219,5 @@ theorem fib_triple_vc : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n�
   mvcgen
   case inv => exact ⇓ (⟨a, b⟩, xs) =>
     a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)
-  all_goals dsimp
+  --all_goals dsimp
   all_goals simp_all +zetaDelta [Nat.sub_one_add_one]

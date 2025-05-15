@@ -18,6 +18,19 @@ import MPL.Specs -- important for MPL.Specs.bind
 namespace MPL.ProofMode.Tactics
 open Lean Elab Tactic Meta
 
+open Lean Elab Term Tactic Command
+elab "test" : tactic => do
+  let (e, _) ← elabTermWithHoles (← `(PostShape.arg Nat .pure)) none `m
+  logInfo m!"iota: {(← getConfig).iota}"
+  logInfo m!"{e}"
+  let e ← whnfR (mkApp (mkConst ``PostShape.args) e)
+  logInfo m!"{e}"
+
+example : True := by
+  set_option trace.Meta.whnf true in
+  test
+  trivial
+
 initialize registerTraceClass `mpl.tactics.spec
 
 theorem Spec.entails_total {α} {ps : PostShape} (p : α → Assertion ps) (q : PostCond α ps) :
