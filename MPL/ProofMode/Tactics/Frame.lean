@@ -47,6 +47,9 @@ instance (σs) (P Q : SPred σs) [HasFrame P Q ψ] : HasFrame (σs:=σs) spred(P
              <| SPred.and_right_comm.trans
              <| SPred.and_assoc.trans
              <| SPred.and_congr_r (SPred.and_comm.trans SPred.pure_and)
+-- The following instance comes last so that it gets the highest priority.
+-- It's the most efficient and best solution if valid
+instance {P : Prop} : HasFrame (σs:=[]) P ⌜True⌝ P where reassoc := SPred.true_and.symm
 
 -- #synth ∀ {w x P Q y z}, HasFrame spred(⌜w = 2⌝ ∧ ⌜x = 3⌝ ∧ P ∧ ⌜y = 4⌝ ∧ Q ∧ ⌜z=6⌝) _ _
 
@@ -73,21 +76,17 @@ partial def transferHypNames (P P' : Expr) : MetaM Expr := (·.snd) <$> label (c
       let P' ← instantiateMVarsIfMVarApp P'
       if let some _ := parseEmptyHyp? P' then
         return (Ps, P')
-      logInfo s!"{P'}, {parseAnd? P'}, {P'.app3? ``SPred.and}"
       if let some (σs, L, R) := parseAnd? P' then
-        logInfo m!"{L} {R}"
         let (Ps, L') ← label Ps L
         let (Ps, R') ← label Ps R
         return (Ps, mkAnd! σs L' R')
       else
         let mut Ps' := Ps
         repeat
-          let P :: Ps'' := Ps'
-            -- If we could not find the hyp, it might be in a nested conjunction.
-            -- Just pick a default name for it.
-            | return (Ps, { name := `h, p := P' : Hyp }.toExpr)
+          -- If we cannot find the hyp, it might be in a nested conjunction.
+          -- Just pick a default name for it.
+          let P :: Ps'' := Ps' | return (Ps, { name := `h, p := P' : Hyp }.toExpr)
           Ps' := Ps''
-          logInfo m!"{P.p} {P'}"
           if ← isDefEq P.p P' then
             return (Ps, { P with p := P' }.toExpr)
         unreachable!

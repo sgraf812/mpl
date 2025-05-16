@@ -13,10 +13,28 @@ theorem fib_triple : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ :
     a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)
   all_goals simp_all +zetaDelta [Nat.sub_one_add_one]
 
+theorem fib_impl_vcs
+    (Q : Nat → PostCond Nat PostShape.pure)
+    (I : (n : Nat) → (_ : ¬n = 0) →
+      PostCond (MProd Nat Nat × List.Zipper [1:n].toList) PostShape.pure)
+    (ret : (Q 0).1 0)
+    (loop_pre : ∀ n (hn : ¬n = 0), (I n hn).1 (⟨0, 1⟩, List.Zipper.begin _))
+    (loop_post : ∀ n (hn : ¬n = 0) r, (I n hn).1 (r, List.Zipper.end _) ⊢ₛ (Q n).1 r.snd)
+    (loop_step : ∀ n (hn : ¬n = 0) r rpref x suff (h : [1:n].toList = rpref.reverse ++ x :: suff),
+                  (I n hn).1 (r, ⟨rpref, x::suff, by simp[h]⟩) ⊢ₛ (I n hn).1 (⟨r.2, r.1+r.2⟩, ⟨x::rpref, suff, by simp[h]⟩))
+    : wp⟦fib_impl n⟧ (Q n) := by
+  unfold fib_impl
+  mvcgen
+  case inv h => exact I n h
+  case ifTrue h => subst h; mpure_intro; exact ret
+  case ifFalse h => mpure_intro; apply_rules [loop_pre]
+  case step => mpure_intro; apply_rules [loop_step]
+  case post.success => mpure_intro; apply_rules [loop_post]
+
 -- TODO: Use strongest post
 theorem ifs_triple : ⦃⌜True⌝⦄ ifs n ⦃⇓ r => ⌜r > 0⌝⦄ := by
   unfold ifs
-  mvcgen <;> simp +zetaDelta
+  mvcgen_no_trivial <;> try (mpure_intro; trivial) -- this is the default for mvcgen
 
 private abbrev fst : SVal (AppState::σs) Nat := fun s => SVal.pure s.1
 private abbrev snd : SVal (AppState::σs) Nat := fun s => SVal.pure s.2
@@ -27,13 +45,10 @@ theorem mkFreshNat_spec [Monad m] [WPMonad m sh] :
   (mkFreshNat : StateT AppState m Nat)
   ⦃⇓ r => ⌜r = n ∧ #fst = n + 1 ∧ #snd = o⌝⦄ := by
   unfold mkFreshNat
-  mvcgen <;> simp_all
+  mvcgen
+  simp_all
 
 theorem mkFreshPair_triple : ⦃⌜True⌝⦄ mkFreshPair ⦃⇓ (a, b) => ⌜a ≠ b⌝⦄ := by
   unfold mkFreshPair
   mvcgen
-  simp
-  trivial
-  simp_all
-  trivial
-  simp_all[SPred.entails_elim_cons]
+  simp_all [SPred.entails_elim_cons]

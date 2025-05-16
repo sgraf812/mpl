@@ -184,7 +184,7 @@ elab "mvcgen_step" n:(num)? : tactic => do
     return m)
   replaceMainGoal (← goals.get).reverse
 
-elab "mvcgen" : tactic => do
+elab "mvcgen_no_trivial" : tactic => do
   let (mvar, goal) ← mStartMVar (← getMainGoal)
   mvar.withContext do
   let goals ← IO.mkRef []
@@ -193,6 +193,8 @@ elab "mvcgen" : tactic => do
     goals.modify (m.mvarId! :: ·)
     return m)
   replaceMainGoal (← goals.get).reverse
+
+macro "mvcgen" : tactic => `(tactic| mvcgen_no_trivial <;> try (guard_target =~ (⌜True⌝ ⊢ₛ _); mpure_intro; trivial))
 
 def fib_impl (n : Nat) : Idd Nat := do
   if n = 0 then return 0
@@ -215,5 +217,4 @@ theorem fib_triple_vc : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n�
   mvcgen
   case inv => exact ⇓ (⟨a, b⟩, xs) =>
     a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)
-  --all_goals dsimp
   all_goals simp_all +zetaDelta [Nat.sub_one_add_one]

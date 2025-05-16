@@ -6,6 +6,7 @@ Authors: Lars König, Mario Carneiro, Sebastian Graf
 import MPL.ProofMode.Tactics.Basic
 import MPL.ProofMode.Tactics.Intro
 import MPL.ProofMode.Tactics.Pure
+import MPL.ProofMode.Tactics.Frame
 import MPL.ProofMode.Tactics.Assumption
 import MPL.ProofMode.Tactics.Utils
 import MPL.WP
@@ -153,57 +154,52 @@ def dischargeMGoal (goal : MGoal) (goalTag : Name) (discharge : Expr → Name �
   let some prf ← liftM (m:=MetaM) goal.assumption | discharge goal.toExpr goalTag
   return prf
 
-theorem Spec.frame [IsPure P φ] (h : φ → P ⊢ₛ T) : P ⊢ₛ T := by
-  apply SPred.pure_elim
-  · exact IsPure.to_pure.mp
-  · exact h
-
-def mTryFrame (goal : MGoal) (k : MGoal → n (α × Expr)) : n (α × Expr) := do
-  let φ ← mkFreshExprMVar (mkSort .zero)
-  if let some inst ← synthInstance? (mkApp3 (mkConst ``IsPure) goal.σs goal.hyps φ) then
-    withLocalDeclD `h φ fun hφ => do
-      let (a, prf) ← k goal
-      let prf ← mkLambdaFVars #[hφ] prf
-      let prf := mkApp6 (mkConst ``Spec.frame) goal.σs goal.hyps φ goal.target inst prf
-      return (a, prf)
-  else
-    k goal
-
 def mSpec (goal : MGoal) (elabSpecAtWP : Expr → n (SpecTheorem × List MVarId)) (discharge : Expr → Name → n Expr) (preTag := `pre) (resultName := `r) : n (Expr × List MVarId) := do
   -- First instantiate `fun s => ...` in the target via repeated `mintro ∀s`.
   Prod.swap <$> mIntroForallN goal goal.target.consumeMData.getNumHeadLambdas fun goal => do
 
-  -- Elaborate the spec
+  -- Elaborate the spec for the wp⟦e⟧ app in the target
   let T := goal.target.consumeMData
-  let fn := T.getAppFn.constName!
-  unless fn == ``PredTrans.apply do liftM (m:=MetaM) (throwError "target not a PredTrans.apply application {T}")
+  unless T.getAppFn.constName! == ``PredTrans.apply do
+    liftM (m:=MetaM) (throwError "target not a PredTrans.apply application {indentExpr T}")
   let wp := T.getArg! 2
-  let (specThm, elabMVars) ← controlAt MetaM fun map => map (elabSpecAtWP wp)
+  let (specThm, elabMVars) ← elabSpecAtWP wp
 
-  -- The precondition of `specThm` might look like `⌜?n = ‹Nat›ₛ ∧ ?m = ‹Bool›ₛ⌝`.
-  -- Further eta reduce according to `etaPotential` so that the solutions for `?n` and `?m` do not
-  -- depend on the bound variable that ‹_›ₛ expands to.
+  -- The precondition of `specThm` might look like `⌜?n = ‹Nat›ₛ ∧ ?m = ‹Bool›ₛ⌝`, which expands to
+  -- `SVal.curry (fun tuple => ?n = SVal.uncurry (getThe Nat tuple) ∧ ?m = SVal.uncurry (getThe Bool tuple))`.
+  -- Note that the assignments for `?n` and `?m` depend on the bound variable `tuple`.
+  -- Here, we further eta expand and simplify according to `etaPotential` so that the solutions for
+  -- `?n` and `?m` do not depend on `tuple`.
   let residualEta := specThm.etaPotential - (T.getAppNumArgs - 4) -- 4 arguments expected for PredTrans.apply
   mIntroForallN goal residualEta fun goal => do
+
+  -- Compute a frame of `P` that we duplicate into the pure context using `Spec.frame`
+  -- For now, frame = `P` or nothing at all
+  mTryFrame goal fun goal => do
+
+  -- Fully instantiate the specThm without instantiating its MVars to `wp` yet
+  let (schematicMVars, _, spec, specTy) ← specThm.proof.instantiate
+
+  -- Apply the spec to the excess arguments of the `wp⟦e⟧ Q` application
   let T := goal.target.consumeMData
   let args := T.getAppArgs
   let Q' := args[3]!
   let excessArgs := (args.extract 4 args.size).reverse
 
-  -- Now actually instantiate the specThm using the expected type computed from `wp`.
-  let (schematicMVars, _, spec, specTy) ← specThm.proof.instantiate
+  -- Actually instantiate the specThm using the expected type computed from `wp`.
+  -- TODO: Should try hard to move the `dsimp` below before this instantation.
+  --       We will do too much work on "the rest of the program" which might occur
+  --       in `P` in case of `Specs.bind : ⦃wp⟦x⟧ (fun a => wp⟦f a⟧ Q, Q.2)⦄ (x >>= f) ⦃Q⦄`.
   let_expr f@Triple m ps instWP α prog P Q := specTy | do liftM (m:=MetaM) (throwError "target not a Triple application {specTy}")
   let wp' := mkApp5 (mkConst ``WP.wp f.constLevels!) m ps instWP α prog
   unless (← withAssignableSyntheticOpaque <| isDefEq wp wp') do
     Term.throwTypeMismatchError none wp wp' spec
+
+  -- Simplify the precondition
   let ctx ← Simp.Context.mkDefault
   let P := P.betaRev excessArgs
   let (P, _) ← dsimp P ctx
   let spec := spec.betaRev excessArgs
-  -- Compute a frame of `P` that we duplicate into the pure context using `Spec.frame`
-  -- For now, frame = `P` or nothing at all
-  mTryFrame goal fun goal => do
-  -- Now we are all set for applying `spec`.
 
   -- first try instantiation if P or Q are schematic (i.e. an MVar app)
   let mut HPRfl := false
