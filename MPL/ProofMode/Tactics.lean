@@ -10,6 +10,7 @@ import MPL.ProofMode.Tactics.Revert
 import MPL.ProofMode.Tactics.Exact
 import MPL.ProofMode.Tactics.Assumption
 import MPL.ProofMode.Tactics.Pure
+import MPL.ProofMode.Tactics.Frame
 import MPL.ProofMode.Tactics.LeftRight
 import MPL.ProofMode.Tactics.Constructor
 import MPL.ProofMode.Tactics.Specialize

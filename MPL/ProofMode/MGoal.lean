@@ -45,6 +45,11 @@ def parseHyp? : Expr → Option Hyp
 def Hyp.toExpr (hyp : Hyp) : Expr :=
   .mdata ⟨[(nameAnnotation, .ofName hyp.name)]⟩ hyp.p
 
+/-- An elaborator to create a new named hypothesis for an `MGoal` context. -/
+elab "mk_hyp " name:ident " := " e:term : term <= ty? => do
+  let e ← Lean.Elab.Term.elabTerm e ty?
+  return (Hyp.mk name.getId e).toExpr
+
 -- set_option pp.all true in
 -- #check ⌜True⌝
 def emptyHyp (σs : Expr) : Expr := -- ⌜True⌝ standing in for an empty conjunction of hypotheses
@@ -117,7 +122,8 @@ partial def MGoal.findHyp? (goal : MGoal) (name : Name) : Option (SubExpr.Pos ×
         else
           none
       else if let some (_, lhs, rhs) := parseAnd? e then
-        go lhs (pushLeftConjunct p) <|> go rhs (pushRightConjunct p)
+        -- NB: Need to prefer rhs over lhs, like the goal view (MPL.ProofMode.Display).
+        go rhs (pushLeftConjunct p) <|> go lhs (pushRightConjunct p)
       else if let some _ := parseEmptyHyp? e then
         none
       else

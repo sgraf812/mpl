@@ -38,13 +38,14 @@ partial def focusHyp (σs : Expr) (e : Expr) (name : Name) : Option FocusResult 
       none
   else if let some (σs, lhs, rhs) := parseAnd? e then
     try
-      let ⟨focus, lhs', h₁⟩ ← focusHyp σs lhs name
-      let ⟨C, h₂⟩ := mkAnd σs lhs' rhs
-      return ⟨focus, C, mkApp8 (mkConst ``focus_l) σs lhs lhs' rhs C focus h₁ h₂⟩
-    catch _ =>
+      -- NB: Need to prefer rhs over lhs, like the goal view (MPL.ProofMode.Display).
       let ⟨focus, rhs', h₁⟩ ← focusHyp σs rhs name
       let ⟨C, h₂⟩ := mkAnd σs lhs rhs'
       return ⟨focus, C, mkApp8 (mkConst ``focus_r) σs lhs rhs rhs' C focus h₁ h₂⟩
+    catch _ =>
+      let ⟨focus, lhs', h₁⟩ ← focusHyp σs lhs name
+      let ⟨C, h₂⟩ := mkAnd σs lhs' rhs
+      return ⟨focus, C, mkApp8 (mkConst ``focus_l) σs lhs lhs' rhs C focus h₁ h₂⟩
   else if let some _ := parseEmptyHyp? e then
     none
   else

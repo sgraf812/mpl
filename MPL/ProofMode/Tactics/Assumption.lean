@@ -22,9 +22,10 @@ partial def _root_.MPL.ProofMode.MGoal.assumption (goal : MGoal) : OptionT MetaM
     guard (← isDefEq hyp.p goal.target)
     return mkApp2 (mkConst ``SPred.entails.refl) goal.σs hyp.p
   if let some (σs, lhs, rhs) := parseAnd? goal.hyps then
-    mkApp5 (mkConst ``Assumption.assumption_l) σs lhs rhs goal.target <$> assumption { goal with hyps := lhs }
-    <|>
+    -- NB: Need to prefer rhs over lhs, like the goal view (MPL.ProofMode.Display).
     mkApp5 (mkConst ``Assumption.assumption_r) σs lhs rhs goal.target <$> assumption { goal with hyps := rhs }
+    <|>
+    mkApp5 (mkConst ``Assumption.assumption_l) σs lhs rhs goal.target <$> assumption { goal with hyps := lhs }
   else
     panic! s!"assumption: hypothesis without proper metadata: {goal.hyps}"
 

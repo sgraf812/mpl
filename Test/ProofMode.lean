@@ -81,6 +81,22 @@ theorem with_proof (H : A → B) (P Q : SPred σs) : P ⊢ₛ Q → ⌜A⌝ → 
 
 end pureintro
 
+namespace frame
+
+theorem move (P Q : SPred σs) : ⊢ₛ ⌜p⌝ ∧ Q ∧ ⌜q⌝ ∧ ⌜r⌝ ∧ P ∧ ⌜s⌝ ∧ ⌜t⌝ → Q := by
+  mintro _
+  mframe
+  mcases h with hP
+  mexact h
+
+theorem move_multiple (P Q : SPred σs) : ⊢ₛ ⌜p⌝ ∧ Q ∧ ⌜q⌝ ∧ ⌜r⌝ ∧ P ∧ ⌜s⌝ ∧ ⌜t⌝ → Q := by
+  mintro h
+  mcases h with ⟨hp, hQ, hq, rest⟩
+  mframe
+  mexact hQ
+
+end frame
+
 theorem revert (P Q R : SPred σs) : P ∧ Q ∧ R ⊢ₛ P → R := by
   mintro ⟨HP, HQ, HR⟩
   mrevert HQ
