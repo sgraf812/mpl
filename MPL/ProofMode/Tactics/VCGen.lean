@@ -24,7 +24,7 @@ import MPL.Triple
 -/
 
 namespace MPL.ProofMode.Tactics
-open Lean Elab Tactic Meta
+open Lean Parser Elab Tactic Meta
 
 initialize registerTraceClass `mpl.tactics.vcgen
 
@@ -35,10 +35,13 @@ inductive Fuel where
 | unlimited
 deriving DecidableEq
 
+structure Context where
+  specThms : SpecTheorems
+
 structure State where
   fuel : Fuel := .unlimited
 
-abbrev VCGenM := StateRefT State MetaM
+abbrev VCGenM := ReaderT Context (StateRefT State MetaM)
 
 def burnOne : VCGenM PUnit := do
   let s ← get
@@ -53,6 +56,67 @@ def ifOutOfFuel (x : VCGenM α) (k : VCGenM α) : VCGenM α := do
   | Fuel.limited 0 => x
   | _ => k
 
+/-- A spec lemma specification is a term that instantiates to a hoare triple spec. -/
+syntax specLemma := term
+/-- An erasure specification `-thm` says to remove `thm` from the spec set -/
+syntax specErase := "-" ident
+
+syntax (name := mvcgen_step) "mvcgen_step" optConfig
+ (num)? (" [" withoutPosition((specErase <|> specLemma),*,?) "]")? : tactic
+
+syntax (name := mvcgen_impl) "mvcgen_no_trivial_discharge" optConfig
+  (" [" withoutPosition((specErase <|> specLemma),*,?) "]")? : tactic
+
+/-
+def mkSpecContext (optConfig : Syntax) (lemmas : Syntax) : TermElabM Context := do
+  unless optConfig.isNone do throwError "mvcgen does not currently support config options"
+  let mut specThms ← getSpecTheorems
+  if lemmas.isNone then return { specThms }
+  for arg in lemmas[1].getSepArgs do
+    if arg.getKind == ``specErase then
+      if let some fvar ← Term.isLocalIdent? arg[1] then
+        -- We use `eraseCore` because the simp theorem for the hypothesis was not added yet
+        specThms := specThms.eraseCore (.local fvar.fvarId!)
+      else
+        let id := arg[1]
+        if let .ok declName ← observing (realizeGlobalConstNoOverloadWithInfo id) then
+          -- if ctx.config.autoUnfold then
+          --   thms := thms.eraseCore (.decl declName)
+          -- else
+          specThms ← withRef id <| specThms.eraseCore (.decl declName)
+        else
+          withRef id <| throwUnknownConstant name
+        else if arg.getKind == ``Lean.Parser.Tactic.simpLemma then
+          let post :=
+            if arg[0].isNone then
+              true
+            else
+              arg[0][0].getKind == ``Parser.Tactic.simpPost
+          let inv  := !arg[1].isNone
+          let term := arg[2]
+          match (← resolveSimpIdTheorem? term) with
+          | .expr e  =>
+            let name ← mkFreshId
+            thms ← addDeclToUnfoldOrTheorem ctx.indexConfig thms (.stx name arg) e post inv kind
+          | .simproc declName =>
+            simprocs ← simprocs.add declName post
+          | .ext (some ext₁) (some ext₂) _ =>
+            thmsArray := thmsArray.push (← ext₁.getTheorems)
+            simprocs  := simprocs.push (← ext₂.getSimprocs)
+          | .ext (some ext₁) none _ =>
+            thmsArray := thmsArray.push (← ext₁.getTheorems)
+          | .ext none (some ext₂) _ =>
+            simprocs  := simprocs.push (← ext₂.getSimprocs)
+          | .none    =>
+            let name ← mkFreshId
+            thms ← addSimpTheorem ctx.indexConfig thms (.stx name arg) term post inv
+        else if arg.getKind == ``Lean.Parser.Tactic.simpStar then
+          starArg := true
+        else
+          throwUnsupportedSyntax
+
+  return
+-/
 def isTrivial (e : Expr) : Bool := match e with
   | .bvar .. => true
   | .mvar .. => true
@@ -74,8 +138,8 @@ def withNonTrivialLetDecl (name : Name) (type : Expr) (val : Expr) (k : Expr →
     withLetDecl name type val (kind := kind) fun fv => do
       k fv (liftM <| mkForallFVars #[fv] ·)
 
-partial def step (fuel : Fuel) (goal : MGoal) (name : Name) (discharge : Expr → Name → VCGenM Expr) : MetaM Expr := do
-  StateRefT'.run' (onGoal goal name) { fuel }
+partial def step (ctx : Context) (fuel : Fuel) (goal : MGoal) (name : Name) (discharge : Expr → Name → VCGenM Expr) : MetaM Expr := do
+  StateRefT'.run' (ReaderT.run (onGoal goal name) ctx) { fuel }
 where
   onFail (goal : MGoal) (name : Name) : VCGenM Expr := do
     -- logInfo m!"onFail: {goal.toExpr}"
@@ -145,7 +209,7 @@ where
         return ← onWPApp { goal with target := mkAppN (mkConst ``PredTrans.apply) (args.set! 2 wpe) } name
       if f.isConst then
         burnOne
-        let (prf, specHoles) ← mSpec goal (liftM ∘ findAndElabSpec (← getSpecTheorems)) tryGoal (preTag := name)
+        let (prf, specHoles) ← mSpec goal (liftM ∘ findAndElabSpec ctx.specThms) tryGoal (preTag := name)
         -- TODO: Better story for the generates holes
         for mvar in specHoles do
           -- logInfo m!"mvar: {← mvar.getTag} assigned: {← mvar.isAssigned}"
@@ -195,6 +259,14 @@ elab "mvcgen_no_trivial" : tactic => do
   replaceMainGoal (← goals.get).reverse
 
 macro "mvcgen" : tactic => `(tactic| mvcgen_no_trivial <;> try (guard_target =~ (⌜True⌝ ⊢ₛ _); mpure_intro; trivial))
+
+@[tactic mvcgen_impl] def evalMVCGen : Tactic := fun stx => withMainContext do withSimpDiagnostics do
+  let { ctx, simprocs, dischargeWrapper } ← mkSpecContext stx
+  let stats ← dischargeWrapper.with fun discharge? =>
+    simpLocation ctx simprocs discharge? (expandOptLocation stx[5])
+  if tactic.simp.trace.get (← getOptions) then
+    traceSimpCall stx stats.usedTheorems
+  return stats.diag
 
 def fib_impl (n : Nat) : Idd Nat := do
   if n = 0 then return 0

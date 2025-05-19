@@ -16,14 +16,23 @@ initialize registerTraceClass `mpl.spec.attr (inherited := true)
 inductive SpecProof where
   | global (declName : Name)
   | local (fvarId : FVarId)
-  | stx (ref : Syntax) (proof : Expr)
+  | stx (id : Name) (ref : Syntax) (proof : Expr)
   deriving Inhabited, BEq
+
+/-- A unique identifier corresponding to the origin. -/
+def SpecProof.key : SpecProof → Name
+  | .global declName => declName
+  | .local fvarId => fvarId.name
+  | .stx id _ _ => id
+
+instance : Hashable SpecProof where
+  hash sp := hash sp.key
 
 def SpecProof.instantiate (proof : SpecProof) : MetaM (Array Expr × Array BinderInfo × Expr × Expr) := do
   let prf ← match proof with
     | .global declName => mkConstWithFreshMVarLevels declName
     | .local fvarId => pure <| mkFVar fvarId
-    | .stx _ proof => pure proof -- TODO: Think about simp-like generalization
+    | .stx _ _ proof => pure proof -- TODO: Think about simp-like generalization
   let (xs, bs, type) ← forallMetaTelescope (← inferType prf)
   return (xs, bs, prf.beta xs, type)
 
@@ -31,7 +40,7 @@ instance : ToMessageData SpecProof where
   toMessageData := fun
     | .global declName => m!"SpecProof.global {declName}"
     | .local fvarId => m!"SpecProof.local {mkFVar fvarId}"
-    | .stx ref proof => m!"SpecProof.stx {ref} {proof}"
+    | .stx _ ref proof => m!"SpecProof.stx _ {ref} {proof}"
 
 structure SpecTheorem where
   keys : Array DiscrTree.Key
@@ -56,7 +65,11 @@ abbrev SpecEntry := SpecTheorem
 
 structure SpecTheorems where
   specs : DiscrTree SpecTheorem := DiscrTree.empty
+  erased : Std.HashSet SpecProof := {}
   deriving Inhabited
+
+partial def SpecTheorems.eraseCore (d : SpecTheorems) (thmId : SpecProof) : SpecTheorems :=
+  { d with erased := d.erased.insert thmId }
 
 abbrev SpecExtension := SimpleScopedEnvExtension SpecEntry SpecTheorems
 
@@ -155,7 +168,7 @@ def mkSpecTheoremFromLocal (fvar : FVarId) (prio : Nat := eval_prio default) : M
 
 def mkSpecTheoremFromStx (ref : Syntax) (proof : Expr) (prio : Nat := eval_prio default) : MetaM SpecTheorem := do
   let type ← inferType proof
-  mkSpecTheorem type (.stx ref proof) prio
+  mkSpecTheorem type (.stx (← mkFreshId) ref proof) prio
 
 def addSpecTheoremEntry (d : SpecTheorems) (e : SpecTheorem) : SpecTheorems :=
   { d with specs := d.specs.insertCore e.keys e }
