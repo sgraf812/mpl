@@ -13,6 +13,10 @@ theorem fib_triple : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ :
     a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)
   all_goals simp_all +zetaDelta [Nat.sub_one_add_one]
 
+attribute [local spec] fib_triple in
+theorem fib_triple_attr : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ := by
+  mvcgen
+
 theorem fib_impl_vcs
     (Q : Nat → PostCond Nat PostShape.pure)
     (I : (n : Nat) → (_ : ¬n = 0) →

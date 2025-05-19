@@ -4,6 +4,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Sebastian Graf
 -/
 import MPL
+import MPL.ProofMode.Tactics.VCGen
 
 namespace MPL.Test.Aeneas
 open MPL
@@ -128,28 +129,11 @@ theorem mul2_add1_spec' (x : U32) (h : 2 * x.val + 1 ≤ U32.max)
   mspec U32.add_spec' (by simp; omega)
   simp +arith [h]
 
--- for more `progress` like automation, we can register a wp transformer:
-@[wp_simp]
-theorem U32.add_apply {x y : U32} {Q : PCond U32} :
-    wp⟦x + y⟧ Q =
-    if h : ↑x + ↑y ≤ U32.max
-    then Q.1 (UScalar.ofNatCore (↑x + ↑y) sorry) -- massage h
-    else Q.2.1 integerOverflow := by
-    split
-    next h =>
-      have ⟨z, ⟨hxy, hz⟩⟩ := U32.add_spec h
-      simp [hxy, hz.symm, wp]
-      sorry -- show Q.1 z ↔ Q.1 (ofNatCore z.val ⋯)
-    next h =>
-      simp [Result.instWP, HAdd.hAdd, UScalar.add]
-      have : ¬x.val + y.val ≤ U32.max → UScalar.tryMk .U32 (Add.add x.val y.val) = Result.fail integerOverflow :=
-        sorry -- by definition of tryMk
-      simp [this h, MonadExcept.throw_apply, Except.throw_apply]
-
-theorem mul2_add1_apply (x : U32) (h : 2 * x.val + 1 ≤ U32.max)
-  : wp⟦mul2_add1 x⟧ Q = Q.1 (UScalar.ofNatCore (2 * ↑x + (1 : Nat)) sorry) := by
+attribute [local spec] U32.add_spec'
+theorem mul2_add1_spec_vc (x : U32) (hmax : 2 * x.val + 1 ≤ U32.max)
+  : ⦃Q.1 (UScalar.ofNatCore (2 * ↑x + (1 : Nat)) sorry)⦄ (mul2_add1 x) ⦃Q⦄ := by
   rw[mul2_add1]
-  mstart
-  mwp
-  simp +arith +contextual [h]
-  omega
+  mvcgen
+  · simp +arith [h]
+  · simp +arith [hmax]
+  · simp +arith [hmax]; omega
