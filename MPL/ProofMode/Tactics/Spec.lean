@@ -21,23 +21,11 @@ open Lean Elab Tactic Meta
 
 initialize registerTraceClass `mpl.tactics.spec
 
-theorem Spec.entails_total {α} {ps : PostShape} (p : α → Assertion ps) (q : PostCond α ps) :
-  (∀ a, p a ⊢ₛ q.1 a) → PostCond.total p ⊢ₚ q := (PostCond.entails_total p q).mpr
-
-theorem Spec.entails_partial {α} {ps : PostShape} (p : PostCond α ps) (q : α → Assertion ps) :
-  (∀ a, p.1 a ⊢ₛ q a) → p ⊢ₚ PostCond.partial q := (PostCond.entails_partial p q).mpr
-
-structure ElabSpecResult where
-  spec : Expr
-  specHoles : List MVarId
-  P : Expr
-  Q : Expr
-  etaPotential : Nat
-
 def findSpec (database : SpecTheorems) (prog : Expr) : MetaM SpecTheorem := do
   let prog ← instantiateMVarsIfMVarApp prog
   unless prog.getAppFn'.isConst do throwError m!"not an application of a constant: {prog}"
   let candidates ← database.specs.getMatch prog
+  let candidates := candidates.filter fun spec => !database.erased.contains spec.proof
   let candidates := candidates.insertionSort fun s₁ s₂ => s₁.priority < s₂.priority
   -- logInfo m!"candidates for {prog}: {candidates.map (·.proof)}"
   let specs ← candidates.filterM fun spec => do

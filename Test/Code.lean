@@ -34,3 +34,10 @@ def mkFreshPair : StateM AppState (Nat × Nat) := do
   let a ← mkFreshNat
   let b ← mkFreshNat
   pure (a, b)
+
+def throwing_loop : ExceptT Nat (StateT Nat Idd) Nat := do
+  let mut x := 0
+  let s ← get
+  for i in [1:s] do { x := x + i; if x > 4 then throw 42 }
+  (set 1 : ExceptT Nat (StateT Nat Idd) PUnit)
+  return x

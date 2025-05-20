@@ -56,16 +56,18 @@ structure SpecTheorem where
   instantiated after applying `mintro ∀s` `etaPotential` many times.
   -/
   etaPotential : Nat := 0
-  priority : Nat  := eval_prio default -- TODO: unused
-  /-- `rfl` is true if `proof` is by `SPred.entails.rfl`. -/
-  rfl : Bool
+  priority : Nat  := eval_prio default
   deriving Inhabited, BEq
 
-abbrev SpecEntry := SpecTheorem
+inductive SpecEntry
+  | thm : SpecTheorem → SpecEntry
+  | toUnfold : Name → SpecEntry
+  deriving Inhabited
 
 structure SpecTheorems where
   specs : DiscrTree SpecTheorem := DiscrTree.empty
-  erased : Std.HashSet SpecProof := {}
+  toUnfold : PHashSet Name := {}
+  erased : PHashSet SpecProof := {}
   deriving Inhabited
 
 partial def SpecTheorems.eraseCore (d : SpecTheorems) (thmId : SpecProof) : SpecTheorems :=
@@ -148,10 +150,11 @@ private def mkSpecTheorem (type : Expr) (proof : SpecProof) (prio : Nat) : MetaM
   let keys ← DiscrTree.mkPath prog (noIndexAtArgs := false)
   -- beta potential of `P` describes how many times we want to `mintro ∀s`, that is,
   -- *eta*-expand the goal.
-  let etaPotential ← computeMVarBetaPotentialForSPred xs (mkApp (mkConst ``PostShape.args) ps) P
+  let σs := mkApp (mkConst ``PostShape.args) ps
+  let etaPotential ← computeMVarBetaPotentialForSPred xs σs P
   -- logInfo m!"Beta potential {etaPotential} for {P}"
   -- logInfo m!"mkSpecTheorem: {keys}, proof: {proof}"
-  return { keys, prog := (← mkForallFVars xs prog), proof, etaPotential, rfl := false, priority := prio }
+  return { keys, prog := (← mkForallFVars xs prog), proof, etaPotential, priority := prio }
 
 def mkSpecTheoremFromConst (declName : Name) (prio : Nat := eval_prio default) : MetaM SpecTheorem := do
   -- cf. mkSimpTheoremsFromConst
@@ -173,19 +176,32 @@ def mkSpecTheoremFromStx (ref : Syntax) (proof : Expr) (prio : Nat := eval_prio 
 def addSpecTheoremEntry (d : SpecTheorems) (e : SpecTheorem) : SpecTheorems :=
   { d with specs := d.specs.insertCore e.keys e }
 
+def SpecTheorems.addDeclToUnfoldCore (d : SpecTheorems) (declName : Name) : SpecTheorems :=
+  { d with toUnfold := d.toUnfold.insert declName }
+
+def SpecTheorems.addLetDeclToUnfold (d : SpecTheorems) (fvarId : FVarId) : SpecTheorems :=
+  -- A small hack that relies on the fact that constants and `FVarId` names should be disjoint.
+  { d with toUnfold := d.toUnfold.insert fvarId.name }
+
+/-- Return `true` if `declName` is tagged to be unfolded using `unfoldDefinition?` (i.e., without using equational theorems). -/
+def SpecTheorems.isDeclToUnfold (d : SpecTheorems) (declName : Name) : Bool :=
+  d.toUnfold.contains declName
+
+def SpecTheorems.isLetDeclToUnfold (d : SpecTheorems) (fvarId : FVarId) : Bool :=
+  d.toUnfold.contains fvarId.name -- See comment at `addLetDeclToUnfold`
+
 def addSpecTheorem (ext : SpecExtension) (declName : Name) (prio : Nat) (attrKind : AttributeKind) : MetaM Unit := do
   let thm ← mkSpecTheoremFromConst declName prio
-  -- logInfo m!"addSpecTheorem: {thm.keys}, proof: {thm.proof}"
-  -- let thms := ext.getState (← getEnv)
-  -- let grps := thms.specs.values.groupByKey (·.keys)
-  -- logInfo m!"thms: {grps.map (fun k v => v.map (·.proof)) |>.toList}"
-  ext.add thm attrKind
+  ext.add (SpecEntry.thm thm) attrKind
 
 def mkSpecExt : IO SpecExtension :=
   registerSimpleScopedEnvExtension {
     name     := `specMap
     initial  := {}
-    addEntry := addSpecTheoremEntry
+    addEntry := fun d e =>
+      match e with
+      | .thm e => addSpecTheoremEntry d e
+      | .toUnfold n => d.addDeclToUnfoldCore n
   }
 
 def mkSpecAttr (ext : SpecExtension) : IO Unit :=
@@ -200,18 +216,8 @@ def mkSpecAttr (ext : SpecExtension) : IO Unit :=
         let prio ← Attribute.Builtin.getPrio stx
         if (← isProp info.type) then
           addSpecTheorem ext declName prio attrKind
-        -- TODO: add unfold rules
-        -- else if info.hasValue then
-        --   if (← SimpTheorems.ignoreEquations declName) then
-        --     ext.add (SimpEntry.toUnfold declName) attrKind
-        --   else if let some eqns ← getEqnsFor? declName then
-        --     for eqn in eqns do
-        --       addSimpTheorem ext eqn post (inv := false) attrKind prio
-        --     ext.add (SimpEntry.toUnfoldThms declName eqns) attrKind
-        --     if (← SimpTheorems.unfoldEvenWithEqns declName) then
-        --       ext.add (SimpEntry.toUnfold declName) attrKind
-        --   else
-        --     ext.add (SimpEntry.toUnfold declName) attrKind
+        else if info.hasValue then
+          ext.add (SpecEntry.toUnfold declName) attrKind
         else
           throwError "invalid 'spec', it is not a proposition" -- nor a definition (to unfold)"
       discard <| go.run {} {}

@@ -13,9 +13,21 @@ theorem fib_triple : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ :
     a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)
   all_goals simp_all +zetaDelta [Nat.sub_one_add_one]
 
+theorem fib_triple_step : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ := by
+  unfold fib_impl
+  mvcgen_step 13 -- 12 would not be too low
+  case inv => exact ⇓ (⟨a, b⟩, xs) =>
+    a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)
+  all_goals simp_all +zetaDelta [Nat.sub_one_add_one]
+
 attribute [local spec] fib_triple in
 theorem fib_triple_attr : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ := by
   mvcgen
+
+attribute [local spec] fib_triple in
+theorem fib_triple_erase : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ := by
+  fail_if_success mvcgen [-fib_triple] -- "No specs found for fib_impl n"
+  admit
 
 theorem fib_impl_vcs
     (Q : Nat → PostCond Nat PostShape.pure)
@@ -52,7 +64,38 @@ theorem mkFreshNat_spec [Monad m] [WPMonad m sh] :
   mvcgen
   simp_all
 
+theorem erase_unfold [Monad m] [WPMonad m sh] :
+  ⦃⌜#fst = n ∧ #snd = o⌝⦄
+  (mkFreshNat : StateT AppState m Nat)
+  ⦃⇓ r => ⌜r = n ∧ #fst = n + 1 ∧ #snd = o⌝⦄ := by
+  unfold mkFreshNat
+  mvcgen [-modify]
+  simp_all
+  fail_if_success done
+  sorry
+
+theorem add_unfold [Monad m] [WPMonad m sh] :
+  ⦃⌜#fst = n ∧ #snd = o⌝⦄
+  (mkFreshNat : StateT AppState m Nat)
+  ⦃⇓ r => ⌜r = n ∧ #fst = n + 1 ∧ #snd = o⌝⦄ := by
+  mvcgen [mkFreshNat]
+  simp_all
+
 theorem mkFreshPair_triple : ⦃⌜True⌝⦄ mkFreshPair ⦃⇓ (a, b) => ⌜a ≠ b⌝⦄ := by
   unfold mkFreshPair
   mvcgen
   simp_all [SPred.entails_elim_cons]
+
+theorem throwing_loop_spec :
+  ⦃fun s => s = 4⦄
+  throwing_loop
+  ⦃post⟨fun _ _ => False,
+        fun e s => e = 42 ∧ s = 4⟩⦄ := by
+  mvcgen [throwing_loop]
+  case inv => exact post⟨fun (r, xs) s => r ≤ 4 ∧ s = 4 ∧ r + xs.suff.sum > 4,
+                         fun e s => e = 42 ∧ s = 4⟩
+  · simp_all only [SVal.curry_nil, SPred.entails_nil]; decide
+  · simp_all only [List.sum_nil]; omega
+  · simp_all
+  · intro _; simp_all
+  · intro _; simp_all; omega
