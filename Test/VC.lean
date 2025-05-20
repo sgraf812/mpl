@@ -98,4 +98,10 @@ theorem throwing_loop_spec :
   · simp_all only [List.sum_nil]; omega
   · simp_all
   · intro _; simp_all
-  · intro _; simp_all; omega
+  · intro _; simp_all only [List.sum_cons, true_and, SPred.entails_nil]; omega
+
+theorem unfold_to_expose_match_spec :
+  ⦃fun s => ⌜s = 4⌝⦄
+  unfold_to_expose_match
+  ⦃⇓ r => ⌜r = 4⌝⦄ := by
+  mvcgen_step 4 [unfold_to_expose_match, Option.getD]

@@ -122,7 +122,7 @@ private def mkSpecContext (optConfig : Syntax) (lemmas : Syntax) : TacticM Conte
           specThms := specThms.addLetDeclToUnfold fvar
         else
           throwError "invalid argument, variable is not a proposition or let-declaration"
-      | _ => throwUnsupportedSyntax
+      | _ => throwError "Could not resolve {term}"
     else
       throwUnsupportedSyntax
   return { specThms }
@@ -236,22 +236,23 @@ where
             -- invariants.
             hole.assign (← hole.withContext <| tryGoal (← hole.getType) (← hole.getTag))
           return prf
-      return ← onFail goal name
       -- Split match-expressions
-      --if let some info := isMatcherAppCore? (← getEnv) e then
-      --  let candidate ← id do
-      --    let args := e.getAppArgs
-      --    logInfo "e: {e}, args: {args}"
-      --    for i in [info.getFirstDiscrPos : info.getFirstDiscrPos + info.numDiscrs] do
-      --      if args[i]!.hasLooseBVars then
-      --        return false
-      --    return true
-      --  if candidate then
-      --    -- We could be even more deliberate here and use the `lifter` lemmas
-      --    -- for the match statements instead of the `split` tactic.
-      --    -- For now using `splitMatch` works fine.
-      --    -- return ← Split.splitMatch goal e
-      --    return (fuel, ← discharge goal subst)
+      if let some info := isMatcherAppCore? (← getEnv) e then
+        let candidate ← id do
+          let args := e.getAppArgs
+          logInfo "e: {e}, args: {args}"
+          for i in [info.getFirstDiscrPos : info.getFirstDiscrPos + info.numDiscrs] do
+            if args[i]!.hasLooseBVars then
+              return false
+          return true
+        if candidate then
+          -- We could be even more deliberate here and use the `lifter` lemmas
+          -- for the match statements instead of the `split` tactic.
+          -- For now using `splitMatch` works fine.
+          -- return ← Split.splitMatch goal e
+          logInfo m!"candidate: {e}"
+          return ← onFail goal name
+      return ← onFail goal name
     | _ => return ← onFail goal name
 
 def genVCs (goal : MVarId) (ctx : Context) (fuel : Fuel) : TacticM (Array MVarId) := do
