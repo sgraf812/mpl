@@ -42,5 +42,12 @@ def throwing_loop : ExceptT Nat (StateT Nat Idd) Nat := do
   (set 1 : ExceptT Nat (StateT Nat Idd) PUnit)
   return x
 
+def returning_loop : StateT Nat Idd Nat := do
+  let mut x := 0
+  let s ← get
+  for i in [1:s] do { x := x + i; if x > 4 then return 42 }
+  set 1
+  return x
+
 def unfold_to_expose_match : StateM Nat Nat :=
   (some get).getD (pure 3)

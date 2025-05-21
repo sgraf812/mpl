@@ -189,22 +189,15 @@ def mSpec (goal : MGoal) (elabSpecAtWP : Expr → n (SpecTheorem × List MVarId)
   let (P, _) ← dsimp P ctx
   let spec := spec.betaRev excessArgs
 
-  -- first try instantiation if P or Q are schematic (i.e. an MVar app)
-  let mut HPRfl := false
-  let mut QQ'Rfl := false
+  -- often P or Q are schematic (i.e. an MVar app). Try to solve by rfl.
   let P ← instantiateMVarsIfMVarApp P
   let Q ← instantiateMVarsIfMVarApp Q
-  if P.getAppFn.isMVar then
-    let _ ← withAssignableSyntheticOpaque <| isDefEq P goal.hyps
-    HPRfl := true
-  if Q.getAppFn.isMVar then
-    let _ ← withAssignableSyntheticOpaque <| isDefEq Q Q'
-    QQ'Rfl := true
+  let HPRfl ← withDefault <| withAssignableSyntheticOpaque <| approxDefEq <| isDefEqGuarded P goal.hyps
+  let QQ'Rfl ← withDefault <| withAssignableSyntheticOpaque <| approxDefEq <| isDefEqGuarded Q Q'
 
   -- Discharge the validity proof for the spec if not rfl
   let mut prePrf : Expr → Expr := id
   if !HPRfl then
-    let P ← instantiateMVarsIfMVarApp P
     -- let P := (← reduceProjBeta? P).getD P
     let HPPrf ← dischargeMGoal { goal with target := P } preTag discharge
     prePrf := mkApp6 (mkConst ``SPred.entails.trans) goal.σs goal.hyps P goal.target HPPrf

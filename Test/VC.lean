@@ -100,8 +100,30 @@ theorem throwing_loop_spec :
   · intro _; simp_all
   · intro _; simp_all only [List.sum_cons, true_and, SPred.entails_nil]; omega
 
+-- theorem returning_loop_spec :
+--   ⦃fun s => s = 4⦄
+--   returning_loop
+--   ⦃⇓ r s => r = 42 ∧ s = 4⦄ := by
+--   mvcgen [returning_loop]
+
 theorem unfold_to_expose_match_spec :
   ⦃fun s => ⌜s = 4⌝⦄
   unfold_to_expose_match
   ⦃⇓ r => ⌜r = 4⌝⦄ := by
-  mvcgen_step 4 [unfold_to_expose_match, Option.getD]
+  -- should unfold `Option.getD`, reduce the `match (some get) with | some e => e`
+  -- and then apply the spec for `get`.
+  mvcgen [unfold_to_expose_match, Option.getD]
+  -- TODO: This is weird, we should not need .rfl below.
+  -- `mspec` should be able to solve this,
+  -- but isDefEq seems to fail for `⌜s = 4⌝ = ⌜s = 4⌝ s`, whereas
+  -- it succeeds below. It must be some Config setting, but I don't know which.
+  exact .rfl
+
+theorem test_match_splitting {m : Option Nat} (h : m = some 4) :
+  ⦃⌜True⌝⦄
+  (match m with
+  | some n => (set n : StateM Nat PUnit)
+  | none => set 0)
+  ⦃⇓ r s => ⌜s = 4⌝⦄ := by
+  mvcgen
+  simp_all

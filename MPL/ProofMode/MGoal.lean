@@ -15,14 +15,14 @@ abbrev _root_.MPL.SPred.tautological {σs : List Type} (Q : SPred σs) : Prop :=
 class _root_.MPL.PropAsSPredTautology (φ : Prop) {σs : outParam (List Type)} (P : outParam (SPred σs)) : Prop where
   iff : φ ↔ ⊢ₛ P
 
-instance : PropAsSPredTautology (⊢ₛ P) P where
-  iff := Iff.rfl
+instance : PropAsSPredTautology (σs := []) φ φ where
+  iff := true_imp_iff.symm
 
 instance : PropAsSPredTautology (P ⊢ₛ Q) spred(P → Q) where
   iff := (SPred.entails_true_intro P Q).symm
 
-instance : PropAsSPredTautology (σs := []) φ φ where
-  iff := true_imp_iff.symm
+instance : PropAsSPredTautology (⊢ₛ P) P where
+  iff := Iff.rfl
 
 theorem start_entails {φ : Prop} [PropAsSPredTautology φ P] : (⊢ₛ P) → φ :=
   PropAsSPredTautology.iff.mpr

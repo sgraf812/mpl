@@ -149,6 +149,7 @@ def withNonTrivialLetDecl (name : Name) (type : Expr) (val : Expr) (k : Expr →
       k fv (liftM <| mkForallFVars #[fv] ·)
 
 partial def step (ctx : Context) (fuel : Fuel) (goal : MGoal) (name : Name) : MetaM (Expr × Array MVarId) := do
+  withReducible do
   let (res, state) ← StateRefT'.run (ReaderT.run (onGoal goal name) ctx) { fuel }
   return (res, state.vcs)
 where
@@ -165,6 +166,14 @@ where
       if let some proof := res.proof? then
         prf := mkApp proof prf
       mkLambdaFVars xs prf
+
+  assignMVars (mvars : List MVarId) : VCGenM PUnit := do
+    for mvar in mvars do
+      if ← mvar.isAssigned then continue
+      -- I used to filter for `isProp` here and add any non-Props directly as subgoals,
+      -- but then we would get spurious instantiations of non-synthetic goals such as loop
+      -- invariants.
+      mvar.assign (← mvar.withContext <| tryGoal (← mvar.getType) (← mvar.getTag))
 
   onGoal goal name : VCGenM Expr := do
     let T := goal.target
@@ -198,60 +207,61 @@ where
     -- logInfo m!"trans: {trans}"
     --let Q := args[3]!
     match_expr ← instantiateMVarsIfMVarApp trans with
-    | WP.wp m ps instWP α e =>
-      let us := trans.getAppFn.constLevels!
+    | hd@WP.wp m ps instWP α e =>
+      let us := hd.constLevels!
       let e ← instantiateMVarsIfMVarApp e
-      let f := e.getAppFn'
-      if let .letE x ty val body _nonDep := f then
+      let goalWithNewExpr e' :=
+        let wp' := mkApp5 (mkConst ``WP.wp us) m ps instWP α e'
+        let args' := args.set! 2 wp'
+        { goal with target := mkAppN (mkConst ``PredTrans.apply) args' }
+
+      if let .letE x ty val body _nonDep := e.getAppFn' then
         burnOne
         return ← withNonTrivialLetDecl x ty val fun fv leave => do
         let e' := ((body.instantiate1 fv).betaRev e.getAppRevArgs)
-        let wp' := mkApp5 (mkConst ``WP.wp us) m ps instWP α e'
-        let args' := args.set! 2 wp'
-        let goal := { goal with target := mkAppN (mkConst ``PredTrans.apply) args' }
-        leave (← onWPApp goal name)
+        leave (← onWPApp (goalWithNewExpr e') name)
+      -- Reduce match-expressions
+      let e ← match (← reduceMatcher? e) with
+        | .reduced e' =>
+        burnOne
+        return ← onWPApp (goalWithNewExpr e') name
+        | .stuck _e' => pure e -- NB: Do not expose the recursor in e'; split instead.
+        | _ => pure e
+      -- Split match-expressions
+      if isMatcherAppCore (← getEnv) e then
+        -- logInfo m!"split match {e}"
+        burnOne
+        let mvar ← mkFreshExprSyntheticOpaqueMVar goal.toExpr (tag := name)
+        let mvars ← Split.splitMatch mvar.mvarId! e
+        assignMVars mvars
+        return mvar
+      -- Unfold local bindings (TODO don't do this unconditionally)
+      let f := e.getAppFn'
       if let some (some val) ← f.fvarId?.mapM (·.getValue?) then
         burnOne
-        -- TODO: We do not want to unconditionally unfold let bindings in the future :(
         let e' := val.betaRev e.getAppRevArgs
         let wpe := mkApp5 (mkConst ``WP.wp us) m ps instWP α e'
         -- logInfo m!"unfold local var {f}, new WP: {wpe}"
         return ← onWPApp { goal with target := mkAppN (mkConst ``PredTrans.apply) (args.set! 2 wpe) } name
+      -- Unfold definitions according to reducibility and spec attributes,
+      -- apply specifications
       if f.isConst then
         burnOne
-        if ctx.specThms.isDeclToUnfold f.constName! then
-          unless ctx.specThms.erased.contains (.global f.constName!) do
-            let e' ← Meta.unfoldDefinition e
-            let wp' := mkApp5 (mkConst ``WP.wp us) m ps instWP α e'
-            let args' := args.set! 2 wp'
-            let goal := { goal with target := mkAppN (mkConst ``PredTrans.apply) args' }
-            return ← onWPApp goal name
-          -- NB: If f.constName! is erased, fall through to onFail
+        let declName := f.constName!
+        -- logInfo m!"const: {declName}"
+        let minfo ← getUnfoldableConst? declName
+        if minfo.isSome || ctx.specThms.isDeclToUnfold declName then
+          unless ctx.specThms.erased.contains (.global declName) do
+          -- ignore transparencey because `getUnfoldableConst?` already checks for it,
+          -- and transparency should not override a user supplied decl to unfold.
+          if let some e' ← Meta.unfoldDefinition? e (ignoreTransparency := true) then
+            return ← onWPApp (goalWithNewExpr e') name
+          -- NB: If f.constName! is erased or we could not unfold, fall through to onFail
         else
+          -- logInfo m!"try spec: {declName}"
           let (prf, specHoles) ← mSpec goal (liftM ∘ findAndElabSpec ctx.specThms) tryGoal (preTag := name)
-          for hole in specHoles do
-            if ← hole.isAssigned then continue
-            -- I used to filter for `isProp` here and add any non-Props directly as subgoals,
-            -- but then we would get spurious instantiations of non-synthetic goals such as loop
-            -- invariants.
-            hole.assign (← hole.withContext <| tryGoal (← hole.getType) (← hole.getTag))
+          assignMVars specHoles
           return prf
-      -- Split match-expressions
-      if let some info := isMatcherAppCore? (← getEnv) e then
-        let candidate ← id do
-          let args := e.getAppArgs
-          logInfo "e: {e}, args: {args}"
-          for i in [info.getFirstDiscrPos : info.getFirstDiscrPos + info.numDiscrs] do
-            if args[i]!.hasLooseBVars then
-              return false
-          return true
-        if candidate then
-          -- We could be even more deliberate here and use the `lifter` lemmas
-          -- for the match statements instead of the `split` tactic.
-          -- For now using `splitMatch` works fine.
-          -- return ← Split.splitMatch goal e
-          logInfo m!"candidate: {e}"
-          return ← onFail goal name
       return ← onFail goal name
     | _ => return ← onFail goal name
 
