@@ -32,6 +32,12 @@ def StateTuple (σs : List Type) := match σs with
 | [] => Unit
 | σ :: σs => σ × StateTuple σs
 
+instance : Inhabited (StateTuple []) where
+  default := ()
+
+instance [Inhabited σ] [Inhabited (StateTuple σs)] : Inhabited (StateTuple (σ :: σs)) where
+  default := (default, default)
+
 /-- Curry a function taking a `StateTuple` into an `SVal`. -/
 def curry {σs : List Type} (f : StateTuple σs → α) : SVal σs α := match σs with
 | [] => f ()
