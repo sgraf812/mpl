@@ -18,6 +18,7 @@ import MPL.ProofMode.Tactics.WP
 import MPL.ProofMode.Tactics.Spec
 import MPL.ProofMode.Tactics.Utils
 import MPL.Triple
+import MPL.Util.LetElim
 
 /-!
 # Tactic `mvcgen`
@@ -25,6 +26,7 @@ import MPL.Triple
 
 namespace MPL.ProofMode.Tactics
 open Lean Parser Elab Tactic Meta
+open MPL Util
 
 initialize registerTraceClass `mpl.tactics.vcgen
 
@@ -266,6 +268,7 @@ where
     | _ => return ← onFail goal name
 
 def genVCs (goal : MVarId) (ctx : Context) (fuel : Fuel) : TacticM (Array MVarId) := do
+  let goal ← elimLets goal
   let (mvar, goal) ← mStartMVar goal
   mvar.withContext do
   let (prf, vcs) ← VC.step ctx (fuel := fuel) goal (← mvar.getTag)
