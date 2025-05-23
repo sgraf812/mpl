@@ -72,7 +72,7 @@ theorem erase_unfold [Monad m] [WPMonad m sh] :
   mvcgen [-modify]
   simp_all
   fail_if_success done
-  sorry
+  admit
 
 theorem add_unfold [Monad m] [WPMonad m sh] :
   ⦃⌜#fst = n ∧ #snd = o⌝⦄

@@ -38,10 +38,15 @@ inductive Fuel where
 deriving DecidableEq
 
 structure Config where
+  /--
+  If true, do not substitute away let-declarations that are used at most once.
+  -/
+  noLetElim : Bool := false
 
 declare_config_elab elabConfig Config
 
 structure Context where
+  config : Config
   specThms : SpecTheorems
 
 structure State where
@@ -90,9 +95,9 @@ syntax (name := mvcgen) "mvcgen" optConfig
   (" [" withoutPosition((specErase <|> specLemma),*,?) "]")? : tactic
 
 private def mkSpecContext (optConfig : Syntax) (lemmas : Syntax) : TacticM Context := do
-  let _config ← elabConfig optConfig
+  let config ← elabConfig optConfig
   let mut specThms ← getSpecTheorems
-  if lemmas.isNone then return { specThms }
+  if lemmas.isNone then return { config, specThms }
   for arg in lemmas[1].getSepArgs do
     if arg.getKind == ``specErase then
       if let some fvar ← Term.isLocalIdent? arg[1] then
@@ -127,7 +132,7 @@ private def mkSpecContext (optConfig : Syntax) (lemmas : Syntax) : TacticM Conte
       | _ => throwError "Could not resolve {term}"
     else
       throwUnsupportedSyntax
-  return { specThms }
+  return { config, specThms }
 
 def isTrivial (e : Expr) : Bool := match e with
   | .bvar .. => true
@@ -268,7 +273,7 @@ where
     | _ => return ← onFail goal name
 
 def genVCs (goal : MVarId) (ctx : Context) (fuel : Fuel) : TacticM (Array MVarId) := do
-  let goal ← elimLets goal
+  let goal ← if ctx.config.noLetElim then pure goal else elimLets goal
   let (mvar, goal) ← mStartMVar goal
   mvar.withContext do
   let (prf, vcs) ← VC.step ctx (fuel := fuel) goal (← mvar.getTag)
@@ -315,6 +320,7 @@ abbrev fib_spec : Nat → Nat
 theorem fib_triple_vc : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ := by
   unfold fib_impl
   -- set_option trace.mpl.tactics.spec true in
+  elim_lets
   mvcgen
   case inv => exact ⇓ (⟨a, b⟩, xs) =>
     a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)
