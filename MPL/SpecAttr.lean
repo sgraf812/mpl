@@ -13,6 +13,15 @@ open Lean Meta
 
 initialize registerTraceClass `mpl.spec.attr (inherited := true)
 
+/--
+  This attribute should not be used directly.
+  It is an implementation detail of the `@[spec]` attribute.
+-/
+my_register_simp_attr spec_internal_simp
+
+def getSpecSimpTheorems : CoreM SimpTheorems :=
+  spec_internal_simp_ext.getTheorems
+
 inductive SpecProof where
   | global (declName : Name)
   | local (fvarId : FVarId)
@@ -59,14 +68,10 @@ structure SpecTheorem where
   priority : Nat  := eval_prio default
   deriving Inhabited, BEq
 
-inductive SpecEntry
-  | thm : SpecTheorem → SpecEntry
-  | toUnfold : Name → SpecEntry
-  deriving Inhabited
+abbrev SpecEntry := SpecTheorem
 
 structure SpecTheorems where
   specs : DiscrTree SpecTheorem := DiscrTree.empty
-  toUnfold : PHashSet Name := {}
   erased : PHashSet SpecProof := {}
   deriving Inhabited
 
@@ -176,52 +181,36 @@ def mkSpecTheoremFromStx (ref : Syntax) (proof : Expr) (prio : Nat := eval_prio 
 def addSpecTheoremEntry (d : SpecTheorems) (e : SpecTheorem) : SpecTheorems :=
   { d with specs := d.specs.insertCore e.keys e }
 
-def SpecTheorems.addDeclToUnfoldCore (d : SpecTheorems) (declName : Name) : SpecTheorems :=
-  { d with toUnfold := d.toUnfold.insert declName }
-
-def SpecTheorems.addLetDeclToUnfold (d : SpecTheorems) (fvarId : FVarId) : SpecTheorems :=
-  -- A small hack that relies on the fact that constants and `FVarId` names should be disjoint.
-  { d with toUnfold := d.toUnfold.insert fvarId.name }
-
-/-- Return `true` if `declName` is tagged to be unfolded using `unfoldDefinition?` (i.e., without using equational theorems). -/
-def SpecTheorems.isDeclToUnfold (d : SpecTheorems) (declName : Name) : Bool :=
-  d.toUnfold.contains declName
-
-def SpecTheorems.isLetDeclToUnfold (d : SpecTheorems) (fvarId : FVarId) : Bool :=
-  d.toUnfold.contains fvarId.name -- See comment at `addLetDeclToUnfold`
-
 def addSpecTheorem (ext : SpecExtension) (declName : Name) (prio : Nat) (attrKind : AttributeKind) : MetaM Unit := do
   let thm ← mkSpecTheoremFromConst declName prio
-  ext.add (SpecEntry.thm thm) attrKind
+  ext.add thm attrKind
 
 def mkSpecExt : IO SpecExtension :=
   registerSimpleScopedEnvExtension {
     name     := `specMap
     initial  := {}
-    addEntry := fun d e =>
-      match e with
-      | .thm e => addSpecTheoremEntry d e
-      | .toUnfold n => d.addDeclToUnfoldCore n
+    addEntry := fun d e => addSpecTheoremEntry d e
   }
 
 def mkSpecAttr (ext : SpecExtension) : IO Unit :=
   registerBuiltinAttribute {
     name  := `spec
-    descr := "Marks theorems to use with the `mspec` and `mvcgen` tactics"
+    descr := "Marks Hoare triple specifications and simp theorems to use with the `mspec` and `mvcgen` tactics"
     -- applicationTime := AttributeApplicationTime.afterCompilation -- this seems unnecessarily conservative?
     applicationTime := AttributeApplicationTime.afterTypeChecking
     add   := fun declName stx attrKind => do
       let go : MetaM Unit := do
         let info ← getConstInfo declName
         let prio ← Attribute.Builtin.getPrio stx
-        if (← isProp info.type) then
+        try
           addSpecTheorem ext declName prio attrKind
-        else if info.hasValue then
-          ext.add (SpecEntry.toUnfold declName) attrKind
-        else
-          throwError "invalid 'spec', it is not a proposition" -- nor a definition (to unfold)"
+        catch _ =>
+        let impl ← getBuiltinAttributeImpl `spec_internal_simp
+        try
+          impl.add declName stx attrKind
+        catch _ =>
+        throwError "Invalid 'spec': target was neither a Hoare triple specification nor a 'simp' lemma"
       discard <| go.run {} {}
-      -- TODO: add erase
   }
 
 initialize specAttr : SpecExtension ← do

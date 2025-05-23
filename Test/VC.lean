@@ -15,7 +15,7 @@ theorem fib_triple : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ :
 
 theorem fib_triple_step : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ := by
   unfold fib_impl
-  mvcgen_step 13 -- 12 would not be too low
+  mvcgen_step 14 -- 13 still has a wp⟦·⟧
   case inv => exact ⇓ (⟨a, b⟩, xs) =>
     a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)
   all_goals simp_all +zetaDelta [Nat.sub_one_add_one]
@@ -26,7 +26,8 @@ theorem fib_triple_attr : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n
 
 attribute [local spec] fib_triple in
 theorem fib_triple_erase : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ := by
-  fail_if_success mvcgen [-fib_triple] -- "No specs found for fib_impl n"
+  mvcgen [-fib_triple] -- should not make any progress
+  fail_if_success done
   admit
 
 theorem fib_impl_vcs
@@ -79,7 +80,6 @@ theorem add_unfold [Monad m] [WPMonad m sh] :
   (mkFreshNat : StateT AppState m Nat)
   ⦃⇓ r => ⌜r = n ∧ #fst = n + 1 ∧ #snd = o⌝⦄ := by
   mvcgen [mkFreshNat]
-  simp_all
 
 theorem mkFreshPair_triple : ⦃⌜True⌝⦄ mkFreshPair ⦃⇓ (a, b) => ⌜a ≠ b⌝⦄ := by
   unfold mkFreshPair
@@ -112,6 +112,7 @@ theorem unfold_to_expose_match_spec :
   ⦃⇓ r => ⌜r = 4⌝⦄ := by
   -- should unfold `Option.getD`, reduce the `match (some get) with | some e => e`
   -- and then apply the spec for `get`.
+  set_option pp.rawOnError true in
   mvcgen [unfold_to_expose_match, Option.getD]
   -- TODO: This is weird, we should not need .rfl below.
   -- `mspec` should be able to solve this,

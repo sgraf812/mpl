@@ -48,9 +48,12 @@ declare_config_elab elabConfig Config
 structure Context where
   config : Config
   specThms : SpecTheorems
+  simpCtx : Simp.Context
+  simprocs : Simp.SimprocsArray
 
 structure State where
   fuel : Fuel := .unlimited
+  simpState : Simp.State := {}
   /--
   The verification conditions that have been generated so far.
   Includes `Type`-valued goals arising from instantiation of specifications.
@@ -80,59 +83,74 @@ def emitVC (subGoal : Expr) (name : Name) : VCGenM Expr := do
 def addSubGoalAsVC (goal : MVarId) : VCGenM PUnit := do
   modify fun s => { s with vcs := s.vcs.push goal }
 
-/-- A spec lemma specification is a term that instantiates to a hoare triple spec. -/
-syntax specLemma := term
-/-- An erasure specification `-thm` says to remove `thm` from the spec set -/
-syntax specErase := "-" ident
+def liftSimpM (x : SimpM α) : VCGenM α := do
+  let ctx ← read
+  let s ← get
+  let (a, simpState) ← x (Simp.mkDefaultMethodsCore ctx.simprocs).toMethodsRef ctx.simpCtx |>.run s.simpState
+  set { s with simpState }
+  return a
+
+instance : MonadLift SimpM VCGenM where
+  monadLift x := liftSimpM x
 
 syntax (name := mvcgen_step) "mvcgen_step" optConfig
- (num)? (" [" withoutPosition((specErase <|> specLemma),*,?) "]")? : tactic
+ (num)? (" [" withoutPosition((simpErase <|> simpLemma),*,?) "]")? : tactic
 
 syntax (name := mvcgen_no_trivial) "mvcgen_no_trivial" optConfig
-  (" [" withoutPosition((specErase <|> specLemma),*,?) "]")? : tactic
+  (" [" withoutPosition((simpErase <|> simpLemma),*,?) "]")? : tactic
 
 syntax (name := mvcgen) "mvcgen" optConfig
-  (" [" withoutPosition((specErase <|> specLemma),*,?) "]")? : tactic
+  (" [" withoutPosition((simpErase <|> simpLemma),*,?) "]")? : tactic
 
 private def mkSpecContext (optConfig : Syntax) (lemmas : Syntax) : TacticM Context := do
   let config ← elabConfig optConfig
   let mut specThms ← getSpecTheorems
-  if lemmas.isNone then return { config, specThms }
+  let mut simpStuff := #[]
   for arg in lemmas[1].getSepArgs do
-    if arg.getKind == ``specErase then
-      if let some fvar ← Term.isLocalIdent? arg[1] then
-        specThms := specThms.eraseCore (.local fvar.fvarId!)
-      else
-        let id := arg[1]
-        if let .ok declName ← observing (realizeGlobalConstNoOverloadWithInfo id) then
-          specThms := specThms.eraseCore (.global declName)
-        else
-          withRef id <| throwUnknownConstant id.getId.eraseMacroScopes
-    else if arg.getKind == ``specLemma then
-      let term := arg[0]
+    if arg.getKind == ``simpErase then
+      try
+        let specThm ←
+          if let some fvar ← Term.isLocalIdent? arg[1] then
+            mkSpecTheoremFromLocal fvar.fvarId!
+          else
+            let id := arg[1]
+            if let .ok declName ← observing (realizeGlobalConstNoOverloadWithInfo id) then
+              mkSpecTheoremFromConst declName
+            else
+              withRef id <| throwUnknownConstant id.getId.eraseMacroScopes
+        specThms := specThms.eraseCore specThm.proof
+      catch _ =>
+        simpStuff := simpStuff.push ⟨arg⟩ -- simp tracks its own erase stuff
+    else if arg.getKind == ``simpLemma then
+      unless arg[0].isNone && arg[1].isNone do
+        -- When there is ←, →, ↑ or ↓ then this is for simp
+        simpStuff := simpStuff.push ⟨arg⟩
+        continue
+      let term := arg[2]
       match ← Term.resolveId? term (withInfo := true) <|> Term.elabCDotFunctionAlias? ⟨term⟩ with
       | some (.const declName _) =>
         let info ← getConstInfo declName
-        if (← isProp info.type) then
+        try
           let thm ← mkSpecTheoremFromConst declName
           specThms := addSpecTheoremEntry specThms thm
-        else if info.hasValue then
-          specThms := specThms.addDeclToUnfoldCore declName
-        else
-          throwError "invalid argument, constant is not a theorem or definition"
+        catch _ =>
+          simpStuff := simpStuff.push ⟨arg⟩
       | some (.fvar fvar) =>
         let decl ← getFVarLocalDecl (.fvar fvar)
-        if (← isProp decl.type) then
+        try
           let thm ← mkSpecTheoremFromLocal fvar
           specThms := addSpecTheoremEntry specThms thm
-        else if decl.hasValue then
-          specThms := specThms.addLetDeclToUnfold fvar
-        else
-          throwError "invalid argument, variable is not a proposition or let-declaration"
+        catch _ =>
+          simpStuff := simpStuff.push ⟨arg⟩
       | _ => throwError "Could not resolve {term}"
     else
       throwUnsupportedSyntax
-  return { config, specThms }
+  -- Build a mock simp call to build a simp context that corresponds to `simp [simpStuff]`
+  let stx ← `(tactic| simp [$(Syntax.TSepArray.ofElems simpStuff),*])
+  -- logInfo s!"{stx}"
+  let res ← mkSimpContext stx.raw (eraseLocal := false) (simpTheorems := getSpecSimpTheorems)
+  -- logInfo m!"{res.ctx.simpTheorems.map (·.toUnfold.toList)}"
+  return { config, specThms, simpCtx := res.ctx, simprocs := res.simprocs }
 
 def isTrivial (e : Expr) : Bool := match e with
   | .bvar .. => true
@@ -155,12 +173,16 @@ def withNonTrivialLetDecl (name : Name) (type : Expr) (val : Expr) (k : Expr →
     withLetDecl name type val (kind := kind) fun fv => do
       k fv (liftM <| mkForallFVars #[fv] ·)
 
+theorem rewrite_program [WP m ps] {Q : PostCond α ps} {prog₁ prog₂ : m α} (h : prog₁ = prog₂) :
+  wp⟦prog₂⟧ Q ⊢ₛ wp⟦prog₁⟧ Q := h ▸ .rfl
+
 partial def step (ctx : Context) (fuel : Fuel) (goal : MGoal) (name : Name) : MetaM (Expr × Array MVarId) := do
   withReducible do
   let (res, state) ← StateRefT'.run (ReaderT.run (onGoal goal name) ctx) { fuel }
   return (res, state.vcs)
 where
   onFail (goal : MGoal) (name : Name) : VCGenM Expr := do
+    -- logInfo m!"fail {goal.toExpr}"
     emitVC goal.toExpr name
 
   tryGoal (goal : Expr) (name : Name) : VCGenM Expr := do
@@ -227,15 +249,28 @@ where
         return ← withNonTrivialLetDecl x ty val fun fv leave => do
         let e' := ((body.instantiate1 fv).betaRev e.getAppRevArgs)
         leave (← onWPApp (goalWithNewExpr e') name)
-      -- Reduce match-expressions
-      let e ← match (← reduceMatcher? e) with
-        | .reduced e' =>
-        burnOne
-        return ← onWPApp (goalWithNewExpr e') name
-        | .stuck _e' => pure e -- NB: Do not expose the recursor in e'; split instead.
-        | _ => pure e
-      -- Split match-expressions
-      if isMatcherAppCore (← getEnv) e then
+      -- match-expressions
+      if let .some info := isMatcherAppCore? (← getEnv) e then
+        -- Bring into simp NF
+        let res? ← Simp.simpMatchDiscrs? info e
+        let e ← -- returns/continues only if old e is defeq to new e
+          if let .some res := res? then
+            burnOne
+            if let .some heq := res.proof? then
+              let prf ← onWPApp (goalWithNewExpr res.expr) name
+              return ← mkAppM ``rewrite_program #[heq, prf]
+            else
+              pure res.expr
+          else
+            pure e
+        -- Try reduce the matcher
+        let e ← match (← reduceMatcher? e) with
+          | .reduced e' =>
+          burnOne
+          return ← onWPApp (goalWithNewExpr e') name
+          | .stuck _ => pure e
+          | _ => pure e
+        -- Last resort: Split match
         -- logInfo m!"split match {e}"
         burnOne
         let mvar ← mkFreshExprSyntheticOpaqueMVar goal.toExpr (tag := name)
@@ -254,21 +289,22 @@ where
       -- apply specifications
       if f.isConst then
         burnOne
-        let declName := f.constName!
-        -- logInfo m!"const: {declName}"
-        let minfo ← getUnfoldableConst? declName
-        if minfo.isSome || ctx.specThms.isDeclToUnfold declName then
-          unless ctx.specThms.erased.contains (.global declName) do
-          -- ignore transparencey because `getUnfoldableConst?` already checks for it,
-          -- and transparency should not override a user supplied decl to unfold.
-          if let some e' ← Meta.unfoldDefinition? e (ignoreTransparency := true) then
-            return ← onWPApp (goalWithNewExpr e') name
-          -- NB: If f.constName! is erased or we could not unfold, fall through to onFail
-        else
-          -- logInfo m!"try spec: {declName}"
-          let (prf, specHoles) ← mSpec goal (liftM ∘ findAndElabSpec ctx.specThms) tryGoal (preTag := name)
+        -- logInfo m!"const: {f.constName!}"
+        try
+          let specThm ← findSpec ctx.specThms e
+          let (prf, specHoles) ← mSpec goal (fun _wp  => return (specThm, [])) tryGoal (preTag := name)
           assignMVars specHoles
           return prf
+        catch _ =>
+          -- logInfo m!"no spec for: {f.constName!}, trying simp"
+          let res ← Simp.simp e
+          unless res.expr != e do return ← onFail goal name
+          burnOne
+          if let .some heq := res.proof? then
+            let prf ← onWPApp (goalWithNewExpr res.expr) name
+            return ← mkAppM ``rewrite_program #[heq, prf]
+          else
+            return ← onWPApp (goalWithNewExpr res.expr) name
       return ← onFail goal name
     | _ => return ← onFail goal name
 
