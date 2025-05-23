@@ -42,7 +42,11 @@ def SpecProof.instantiate (proof : SpecProof) : MetaM (Array Expr × Array Binde
     | .global declName => mkConstWithFreshMVarLevels declName
     | .local fvarId => pure <| mkFVar fvarId
     | .stx _ _ proof => pure proof -- TODO: Think about simp-like generalization
-  let (xs, bs, type) ← forallMetaTelescope (← inferType prf)
+  -- We instantiate here deeply specifically for local hypotheses, the type of which
+  -- may contain MVars at multiple levels.
+  -- An example is `ih` in `serialize_bytesize` from the serialization schema test
+  let type ← instantiateMVars (← inferType prf)
+  let (xs, bs, type) ← forallMetaTelescope type
   return (xs, bs, prf.beta xs, type)
 
 instance : ToMessageData SpecProof where

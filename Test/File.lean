@@ -1,4 +1,5 @@
 import MPL
+import MPL.ProofMode.Tactics.VCGen
 
 open MPL
 
@@ -167,42 +168,21 @@ def Schema.serialize (s : Schema) (v : s.interp) : FileM PUnit := do
       elt.serialize v
 decreasing_by (repeat sorry)
 
---derive_wp_simp FileM.append
-@[wp_simp]
-theorem FileM.append_apply :
-    wp⟦FileM.append bs⟧ Q = fun f => Q.1 ⟨⟩ (f.append bs) := by
-  unfold FileM.append
-  mstart
-  mwp
-
--- Same thing as triple:
-theorem FileM.append_spec :
-    ⦃fun f => Q.1 ⟨⟩ { f with bytes := f.bytes ++ bs, pos := f.pos.castLE (by simp) }⦄
-    FileM.append bs
-    ⦃Q⦄ := by
-  mintro _
-  mwp
+attribute [spec] FileM.append
 
 theorem FileM.append_ok : ⦃⌜True⌝⦄ FileM.append bs ⦃⇓ () => ⌜True⌝⦄ := by
-  mintro - ∀s
-  mwp
+  mvcgen
 
 theorem Schema.serialize_ok {s : Schema} (v : s.interp) :
   ⦃⌜True⌝⦄ s.serialize v ⦃⇓ () => ⌜True⌝⦄ := by
   induction s, v using Schema.serialize.induct
-  case case1 => unfold Schema.serialize; mintro - ∀f; mwp
-  case case2 => unfold Schema.serialize; mintro - ∀f; mwp
-  case case3 ih => unfold Schema.serialize; mintro - ∀f; mwp; mspec ih
---  case case4 ih => unfold Schema.serialize; mintro - ∀f; mwp
---  case case5 ih1 ih2 => unfold Schema.serialize; mintro - ∀f; mwp; mspec ih1; mspec ih2
+  case case1 => mvcgen [Schema.serialize]
+  case case2 => mvcgen [Schema.serialize]
+  case case3 ih => mvcgen [Schema.serialize, ih]
   case case4 arr ih =>
-    unfold Schema.serialize
-    mintro - ∀f
-    mwp
-    cases arr
-    conv in wp _ => simp
-    mspec (Specs.foldlM_list (m := FileM) (⇓ _ => ⌜True⌝) ?step)
-    case step => intros; apply ih
+    mvcgen [Schema.serialize, ih]
+    case inv => exact (⇓ _ => ⌜True⌝)
+    all_goals simp_all
 
 theorem serialize_ne_error {s : Schema} (v : s.interp) :
     s.serialize v File.mkEmpty ≠ .error e f := by
@@ -224,88 +204,29 @@ def byteSize {s : Schema} (v : s.interp) : Nat :=
   | .enum _ _ _, ⟨_, v⟩ => 1 + byteSize v
 --  | .struct 0 flds, t => 0
 --  | .struct (n+1) flds, (e, t) => byteSize e + @byteSize (Schema.struct n (flds ∘ Fin.succ)) t
-  | .array _, a => a.foldl (init := 0) (fun acc v => acc + byteSize v)
+  | .array _, a => a.foldl (init := 0) (fun acc v => acc + byteSize v) + 1
 
 theorem EStateM.wp_to_tuple {ε σ α} {x : EStateM ε σ α} {Q : PostCond α (.except ε (.arg σ .pure))} {s : σ}
   (h : wp⟦x⟧ Q s) : ⦃(· = s)⦄ x ⦃Q⦄ := by intro _ hs; subst hs; exact h
 
-theorem serialize_byteSize {s : Schema} (v : s.interp) (f : File) :
-  match s.serialize v f with
-  | .ok () f' => f'.bytes.size = byteSize v + f.bytes.size
-  | .error _ _ => False := by
-  generalize h : s.serialize v f = x
-  apply EStateM.by_wp h _
-  subst h
-  simp
-  induction s, v using Schema.serialize.induct generalizing f
-  case case1 => unfold Schema.serialize; mstart; mwp; simp +arith [File.mkEmpty, byteSize, File.append]
-  case case2 => unfold Schema.serialize; mstart; mwp; simp +arith [File.mkEmpty, byteSize, File.append]
-  case case3 tag v ih =>
-    unfold Schema.serialize
-    mstart
-    mwp
-    mspec (EStateM.wp_to_tuple (ih { bytes := f.bytes.push (OfNat.ofNat ↑tag), pos := Fin.castLE _ f.pos }))
-    case post.success => simp +arith [File.mkEmpty, byteSize, *]
-    simp +arith [File.mkEmpty, byteSize, *]
+theorem serialize_byteSize {s : Schema} (v : s.interp) (oldf : File) :
+  ⦃fun f' => oldf = f'⦄
+  s.serialize v
+  ⦃⇓ () f' => f'.bytes.size = byteSize v + oldf.bytes.size⦄ := by
+  induction s, v using Schema.serialize.induct generalizing oldf
+  case case1 => mvcgen [Schema.serialize]; simp +contextual +arith
+  case case2 => mvcgen [Schema.serialize]; simp +contextual +arith
+  case case3 ih => mvcgen [Schema.serialize, ih]; simp_all; omega
   case case4 arr ih =>
-    unfold Schema.serialize
-    mstart
-    mwp
-    cases arr
-    conv in forIn _ _ _ => simp
-    sorry
-    -- mspec (Specs.foldlM_list (⇓ (_, xs) => ⌜xs.rpref.map byteSize |>.sum = 3⌝) ?step)
-    -- case step => intros; apply ih
-
-#check Schema.serialize.induct
-theorem test {s : Schema} (v : s.interp) (f : File)
-  (case1 : ∀ (v : Schema.byte.interp) (f : File), Q.1 () (f.append #[v]))
-  (case2 : ∀ (v : Schema.word.interp) (f : File), Q.1 () (f.append <| #[v >>> 24, v >>> 16, v >>> 8, v].map (·.toUInt8)))
-  (case3 : ∀ (elt : Schema) (v : (Schema.array elt).interp) (f : File),
-           ∃ (I : PostCond (PUnit × List.Zipper v.toList) (.except FileError (.arg File .pure))),
-             (I.1 ((), ⟨[], v.toList, by simp⟩) (f.append #[v.size.toUInt8]))
-             ∧ (I.1 ((), ⟨v.toList.reverse, [], by simp⟩) ⊢ₛ Q.1 ())
-             ∧ (I.2 ⊢ₑ Q.2)
-             ∧ (∀ (xs : List.Zipper v.toList) (b : Schema.byte.interp) (f : File), I.1 ((), xs) (f.append #[b]))
-             ∧ (∀ (xs : List.Zipper v.toList) (w : Schema.word.interp) (f : File), I.1 ((), xs) (f.append <| #[w >>> 24, w >>> 16, w >>> 8, w].map (·.toUInt8))))
-  :
-  wp⟦s.serialize v⟧ Q f := by
-  apply Schema.serialize.fun_cases _ ?case1 ?case2 ?case3 ?case4 s v
-  case case1 => unfold Schema.serialize; mstart; mwp; mpure_intro; intro v; apply case1
-  case case2 => unfold Schema.serialize; mstart; mwp; mpure_intro; intro v; apply case2
-  case case3 =>
-    intro nalt h alts tag v
-    unfold Schema.serialize
-    mstart
-    mwp
-    mpure_intro
-    exact test v (f.append #[OfNat.ofNat tag]) case1 case2 case3
-  case case4 =>
-    intro elt arr
-    unfold Schema.serialize
-    mstart
-    mwp
-    have ⟨I, hpre, hpost, hexcept, hcase1, hcase2⟩ := case3 elt arr f
-    -- conv in forIn _ _ _ => simp
-    -- mspec (Specs.foldlM_list (⇓ (_, xs) => ⌜True⌝) ?step)
-    mspec_no_bind Specs.forIn_array
-    case inv => exact I
-    case pre => simp[hpre]
-    case post.success => simp[hpost]
-    case post.except.handle => simp[hexcept.1]
-    case step =>
-      intro _ _ v _ _
-      mintro h ∀f
-      mwp
-      mcases h with ⌜hinv⌝
-      mpure_intro
-      refine test v f ?case1 ?case2 ?case3
-      case case1 => simp; apply hcase1
-      case case2 => simp; apply hcase2
-      case case3 =>
-        intro elt arr f
-        have ⟨I, hpre, hpost, hexcept, hcase1, hcase2⟩ := case3 elt arr f
-        refine ⟨I, hpre, hpost, hexcept, hcase1, hcase2⟩
+    -- set_option trace.mpl.tactics.spec true in
+    mvcgen [Schema.serialize, ih]
+    case inv => exact (⇓ ((), xs) f =>
+      f.bytes.size = xs.pref.foldl (fun acc v => acc + byteSize v) 0 + oldf.bytes.size + 1)
+    simp [*]
+    case post.success => simp +contextual +arith
+    case post.except => simp
+    case post.success => simp
+    case step => simp; set_option trace.Meta.isDefEq true in rfl
 
 def serialized {s : Schema} (v : s.interp) (f : File) : Prop :=
   wp⟦s.serialize v⟧
@@ -389,6 +310,14 @@ theorem read_spec :
   case post.except.handle => simp
   mintro ∀f
   simp_all [hasRead]
+
+@[spec]
+theorem read_spec' :
+  ⦃fun f' => ⌜canRead n f' ∧ f' = f⌝⦄
+  FileM.read n
+  ⦃⇓ v f' => hasRead v f f'⦄
+  := by
+  mvcgen[-read_spec, FileM.read]
 
 theorem serialized_hasRead_byte {bs : Vector UInt8 1} {v : Schema.byte.interp} :
     serialized v f → hasRead bs f f' → v = bs[0] := by

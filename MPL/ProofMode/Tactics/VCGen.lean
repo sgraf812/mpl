@@ -109,6 +109,8 @@ private def mkSpecContext (optConfig : Syntax) (lemmas : Syntax) : TacticM Conte
   for arg in lemmas[1].getSepArgs do
     if arg.getKind == ``simpErase then
       try
+        -- Try and build SpecTheorems for the lemma to erase to see if it's
+        -- meant to be interpreted by SpecTheorems. Otherwise fall back to SimpTheorems.
         let specThm ←
           if let some fvar ← Term.isLocalIdent? arg[1] then
             mkSpecTheoremFromLocal fvar.fvarId!
@@ -142,7 +144,7 @@ private def mkSpecContext (optConfig : Syntax) (lemmas : Syntax) : TacticM Conte
           specThms := addSpecTheoremEntry specThms thm
         catch _ =>
           simpStuff := simpStuff.push ⟨arg⟩
-      | _ => throwError "Could not resolve {term}"
+      | _ => withRef term <| throwError "Could not resolve {repr term}"
     else
       throwUnsupportedSyntax
   -- Build a mock simp call to build a simp context that corresponds to `simp [simpStuff]`
@@ -173,8 +175,9 @@ def withNonTrivialLetDecl (name : Name) (type : Expr) (val : Expr) (k : Expr →
     withLetDecl name type val (kind := kind) fun fv => do
       k fv (liftM <| mkForallFVars #[fv] ·)
 
-theorem rewrite_program [WP m ps] {Q : PostCond α ps} {prog₁ prog₂ : m α} (h : prog₁ = prog₂) :
-  wp⟦prog₂⟧ Q ⊢ₛ wp⟦prog₁⟧ Q := h ▸ .rfl
+theorem rewrite_program [WP m ps] {prog₁ prog₂ : m α}
+  (heq : prog₁ = prog₂) (hprf : ⦃P⦄ prog₂ ⦃Q⦄) :
+  ⦃P⦄ prog₁ ⦃Q⦄ := heq ▸ hprf
 
 partial def step (ctx : Context) (fuel : Fuel) (goal : MGoal) (name : Name) : MetaM (Expr × Array MVarId) := do
   withReducible do
@@ -207,8 +210,7 @@ where
   onGoal goal name : VCGenM Expr := do
     let T := goal.target
     let T := (← reduceProjBeta? T).getD T -- very slight simplification
-    trace[mpl.tactics.vcgen] "target: {T}"
-    -- logInfo m!"onGoal: {T}"
+    -- logInfo m!"target: {T}"
     let goal := { goal with target := T }
 
     let f := T.getAppFn
@@ -234,13 +236,14 @@ where
     let args := goal.target.getAppArgs
     let trans := args[2]!
     -- logInfo m!"trans: {trans}"
-    --let Q := args[3]!
+    let Q := args[3]!
     match_expr ← instantiateMVarsIfMVarApp trans with
-    | hd@WP.wp m ps instWP α e =>
-      let us := hd.constLevels!
+    | wp@WP.wp m ps instWP α e =>
       let e ← instantiateMVarsIfMVarApp e
-      let goalWithNewExpr e' :=
-        let wp' := mkApp5 (mkConst ``WP.wp us) m ps instWP α e'
+      let e := e.headBeta
+      trace[mpl.tactics.vcgen] "Target: {e}"
+      let goalWithNewProg e' :=
+        let wp' := mkApp5 wp m ps instWP α e'
         let args' := args.set! 2 wp'
         { goal with target := mkAppN (mkConst ``PredTrans.apply) args' }
 
@@ -248,7 +251,7 @@ where
         burnOne
         return ← withNonTrivialLetDecl x ty val fun fv leave => do
         let e' := ((body.instantiate1 fv).betaRev e.getAppRevArgs)
-        leave (← onWPApp (goalWithNewExpr e') name)
+        leave (← onWPApp (goalWithNewProg e') name)
       -- match-expressions
       if let .some info := isMatcherAppCore? (← getEnv) e then
         -- Bring into simp NF
@@ -257,8 +260,9 @@ where
           if let .some res := res? then
             burnOne
             if let .some heq := res.proof? then
-              let prf ← onWPApp (goalWithNewExpr res.expr) name
-              return ← mkAppM ``rewrite_program #[heq, prf]
+              let prf ← onWPApp (goalWithNewProg res.expr) name
+              let prf := mkApp10 (mkConst ``rewrite_program wp.constLevels!) m ps α goal.hyps Q instWP e res.expr heq prf
+              return prf
             else
               pure res.expr
           else
@@ -267,7 +271,7 @@ where
         let e ← match (← reduceMatcher? e) with
           | .reduced e' =>
           burnOne
-          return ← onWPApp (goalWithNewExpr e') name
+          return ← onWPApp (goalWithNewProg e') name
           | .stuck _ => pure e
           | _ => pure e
         -- Last resort: Split match
@@ -282,29 +286,30 @@ where
       if let some (some val) ← f.fvarId?.mapM (·.getValue?) then
         burnOne
         let e' := val.betaRev e.getAppRevArgs
-        let wpe := mkApp5 (mkConst ``WP.wp us) m ps instWP α e'
         -- logInfo m!"unfold local var {f}, new WP: {wpe}"
-        return ← onWPApp { goal with target := mkAppN (mkConst ``PredTrans.apply) (args.set! 2 wpe) } name
+        return ← onWPApp (goalWithNewProg e') name
       -- Unfold definitions according to reducibility and spec attributes,
       -- apply specifications
       if f.isConst then
         burnOne
-        -- logInfo m!"const: {f.constName!}"
         try
           let specThm ← findSpec ctx.specThms e
+          trace[mpl.tactics.vcgen] "Candidate spec for {f.constName!}: {specThm.proof}"
           let (prf, specHoles) ← mSpec goal (fun _wp  => return (specThm, [])) tryGoal (preTag := name)
           assignMVars specHoles
           return prf
-        catch _ =>
-          -- logInfo m!"no spec for: {f.constName!}, trying simp"
-          let res ← Simp.simp e
-          unless res.expr != e do return ← onFail goal name
-          burnOne
-          if let .some heq := res.proof? then
-            let prf ← onWPApp (goalWithNewExpr res.expr) name
-            return ← mkAppM ``rewrite_program #[heq, prf]
-          else
-            return ← onWPApp (goalWithNewExpr res.expr) name
+        catch ex =>
+          trace[mpl.tactics.vcgen] "Failed to find spec. Trying simp. Reason: {ex.toMessageData}"
+        let res ← Simp.simp e
+        unless res.expr != e do return ← onFail goal name
+        burnOne
+        if let .some heq := res.proof? then
+          trace[mpl.tactics.vcgen] "Simplified"
+          let prf ← onWPApp (goalWithNewProg res.expr) name
+          let prf := mkApp10 (mkConst ``rewrite_program wp.constLevels!) m ps α goal.hyps Q instWP e res.expr heq prf
+          return prf
+        else
+          return ← onWPApp (goalWithNewProg res.expr) name
       return ← onFail goal name
     | _ => return ← onFail goal name
 
@@ -318,18 +323,18 @@ def genVCs (goal : MVarId) (ctx : Context) (fuel : Fuel) : TacticM (Array MVarId
   return vcs
 
 @[tactic mvcgen_step]
-def elabMVCGenStep : Tactic := fun stx => do
+def elabMVCGenStep : Tactic := fun stx => withMainContext do
   let ctx ← mkSpecContext stx[1] stx[3]
   let n := if stx[2].isNone then 1 else stx[2][0].toNat
   discard <| genVCs (← getMainGoal) ctx (fuel := .limited n)
 
 @[tactic mvcgen_no_trivial]
-def elabMVCGenNoTrivial : Tactic := fun stx => do
+def elabMVCGenNoTrivial : Tactic := fun stx => withMainContext do
   let ctx ← mkSpecContext stx[0] stx[1]
   discard <| genVCs (← getMainGoal) ctx (fuel := .unlimited)
 
 @[tactic mvcgen]
-def elabMVCGen : Tactic := fun stx => do
+def elabMVCGen : Tactic := fun stx => withMainContext do
   -- I would like to define this simply as a macro
   -- `(tactic| mvcgen_no_trivial $c $lemmas <;> try (guard_target =~ (⌜True⌝ ⊢ₛ _); mpure_intro; trivial))
   -- but optConfig is not a leading_parser, and neither is the syntax for `lemmas`
@@ -356,7 +361,6 @@ abbrev fib_spec : Nat → Nat
 theorem fib_triple_vc : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ := by
   unfold fib_impl
   -- set_option trace.mpl.tactics.spec true in
-  elim_lets
   mvcgen
   case inv => exact ⇓ (⟨a, b⟩, xs) =>
     a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)

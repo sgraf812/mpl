@@ -23,18 +23,19 @@ initialize registerTraceClass `mpl.tactics.spec
 
 def findSpec (database : SpecTheorems) (prog : Expr) : MetaM SpecTheorem := do
   let prog ← instantiateMVarsIfMVarApp prog
+  let prog := prog.headBeta
   unless prog.getAppFn'.isConst do throwError m!"not an application of a constant: {prog}"
   let candidates ← database.specs.getMatch prog
   let candidates := candidates.filter fun spec => !database.erased.contains spec.proof
   let candidates := candidates.insertionSort fun s₁ s₂ => s₁.priority < s₂.priority
-  -- logInfo m!"candidates for {prog}: {candidates.map (·.proof)}"
+  trace[mpl.tactics.spec] "Candidates for {prog}: {candidates.map (·.proof)}"
   let specs ← candidates.filterM fun spec => do
     let (_, _, _, type) ← spec.proof.instantiate
-    let_expr Triple _m _ps _instWP _α specProg _P _Q := type | failure
+    trace[mpl.tactics.spec] "{spec.proof} instantiates to {type}"
+    let_expr Triple _m _ps _instWP _α specProg _P _Q := type | throwError "Not a triple: {repr type}"
     isDefEq prog specProg
-  -- logInfo m!"specs for {prog}: {specs.map (·.proof)}"
+  trace[mpl.tactics.spec] "Specs for {prog}: {specs.map (·.proof)}"
   if specs.isEmpty then throwError m!"No specs found for {indentExpr prog}\nCandidates: {candidates.map (·.proof)}"
-  -- if specs.size > 1 then throwError s!"multiple specs found for {prog}: {specs.map (·.proof)}"
   return specs[0]!
 
 def instantiateSpec (spec : Expr) (expectedTy : Expr) : MetaM (Expr × List MVarId) := do
@@ -56,7 +57,7 @@ def findAndElabSpec (database : SpecTheorems) (wp : Expr) : MetaM (SpecTheorem �
 
 def elabTermIntoSpecTheorem (stx : TSyntax `term) (expectedTy : Expr) : TacticM (SpecTheorem × List MVarId) := do
   if stx.raw.isIdent then
-    match (← Term.resolveId? stx.raw (withInfo := true)) with
+    match ← Term.resolveId? stx.raw (withInfo := true) with
     | some (.const declName _) => return (← mkSpecTheoremFromConst declName, [])
     | some (.fvar fvarId) => return (← mkSpecTheoremFromLocal fvarId, [])
     | _      => pure ()
@@ -137,7 +138,7 @@ partial def dischargeFailEntails (ps : Expr) (Q : Expr) (Q' : Expr) (goalTag : N
 end
 
 def dischargeMGoal (goal : MGoal) (goalTag : Name) (discharge : Expr → Name → n Expr) : n Expr := do
-  controlAt MetaM (fun map => do trace[mpl.tactics.spec] "dischargeMGoal: {(← reduceProj? goal.target).getD goal.target}"; map (pure ()))
+  -- controlAt MetaM (fun map => do trace[mpl.tactics.spec] "dischargeMGoal: {(← reduceProj? goal.target).getD goal.target}"; map (pure ()))
   -- simply try one of the assumptions for now. Later on we might want to decompose conjunctions etc; full xsimpl
   let some prf ← liftM (m:=MetaM) goal.assumption | discharge goal.toExpr goalTag
   return prf
@@ -175,18 +176,12 @@ def mSpec (goal : MGoal) (elabSpecAtWP : Expr → n (SpecTheorem × List MVarId)
   let excessArgs := (args.extract 4 args.size).reverse
 
   -- Actually instantiate the specThm using the expected type computed from `wp`.
-  -- TODO: Should try hard to move the `dsimp` below before this instantation.
-  --       We will do too much work on "the rest of the program" which might occur
-  --       in `P` in case of `Specs.bind : ⦃wp⟦x⟧ (fun a => wp⟦f a⟧ Q, Q.2)⦄ (x >>= f) ⦃Q⦄`.
   let_expr f@Triple m ps instWP α prog P Q := specTy | do liftM (m:=MetaM) (throwError "target not a Triple application {specTy}")
   let wp' := mkApp5 (mkConst ``WP.wp f.constLevels!) m ps instWP α prog
   unless (← withAssignableSyntheticOpaque <| isDefEq wp wp') do
     Term.throwTypeMismatchError none wp wp' spec
 
-  -- Simplify the precondition
-  let ctx ← Simp.Context.mkDefault
   let P := P.betaRev excessArgs
-  let (P, _) ← dsimp P ctx
   let spec := spec.betaRev excessArgs
 
   -- often P or Q are schematic (i.e. an MVar app). Try to solve by rfl.
