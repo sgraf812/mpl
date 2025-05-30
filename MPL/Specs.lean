@@ -102,11 +102,11 @@ theorem Specs.bind {m : Type → Type u} {ps : PostShape} [Monad m] [WPMonad m p
 
 @[spec]
 theorem Specs.map {m : Type → Type u} {ps : PostShape} [Monad m] [WPMonad m ps] {α β} {x : m α} {f : α → β} {Q : PostCond β ps} :
-  ⦃wp⟦x⟧ (fun a => Q.1 (f a), Q.2)⦄ (f <$> x) ⦃Q⦄ := by simp only [Triple, WP.map_apply, SPred.entails.refl]
+  ⦃wp⟦x⟧ (fun a => Q.1 (f a), Q.2)⦄ (f <$> x) ⦃Q⦄ := by simp only [Triple, WPMonad.map_apply, SPred.entails.refl]
 
 @[spec]
 theorem Specs.seq {m : Type → Type u} {ps : PostShape} [Monad m] [WPMonad m ps] {α β} {x : m (α → β)} {y : m α} {Q : PostCond β ps} :
-  ⦃wp⟦x⟧ (fun f => wp⟦y⟧ (fun a => Q.1 (f a), Q.2), Q.2)⦄ (x <*> y) ⦃Q⦄ := by simp only [Triple, WP.seq_apply, SPred.entails.refl]
+  ⦃wp⟦x⟧ (fun f => wp⟦y⟧ (fun a => Q.1 (f a), Q.2), Q.2)⦄ (x <*> y) ⦃Q⦄ := by simp only [Triple, WPMonad.seq_apply, SPred.entails.refl]
 
 /-! # `MonadLift` -/
 
@@ -410,7 +410,7 @@ theorem Specs.foldlM_list {α : Type} {β : Type} {m : Type → Type v} {ps : Po
     simp only [List.forIn_yield_eq_foldlM, id_map']
   rw[this]
   apply Specs.forIn_list inv
-  simp only [Triple, map_map, PredTrans.map_apply]
+  simp only [Triple, WPMonad.wp_map, PredTrans.map_apply]
   exact step
 
 -- using the postcondition as a constant invariant:

@@ -39,14 +39,14 @@ instance [WP m ps] (x : m α) : PropAsSPredTautology (Triple x P Q) spred(P → 
   iff := (SPred.entails_true_intro P (wp⟦x⟧ Q)).symm
 
 theorem pure [Monad m] [WPMonad m ps] {α} {Q : PostCond α ps} (a : α) (himp : P ⊢ₛ Q.1 a) :
-  ⦃P⦄ pure (f:=m) a ⦃Q⦄ := himp.trans (by simp only [pure_pure, PredTrans.pure_apply, SPred.entails.refl])
+  ⦃P⦄ pure (f:=m) a ⦃Q⦄ := himp.trans (by simp only [WPMonad.wp_pure, PredTrans.pure_apply, SPred.entails.refl])
 
 theorem bind [Monad m] [WPMonad m ps] {α β} {P : Assertion ps} {Q : α → Assertion ps} {R : PostCond β ps} (x : m α) (f : α → m β)
     (hx : ⦃P⦄ x ⦃(Q, R.2)⦄)
     (hf : ∀ b, ⦃Q b⦄ f b ⦃R⦄) :
     ⦃P⦄ (x >>= f) ⦃R⦄ := by
   apply SPred.entails.trans hx
-  simp only [bind_bind]
+  simp only [WPMonad.wp_bind]
   apply (wp x).mono _ _
   simp only [PostCond.entails, Assertion, FailConds.entails.refl, and_true]
   exact hf

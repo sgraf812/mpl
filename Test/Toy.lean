@@ -55,21 +55,6 @@ theorem StateT.mkFreshNat_apply [Monad m] [LawfulMonad m] [WPMonad m sh] :
   wp⟦(mkFreshNat : StateT (Nat × Nat) m Nat)⟧ Q = fun s => Q.1 s.1 (s.1 + 1, s.2) := by
     unfold mkFreshNat; wp_simp
 
--- The following triggers the wp_simp rules for MonadMorphism:
-@[wp_simp]
-theorem MonadStateOf.mkFreshNat_apply [Monad m] [MonadStateOf (Nat × Nat) m] [Monad n] [LawfulMonad m] [LawfulMonad n] [WP m psm] [WPMonad n psn] [MonadLift m n] [MonadMorphism m n MonadLift.monadLift] :
-  wp⟦mkFreshNat : n Nat⟧ Q = wp⟦MonadLift.monadLift (m:=m) mkFreshNat : n Nat⟧ Q := by
-    unfold mkFreshNat; wp_simp [WP.morph_bind_apply, WP.morph_map_apply, WP.morph_pure_apply]; rfl
-
-@[spec]
-theorem mkFreshNat_lift_spec [Monad m] [LawfulMonad m] [WPMonad m sh] :
-  ⦃fun _ s => ⌜s.1 = n ∧ s.2 = o⌝⦄
-  (mkFreshNat : ExceptT Char (ReaderT Bool (StateT (Nat × Nat) m)) Nat)
-  ⦃⇓ r _ s => ⌜r = n ∧ s.1 = n + 1 ∧ s.2 = o⌝⦄ := by
-  mintro _
-  mwp
-  simp
-
 def mkFreshPair : StateM (Nat × Nat) (Nat × Nat) := do
   let a ← mkFreshNat
   let b ← mkFreshNat
@@ -208,7 +193,6 @@ theorem test_loop_break :
     (conv in (List.sum _) => whnf)
     simp_all
     omega
-  simp_all
 
 theorem get_spec [Monad m] [WPMonad m ps] {Q : PostCond σ (.arg σ ps)} :
   ⦃fun s => Q.1 s s⦄ (get : StateT σ m σ) ⦃Q⦄ := by mintro h; mwp
@@ -229,7 +213,6 @@ theorem test_loop_early_return :
     Nat.div_one, pure_bind]
   mspec get_spec
   mspec (Specs.forIn_list (⇓ (r, xs) s => (r.1 = none ∧ r.2 = xs.rpref.sum ∧ r.2 ≤ 4 ∨ r.1 = some 42 ∧ r.2 > 4) ∧ s = 4) ?step)
-  case pre => simp
   case step =>
     intro b pref x suff h
     mintro ⟨h, hs⟩

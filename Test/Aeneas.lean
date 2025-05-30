@@ -43,8 +43,8 @@ instance Result.instWP : WP Result (.except Error .pure) where
   | .div => PredTrans.const ⌜False⌝
 
 instance Result.instWPMonad : WPMonad Result (.except Error .pure) where
-  pure_pure := by intros; ext Q; simp [wp, PredTrans.pure, pure, Except.pure, Id.run]
-  bind_bind x f := by
+  wp_pure := by intros; ext Q; simp [wp, PredTrans.pure, pure, Except.pure, Id.run]
+  wp_bind x f := by
     simp only [instWP, bind]
     ext Q
     cases x <;> simp [PredTrans.bind, PredTrans.const, MonadExcept.throw_apply, Except.throw_apply]

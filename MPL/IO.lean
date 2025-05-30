@@ -35,5 +35,5 @@ scoped instance MPL.IO.instLawfulMonad {ε} : LawfulMonad (EIO ε) := _root_.IO.
 
 open scoped MPL.IO in
 noncomputable instance IO.instWPMonad : WPMonad (EIO ε) (.except ε .pure) where
-  pure_pure := IO.wp_pure
-  bind_bind := IO.wp_bind
+  wp_pure := IO.wp_pure
+  wp_bind := IO.wp_bind

@@ -34,7 +34,7 @@ theorem Except.throw_apply :
 
 theorem ExceptT.throw_apply [Monad m] [WPMonad m ps] :
   wp⟦MonadExceptOf.throw e : ExceptT ε m α⟧ Q = Q.2.1 e := by
-    simp only [wp, MonadExceptOf.throw, ExceptT.mk, pure_pure, pure, PredTrans.pure,
+    simp only [wp, MonadExceptOf.throw, ExceptT.mk, WPMonad.wp_pure, pure, PredTrans.pure,
       PredTrans.pushExcept_apply]
 
 theorem EStateM.throw_apply :
@@ -70,7 +70,7 @@ theorem Except.tryCatch_apply :
 
 theorem ExceptT.tryCatch_apply [Monad m] [WPMonad m ps] :
   wp⟦MonadExceptOf.tryCatch x h : ExceptT ε m α⟧ Q = wp⟦x⟧ (Q.1, fun e => wp⟦h e⟧ Q, Q.2.2) := by
-    simp only [wp, MonadExceptOf.tryCatch, ExceptT.tryCatch, ExceptT.mk, bind_bind,
+    simp only [wp, MonadExceptOf.tryCatch, ExceptT.tryCatch, ExceptT.mk, WPMonad.bind_apply,
       PredTrans.pushExcept_apply, PredTrans.bind_apply]
     congr
     ext x
@@ -80,7 +80,7 @@ open EStateM.Backtrackable in
 theorem EStateM.tryCatch_apply {ε σ δ α x h Q} [EStateM.Backtrackable δ σ]:
   wp⟦MonadExceptOf.tryCatch x h : EStateM ε σ α⟧ Q = fun s => wp⟦x⟧ (Q.1, fun e s' => wp⟦h e⟧ Q (restore s' (save s)), Q.2.2) s := by
     ext s;
-    simp only [wp, MonadExceptOf.tryCatch, EStateM.tryCatch, bind_bind,
+    simp only [wp, MonadExceptOf.tryCatch, EStateM.tryCatch, WPMonad.bind_apply,
       PredTrans.pushExcept_apply, PredTrans.bind_apply]
     cases x s <;> simp
 
@@ -104,7 +104,7 @@ example :
   wp (m:= ReaderT Char (StateT Bool (ExceptT Nat Id))) (do set true; throw 42; set false; get) =
   wp (m:= ReaderT Char (StateT Bool (ExceptT Nat Id))) (do set true; throw 42; get) := by
     ext Q : 2
-    simp only [WP.bind_apply, MonadState.get_apply, MonadStateOf.get_apply, ReaderT.monadLift_apply,
+    simp only [WPMonad.bind_apply, MonadState.get_apply, MonadStateOf.get_apply, ReaderT.monadLift_apply,
       PredTrans.monadLiftArg_apply, StateT.get_apply, MonadStateOf.set_apply, StateT.set_apply,
       MonadExcept.throw_apply, ReaderT.throw_apply, StateT.throw_apply, StateT.monadLift_apply,
       ExceptT.throw_apply]
@@ -114,7 +114,7 @@ example :
   wp (m:= ReaderT Char (StateT Bool (ExceptT Nat Id))) (do set false; get) := by
     ext Q : 2
     simp only [MonadExcept.tryCatch_apply, ReaderT.tryCatch_apply, StateT.tryCatch_apply,
-      ExceptT.tryCatch_apply, WP.StateT_run_apply, WP.ReaderT_run_apply, WP.bind_apply,
+      ExceptT.tryCatch_apply, WP.StateT_run_apply, WP.ReaderT_run_apply, WPMonad.bind_apply,
       MonadState.get_apply, MonadStateOf.get_apply, ReaderT.monadLift_apply,
       PredTrans.monadLiftArg_apply, StateT.get_apply, MonadStateOf.set_apply, StateT.set_apply,
       MonadExcept.throw_apply, ReaderT.throw_apply, StateT.throw_apply, StateT.monadLift_apply,

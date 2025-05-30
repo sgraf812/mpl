@@ -46,11 +46,9 @@ attribute [wp_simp]
   SPred.entails.refl SPred.imp_self_simp SPred.true_intro_simp SPred.true_intro_simp_nil
   FailConds.entails.refl FailConds.entails_false FailConds.entails_true FailConds.pure_def
   PostCond.entails PostCond.entails.refl PostCond.total PostCond.partial
-  -- MonadMorphism and basic if/then/else:
-  WP.pure_apply WP.bind_apply WP.map_apply WP.seq_apply
-  WP.ite_apply WP.dite_apply
-  WP.morph_pure_apply WP.morph_bind_apply WP.morph_map_apply WP.morph_seq_apply
-  WP.morph_ite_apply WP.morph_dite_apply
+  -- WPMonad and basic if/then/else:
+  WPMonad.pure_apply WPMonad.bind_apply WPMonad.map_apply WPMonad.seq_apply
+  WPMonad.ite_apply WPMonad.dite_apply
   -- MonadLift implementation
   StateT.monadLift_apply ReaderT.monadLift_apply ExceptT.monadLift_apply
 --  PredTrans.monadLiftArg_apply PredTrans.monadLiftExcept_apply

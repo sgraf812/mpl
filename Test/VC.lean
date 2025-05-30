@@ -61,8 +61,7 @@ theorem mkFreshNat_spec [Monad m] [WPMonad m sh] :
   ⦃⌜#fst = n ∧ #snd = o⌝⦄
   (mkFreshNat : StateT AppState m Nat)
   ⦃⇓ r => ⌜r = n ∧ #fst = n + 1 ∧ #snd = o⌝⦄ := by
-  unfold mkFreshNat
-  mvcgen
+  mvcgen [mkFreshNat]
   simp_all
 
 theorem erase_unfold [Monad m] [WPMonad m sh] :

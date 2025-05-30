@@ -3,7 +3,6 @@ Copyright (c) 2025 Lean FRO LLC. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Sebastian Graf
 -/
-import MPL.MonadMorphism
 import MPL.PostCond
 
 /-!
@@ -206,14 +205,6 @@ def PredTrans.popArg_apply {ps} {Q : PostCond (α × σ) ps} (t : PredTrans (.ar
 def PredTrans.popExcept_apply {ps} {Q : PostCond (Except ε α) ps} (t : PredTrans (.except ε ps) α) :
   (t.popExcept).apply Q = t.apply (fun a => Q.1 (.ok a), fun e => Q.1 (.error e), Q.2) := rfl
 
-instance PredTrans.instMonadMorphismPushArg : MonadMorphism (StateT σ (PredTrans ps)) (PredTrans (.arg σ ps)) (PredTrans.pushArg) where
-  pure_pure := by intros; rfl
-  bind_bind := by intros; rfl
-
-instance PredTrans.instMonadMorphismPopArg : MonadMorphism (PredTrans (.arg σ ps)) (StateT σ (PredTrans ps)) (PredTrans.popArg) where
-  pure_pure := by intros; rfl
-  bind_bind := by intros; rfl
-
 @[simp]
 theorem PredTrans.pushArg_popArg : pushArg (popArg x) = x := rfl
 
@@ -223,20 +214,6 @@ theorem PredTrans.popArg_pushArg : popArg (pushArg f) = f := rfl
 -- Just a reminder for me that the following would not hold for a suitable defn of pushReader and popReader:
 --theorem PredTrans.pushReader_popReader : pushReader (popReader x) = x := sorry
 --  goal: x.apply (fun a x => Q.1 a x✝, Q.2) x✝ = x.apply Q x✝
-
-instance PredTrans.instMonadMorphismPushExcept : MonadMorphism (ExceptT ε (PredTrans ps)) (PredTrans (.except ε ps)) (PredTrans.pushExcept) where
-  pure_pure := by intros; rfl
-  bind_bind := by
-    intro _ _ x f
-    ext Q
-    simp only [pushExcept, Bind.bind, ExceptT.bind, ExceptT.mk, bind, ExceptT.bindCont]
-    congr
-    ext x
-    cases x <;> simp
-
-instance PredTrans.instMonadMorphismPopExcept : MonadMorphism (PredTrans (.except ε ps)) (ExceptT ε (PredTrans ps)) (PredTrans.popExcept) where
-  pure_pure := by intros; rfl
-  bind_bind := by intros; rfl
 
 @[simp]
 theorem PredTrans.pushExcept_popExcept : pushExcept (popExcept x) = x := rfl

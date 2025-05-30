@@ -20,29 +20,6 @@ variable {m : Type → Type u} {ps : PostShape}
 
 open MonadFunctor renaming monadMap → mmap
 
--- The following 3 instances exist for similar reasons as for instLiftMonadMorphism instances.
--- However, so far I was unable to find an example where they are useful.
--- Given the [MonadMorphism m m f] constraint, it is unlikely they actually are useful.
-instance StateT.instMapMonadMorphism [Monad m] [MonadMorphism m m f] :
-  MonadMorphism (StateT σ m) (StateT σ m) (mmap (m:=m) f) where
-  pure_pure := by simp +unfoldPartialApp only [mmap, pure, StateT.pure, pure_pure, implies_true]
-  bind_bind := by simp +unfoldPartialApp only [mmap, bind, StateT.bind, bind_bind, implies_true]
-
-instance ReaderT.instMapMonadMorphism [Monad m] [MonadMorphism m m f] :
-  MonadMorphism (ReaderT ρ m) (ReaderT ρ m) (mmap (m:=m) f) where
-  pure_pure := by simp +unfoldPartialApp only [mmap, pure, ReaderT.pure, pure_pure, implies_true]
-  bind_bind := by simp +unfoldPartialApp only [mmap, bind, ReaderT.bind, bind_bind, implies_true]
-
-instance ExceptT.instMapMonadMorphism [Monad m] [MonadMorphism m m f] :
-  MonadMorphism (ExceptT ε m) (ExceptT ε m) (mmap (m:=m) f) where
-  pure_pure := by simp only [mmap, pure, ExceptT.pure, pure_pure, implies_true, ExceptT.mk]
-  bind_bind := by
-    intros
-    simp +unfoldPartialApp only [mmap, bind, ExceptT.bind, bind_bind, implies_true, ExceptT.mk, ExceptT.bindCont]
-    congr
-    ext
-    split <;> simp only [pure_pure]
-
 -- The following 3 theorems are analogous to *.monadLift_apply.
 -- We used to have a more tricky definition by rewriting to special monadMap defns on PredTrans, involving
 --   wp1 : (∀ {α}, m α → m α) → PredTrans ps α → PredTrans ps α
@@ -90,7 +67,7 @@ example :
     ext Q : 2
     simp only [MonadWithReaderOf.withTheReader_apply, MonadWithReaderOf.withReader_apply,
       ExceptT.monadMap_apply, StateT.monadMap_apply, ReaderT.withReader_apply, WP.StateT_run_apply,
-      WP.ExceptT_run_apply, WP.bind_apply, MonadMorphism.ite_ite, pure_pure, PredTrans.ite_apply,
+      WP.ExceptT_run_apply, WPMonad.bind_apply, WPMonad.wp_ite, WPMonad.wp_pure, PredTrans.ite_apply,
       PredTrans.pure_apply, MonadReader.read_apply, MonadReaderOf.read_apply,
       ExceptT.monadLift_apply, PredTrans.monadLiftExcept_apply, StateT.monadLift_apply,
       PredTrans.monadLiftArg_apply, ReaderT.read_apply]
