@@ -195,13 +195,8 @@ theorem randFin_total {m : Type → Type u} [Monad m] [WPMonad m ps] {n : ℕ} [
 theorem randBound_spec {m : Type → Type u} [Monad m] [WPMonad m ps] (h : lo ≤ hi)  :
   ⦃fun _ => P⦄
   randBound (m:=m) (g:=StdGen) ℕ lo hi h
-  ⦃⇓ r _ => P ∧ ⌜lo ≤ r.val ∧ r.val ≤ hi⌝⦄ := by
-    mvcgen
-    conv in _ ∧ _ => simp [r.property]
+  ⦃⇓ r _ => P⦄ := by
     mvcgen [randBound, BoundedRandom.randomR, rand, random]
-    mconstructor
-    · massumption
-    · mpure_intro; trivial
 
 theorem sampler_correct {m : Type → Type u} {k h} [Monad m] [WPMonad m ps] :
   ⦃⌜True⌝⦄
@@ -228,6 +223,6 @@ theorem sampler_correct {m : Type → Type u} {k h} [Monad m] [WPMonad m ps] :
     change Midway.valid (next b x _ r.val) (rpref.length + 1)
     have : x = rpref.length := sorry -- by grind -- wishful thinking :(
     subst this
-    apply Midway.valid_next b rpref.length _ r.val r.property.1 r.property.2 hinv.1
+    apply Midway.valid_next b rpref.length _ r.val r.property.1 r.property.2 hinv
   mpure_intro
   exact valid_init
