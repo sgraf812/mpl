@@ -21,3 +21,4 @@ import MPL.ProofMode.Tactics.Refine
 
 import MPL.ProofMode.Tactics.Spec
 import MPL.ProofMode.Tactics.WP
+import MPL.ProofMode.Tactics.VCGen

@@ -3,7 +3,7 @@ Copyright (c) 2022 Lars König. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Lars König, Mario Carneiro, Sebastian Graf
 -/
-import MPL.ProofMode.MGoal
+import MPL.ProofMode.SGoal
 
 namespace MPL.ProofMode.Tactics
 
@@ -11,7 +11,7 @@ open Lean Elab Tactic Meta
 
 def mConstructorCore (mvar : MVarId) : MetaM (MVarId × MVarId) := do
   let g ← instantiateMVars <| ← mvar.getType
-  let some goal := parseMGoal? g | throwError "not in proof mode"
+  let some goal := parseSGoal? g | throwError "not in proof mode"
 
   let mkApp3 (.const ``SPred.and []) σs L R := goal.target | throwError "target is not SPred.and"
 

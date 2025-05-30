@@ -18,7 +18,7 @@ syntax "∀" binderIdent : mintroPat
 theorem Intro.intro {σs : List Type} {P Q H T : SPred σs} (hand : Q ∧ H ⊣⊢ₛ P) (h : P ⊢ₛ T) : Q ⊢ₛ H → T :=
   SPred.imp_intro (hand.mp.trans h)
 
-partial def mIntro [Monad m] [MonadControlT MetaM m] (goal : MGoal) (ident : TSyntax ``binderIdent) (k : MGoal → m (α × Expr)) : m (α × Expr) :=
+partial def mIntro [Monad m] [MonadControlT MetaM m] (goal : SGoal) (ident : TSyntax ``binderIdent) (k : SGoal → m (α × Expr)) : m (α × Expr) :=
   controlAt MetaM fun map => do
   let some (σs, H, T) := goal.target.app3? ``SPred.imp | throwError "Target not an implication {goal.target}"
   let (name, _ref) ← getFreshHypName ident
@@ -31,7 +31,7 @@ partial def mIntro [Monad m] [MonadControlT MetaM m] (goal : MGoal) (ident : TSy
     return (a, prf)
 
 -- This is regular MVar.intro, but it takes care not to leave the proof mode by preserving metadata
-partial def mIntroForall [Monad m] [MonadControlT MetaM m] [MonadLiftT MetaM m] (goal : MGoal) (ident : TSyntax ``binderIdent) (k : MGoal → m (α × Expr)) : m (α × Expr) :=
+partial def mIntroForall [Monad m] [MonadControlT MetaM m] [MonadLiftT MetaM m] (goal : SGoal) (ident : TSyntax ``binderIdent) (k : SGoal → m (α × Expr)) : m (α × Expr) :=
   controlAt MetaM fun map => do
   let some (_type, σ, σs') := (← whnf goal.σs).app3? ``List.cons | liftMetaM <| throwError "Ambient state list not a cons {goal.σs}"
   let name ← match ident with
@@ -45,7 +45,7 @@ partial def mIntroForall [Monad m] [MonadControlT MetaM m] [MonadLiftT MetaM m] 
       let prf ← mkLambdaFVars #[s] prf
       return (a, mkApp5 (mkConst ``SPred.entails_cons_intro) σ σs' goal.hyps goal.target prf)
 
-def mIntroForallN [Monad m] [MonadControlT MetaM m] [MonadLiftT MetaM m] (goal : MGoal) (n : Nat) (k : MGoal → m (α × Expr)) : m (α × Expr) :=
+def mIntroForallN [Monad m] [MonadControlT MetaM m] [MonadLiftT MetaM m] (goal : SGoal) (n : Nat) (k : SGoal → m (α × Expr)) : m (α × Expr) :=
   match n with
   | 0 => k goal
   | n+1 => do mIntroForall goal (← liftM (m := MetaM) `(binderIdent| _)) fun g =>

@@ -21,7 +21,7 @@ def patAsTerm (pat : MRefinePat) (expected : Option Expr := none) : OptionT Tact
     else failure
   | _ => failure
 
-partial def mRefineCore (goal : MGoal) (pat : MRefinePat) (k : MGoal → TSyntax ``binderIdent → TacticM Expr) : TacticM Expr := do
+partial def mRefineCore (goal : SGoal) (pat : MRefinePat) (k : SGoal → TSyntax ``binderIdent → TacticM Expr) : TacticM Expr := do
   match pat with
   | .stateful name => liftMetaM do
     match name with

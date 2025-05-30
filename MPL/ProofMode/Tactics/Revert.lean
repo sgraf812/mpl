@@ -13,7 +13,7 @@ namespace MPL.ProofMode.Tactics
 theorem Revert.revert {σs : List Type} {P Q H T : SPred σs} (hfoc : P ⊣⊢ₛ Q ∧ H) (h : Q ⊢ₛ H → T) : P ⊢ₛ T :=
   hfoc.mp.trans (SPred.imp_elim h)
 
-partial def mRevertStep (goal : MGoal) (ref : TSyntax `ident) (k : MGoal → MetaM Expr) : MetaM Expr := do
+partial def mRevertStep (goal : SGoal) (ref : TSyntax `ident) (k : SGoal → MetaM Expr) : MetaM Expr := do
   let name := ref.getId
   let some res := goal.focusHyp name | throwError "unknown hypothesis '{ref}'"
   let P := goal.hyps

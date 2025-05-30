@@ -30,7 +30,6 @@ theorem start_entails {φ : Prop} [PropAsSPredTautology φ P] : (⊢ₛ P) → �
 theorem elim_entails {φ : Prop} [PropAsSPredTautology φ P] : φ → (⊢ₛ P) :=
   PropAsSPredTautology.iff.mp
 
-@[match_pattern] def mgoalAnnotation := `mgoal
 @[match_pattern] def nameAnnotation := `name
 
 structure Hyp where
@@ -45,7 +44,7 @@ def parseHyp? : Expr → Option Hyp
 def Hyp.toExpr (hyp : Hyp) : Expr :=
   .mdata ⟨[(nameAnnotation, .ofName hyp.name)]⟩ hyp.p
 
-/-- An elaborator to create a new named hypothesis for an `MGoal` context. -/
+/-- An elaborator to create a new named hypothesis for an `SGoal` context. -/
 elab "mk_hyp " name:ident " := " e:term : term <= ty? => do
   let e ← Lean.Elab.Term.elabTerm e ty?
   return (Hyp.mk name.getId e).toExpr
@@ -86,34 +85,37 @@ def σs.mkNil : Expr := mkApp (mkConst ``List.nil [.succ .zero]) (mkSort (.succ 
 def parseAnd? (e : Expr) : Option (Expr × Expr × Expr) :=
   e.app3? ``SPred.and <|> (σs.mkNil, ·) <$> e.app2? ``And
 
-structure MGoal where
+structure SGoal where
   σs : Expr -- Q(List Type)
   hyps : Expr -- A conjunction of hypotheses in `SPred σs`, each carrying a name and uniq as metadata (`parseHyp?`)
   target : Expr -- Q(SPred $σs)
   deriving Inhabited
 
-def parseMGoal? (expr : Expr) : Option MGoal := do
-  let .mdata ⟨[(mgoalAnnotation, .ofBool true)]⟩ e := expr | none
-  let some (σs, hyps, target) := e.app3? ``SPred.entails | none
+/-- This is the same as `SPred.entails`.
+This constant is used to detect `SPred` proof mode goals. -/
+abbrev SGoalEntails := @SPred.entails
+
+def parseSGoal? (expr : Expr) : Option SGoal := do
+  let some (σs, hyps, target) := expr.app3? ``SGoalEntails | none
   some { σs, hyps, target }
 
 open Tactic in
-def ensureMGoal : TacticM (MVarId × MGoal) := do
+def ensureSGoal : TacticM (MVarId × SGoal) := do
   let mvar ← getMainGoal
   let goal ← instantiateMVars <| (← mvar.getType)
-  if let some goal := parseMGoal? goal then
+  if let some goal := parseSGoal? goal then
     return (mvar, goal)
   else
     throwError "Not in proof mode"
 
-def MGoal.strip (goal : MGoal) : Expr := -- omits the .mdata wrapper
+def SGoal.strip (goal : SGoal) : Expr := -- omits the .mdata wrapper
   mkApp3 (mkConst ``SPred.entails) goal.σs goal.hyps goal.target
 
-/-- Roundtrips with `parseMGoal?`. -/
-def MGoal.toExpr (goal : MGoal) : Expr :=
-  .mdata ⟨[(mgoalAnnotation, .ofBool true)]⟩ goal.strip
+/-- Roundtrips with `parseSGoal?`. -/
+def SGoal.toExpr (goal : SGoal) : Expr :=
+  mkApp3 (mkConst ``SGoalEntails) goal.σs goal.hyps goal.target
 
-partial def MGoal.findHyp? (goal : MGoal) (name : Name) : Option (SubExpr.Pos × Hyp) := go goal.hyps SubExpr.Pos.root
+partial def SGoal.findHyp? (goal : SGoal) (name : Name) : Option (SubExpr.Pos × Hyp) := go goal.hyps SubExpr.Pos.root
   where
     go (e : Expr) (p : SubExpr.Pos) : Option (SubExpr.Pos × Hyp) := do
       if let some hyp := parseHyp? e then
@@ -127,15 +129,15 @@ partial def MGoal.findHyp? (goal : MGoal) (name : Name) : Option (SubExpr.Pos ×
       else if let some _ := parseEmptyHyp? e then
         none
       else
-        panic! "MGoal.findHyp?: hypothesis without proper metadata: {e}"
+        panic! "SGoal.findHyp?: hypothesis without proper metadata: {e}"
 
-def MGoal.checkProof (goal : MGoal) (prf : Expr) (suppressWarning : Bool := false) : MetaM Unit := do
+def SGoal.checkProof (goal : SGoal) (prf : Expr) (suppressWarning : Bool := false) : MetaM Unit := do
   check prf
   let prf_type ← inferType prf
   unless ← isDefEq goal.toExpr prf_type do
-    throwError "MGoal.checkProof: the proof and its supposed type did not match.\ngoal:  {goal.toExpr}\nproof: {prf_type}"
+    throwError "SGoal.checkProof: the proof and its supposed type did not match.\ngoal:  {goal.toExpr}\nproof: {prf_type}"
   unless suppressWarning do
-    logWarning m!"stray MGoal.checkProof {prf_type} {goal.toExpr}"
+    logWarning m!"stray SGoal.checkProof {prf_type} {goal.toExpr}"
 
 def getFreshHypName : TSyntax ``binderIdent → CoreM (Name × Syntax)
   | `(binderIdent| $name:ident) => pure (name.getId, name)

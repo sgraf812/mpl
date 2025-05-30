@@ -5,7 +5,7 @@ Authors: Sebastian Graf
 -/
 import MPL.WPMonad
 import MPL.SPred.Notation
-import MPL.ProofMode.MGoal
+import MPL.ProofMode.SGoal
 
 /-!
 # Hoare triples

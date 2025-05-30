@@ -4,30 +4,30 @@ Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Lars König, Mario Carneiro, Sebastian Graf
 -/
 import Lean
-import MPL.ProofMode.MGoal
+import MPL.ProofMode.SGoal
 
 open Lean Elab.Tactic Meta
 
 namespace MPL.ProofMode.Tactics
 
 structure MStartResult where
-  goal : MGoal
+  goal : SGoal
   proof? : Option Expr := none
 
 def mStart (goal : Expr) : MetaM MStartResult := do
   -- check if already in proof mode
-  if let some mGoal := parseMGoal? goal then
-    return { goal := mGoal }
+  if let some sgoal := parseSGoal? goal then
+    return { goal := sgoal }
 
   let listType := mkApp (mkConst ``List [.succ .zero]) (mkSort (.succ .zero))
   let σs ← mkFreshExprMVar listType
   let P ← mkFreshExprMVar (mkApp (mkConst ``SPred) σs)
   let inst ← synthInstance (mkApp3 (mkConst ``PropAsSPredTautology) goal σs P)
   let prf := mkApp4 (mkConst ``ProofMode.start_entails) σs P goal inst
-  let goal : MGoal := { σs,  hyps := emptyHyp σs, target := ← instantiateMVars P }
+  let goal : SGoal := { σs,  hyps := emptyHyp σs, target := ← instantiateMVars P }
   return { goal, proof? := some prf }
 
-def mStartMVar (mvar : MVarId) : MetaM (MVarId × MGoal) := mvar.withContext do
+def mStartMVar (mvar : MVarId) : MetaM (MVarId × SGoal) := mvar.withContext do
   let goal ← instantiateMVars <| ← mvar.getType
   unless ← isProp goal do
     throwError "type mismatch\n{← mkHasTypeButIsExpectedMsg (← inferType goal) (mkSort .zero)}"
@@ -59,5 +59,5 @@ elab "mstop" : tactic => do
   let goal ← instantiateMVars <| ← mvar.getType
 
   -- check if already in proof mode
-  let some mGoal := parseMGoal? goal | throwError "not in proof mode"
-  mvar.setType mGoal.strip
+  let some sgoal := parseSGoal? goal | throwError "not in proof mode"
+  mvar.setType sgoal.strip
