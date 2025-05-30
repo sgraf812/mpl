@@ -135,7 +135,7 @@ def countUsesLCtx (ctx : LocalContext) (targetUses : FVarUses) : MetaM LocalCont
 def doNotDup (u : Uses) (rhs : Expr) (elimTrivial : Bool) : Bool :=
   u == .many && not (elimTrivial && okToDup rhs)
 
-def elimLetsCore (e : Expr) (elimTrivial := true) : MetaM Expr := StateRefT'.run' (s := Std.HashSet.empty) do
+def elimLetsCore (e : Expr) (elimTrivial := true) : MetaM Expr := StateRefT'.run' (s := Std.HashSet.emptyWithCapacity 10) do
   -- Figure out if we can make this work with Core.transform.
   -- I think that would entail keeping track of BVar shifts in `pre` and `post`.
   let pre (e : Expr) : StateRefT (Std.HashSet FVarId) MetaM TransformStep := do

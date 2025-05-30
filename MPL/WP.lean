@@ -114,6 +114,11 @@ instance EStateM.instWP : WP (EStateM ε σ) (.except ε (.arg σ .pure)) where
         ext s
         dsimp
         cases (x s) <;> simp
+      conjunctive0 := by
+        apply SPred.bientails.of_eq
+        ext s
+        dsimp
+        cases (x s) <;> simp
     }
 
 instance State.instWP : WP (StateM σ) (.arg σ .pure) :=
@@ -140,11 +145,23 @@ theorem EStateM.by_wp {α} {x : EStateM.Result ε σ α} {prog : EStateM ε σ �
 theorem WP.ReaderT_run_apply [WP m ps] (x : ReaderT ρ m α) :
   wp⟦x.run r⟧ Q = wp⟦x⟧ (fun a _ => Q.1 a, Q.2) r := rfl
 
+theorem WP.ReaderT_def [WP m ps] (x : ReaderT ρ m α) :
+  wp⟦x⟧ Q r = wp⟦x r⟧ (fun a => Q.1 a r, Q.2) := rfl
+
 theorem WP.StateT_run_apply [WP m ps] (x : StateT σ m α) :
   wp⟦x.run s⟧ Q = wp⟦x⟧ (fun a s => Q.1 (a, s), Q.2) s := rfl
 
+theorem WP.StateT_def [WP m ps] (x : StateT σ m α) :
+  wp⟦x⟧ Q s = wp⟦x s⟧ (fun (a, s) => Q.1 a s, Q.2) := rfl
+
 theorem WP.ExceptT_run_apply [WP m ps] (x : ExceptT ε m α) :
   wp⟦x.run⟧ Q = wp⟦x⟧ (fun a => Q.1 (.ok a), fun e => Q.1 (.error e), Q.2) := by
+    simp [wp, ExceptT.run]
+    congr
+    (ext x; cases x) <;> rfl
+
+theorem WP.ExceptT_def [WP m ps] (x : ExceptT ε m α) :
+  wp⟦x⟧ Q = wp⟦x.run⟧ (fun a => match a with | .ok a =>  Q.1 a | .error e => Q.2.1 e, Q.2.2) := by
     simp [wp, ExceptT.run]
     congr
     (ext x; cases x) <;> rfl
@@ -156,124 +173,3 @@ theorem WP.ite_apply {ps} {Q : PostCond α ps} (c : Prop) [Decidable c] [WP m ps
   wp⟦if c then t else e⟧ Q = if c then wp⟦t⟧ Q else wp⟦e⟧ Q := by split <;> rfl
 
 end Instances
-
-open Lean Elab Meta Term Command
-
-theorem congr_apply_Q {α : Type} {m : Type → Type u} (a b : m α) (h : a = b) {ps : PostShape} [WP m ps] (Q : PostCond α ps) :
-  wp⟦a⟧ Q = wp⟦b⟧ Q := by congr
-
--- the following function is vendored from Mathlib for now.  TODO: Specialize, simplify
-/-- If `e` is a projection of the structure constructor, reduce the projection.
-Otherwise returns `none`. If this function detects that expression is ill-typed, throws an error.
-For example, given `Prod.fst (x, y)`, returns `some x`. -/
-private def _root_.Lean.Expr.reduceProjStruct? (e : Expr) : MetaM (Option Expr) := do
-  let .const cname _ := e.getAppFn | return none
-  let some pinfo ← getProjectionFnInfo? cname | return none
-  let args := e.getAppArgs
-  if ha : args.size = pinfo.numParams + 1 then
-    -- The last argument of a projection is the structure.
-    let sarg := args[pinfo.numParams]'(ha ▸ pinfo.numParams.lt_succ_self)
-    -- Check that the structure is a constructor expression.
-    unless sarg.getAppFn.isConstOf pinfo.ctorName do
-      return none
-    let sfields := sarg.getAppArgs
-    -- The ith projection extracts the ith field of the constructor
-    let sidx := pinfo.numParams + pinfo.i
-    if hs : sidx < sfields.size then
-      return some (sfields[sidx]'hs)
-    else
-      throwError m!"ill-formed expression, {cname} is the {pinfo.i + 1}-th projection function \
-        but {sarg} does not have enough arguments"
-  else
-    return none
-
-def deriveWPSimpFromEq (eq type : Expr) (baseName : Name) (fieldProjs : List Name := []) : TermElabM Name := do
-  let lemmaName := baseName ++ `wp_apply
-  let res ← forallTelescopeReducing type fun xs _ => do
-    let eq := eq.beta xs
-    let_expr Eq ty lhs rhs := (← inferType eq) | throwError "not an equality {eq}"
-    -- For eta-reduced equalities such as liftM.eq_def, we have
-    --   lhs=liftM, rhs=monadLift, ty=(... → ...).
-    -- Need to apply congr lemmas until we see ty=(m α).
-    forallTelescopeReducing ty fun ys ty => do
-    let mut ty := ty
-    let mut eq ← ys.foldlM (fun eq y => mkCongrFun eq y) eq
-    let mut lhs := lhs.beta ys
-    let mut rhs := rhs.beta ys
-    logInfo m!"{xs} {ys} {eq} {ty} {lhs} = {rhs}"
-    -- Now for instance equalities such as instMonadReaderOfOfMonadLift.eq_def, we have
-    -- For eta-reduced equalities such as liftM.eq_def, we have
-    --   lhs=instMonadReaderOfOfMonadLift, rhs={ read := liftM read }
-    -- In this case, we expect to have fieldProjs=[read], and this list is pre-filtered
-    -- to only contain field names that look like monadic operations.
-    -- Apply another congr lemma.
-    for fieldProj in fieldProjs do
-      let args := ty.getAppArgs
-      let us := ty.getAppFn.constLevels!
-      let proj := mkApp (mkAppN (mkConst fieldProj us) args)
-      eq ← mkCongrArg (mkLambda `x .default ty (proj (.bvar 0))) eq
-      lhs := proj lhs
-      let .some rhs' ← (proj rhs).reduceProjStruct? | throwError "not a projection {proj rhs}"
-      rhs := rhs'
-      ty ← inferType lhs
-    logInfo m!"{xs} {ys} {eq} {ty} {lhs} = {rhs}"
-    let .app m a := ty | throwError m!"not a type application {ty}"
-    let (.succ l) ← getLevel ty | throwError m!"not a type {ty}"
-    let res := mkAppN (mkConst ``congr_apply_Q [l]) #[a, m, lhs, rhs, eq]
-    return (← mkLambdaFVars (xs ++ ys) res)
-  check res
-  -- Term.synthesizeSyntheticMVarsNoPostponing
-  let res ← Term.levelMVarToParam res
-  let res ← instantiateMVars res
-  let lvls ← Term.getLevelNames
-  addDecl <| .thmDecl {
-    name := lemmaName,
-    levelParams := lvls,
-    type := ← inferType res,
-    value := res,
-  }
-  return lemmaName
-
-/-- If the given type returns a structure, return the corresponding structure info.
-Example: Given `∀ α, α → Prod α β`, return the structure info for `Prod`. -/
-def isConstructorType? [Monad m] [MonadEnv m] (ty : Expr) : m (Option StructureInfo) := do
-  return getStructureInfo? (← getEnv) ty.getForallBody.getAppFn.constName
-
-def looksTypeLikeMonadicOp? (ty : Expr) : Bool := ty.getForallBody.isApp
-
-/--
-  The command `derive_wp_simp foo` will derive a `wp_simp` lemma that unfolds the definition of `foo`.
-  Similarly, `derive_wp_simp instMonadReaderOfMonadLift` will derive a `wp_simp` lemma for `bar` assuming that `foo` is a
-  each method in the `instMonadReaderOfMonadLift` instance.
--/
--- TODO: Should be an attribute `wp_simps`
-elab "derive_wp_simp " names:ident,+ : command =>
-  for name in names.getElems do
-    let defn ← getConstInfo name.getId
-    liftTermElabM do
-      let lvls ← mkFreshLevelMVarsFor defn
-      let type ← instantiateTypeLevelParams defn lvls
-      if (← isProp type) then
-        let thm ← deriveWPSimpFromEq (mkConst name.getId lvls) type name.getId
-        liftCommandElabM <| elabCommand (← `(attribute [wp_simp] $(mkIdent thm)))
-        return
-      if not defn.hasValue then throwError s!"{name} does not have a definition"
-      let .some eqn ← getUnfoldEqnFor? (nonRec := true) name.getId | throwError s!"{name} does not have an unfolding theorem"
-      let eq ← mkConstWithFreshMVarLevels eqn
-      if let .some info ← isConstructorType? defn.type then
-        let _structName := info.structName
-        -- logInfo _structName
-        for fieldInfo in info.fieldInfo do
-          let info ← getConstInfo fieldInfo.projFn
-          if looksTypeLikeMonadicOp? info.type then
-            let thm ← deriveWPSimpFromEq eq (← inferType eq) name.getId [fieldInfo.projFn]
-            liftCommandElabM <| elabCommand (← `(attribute [wp_simp] $(mkIdent thm)))
-        return
-      if looksTypeLikeMonadicOp? defn.type then
-        let thm ← deriveWPSimpFromEq eq (← inferType eq) name.getId
-        liftCommandElabM <| elabCommand (← `(attribute [wp_simp] $(mkIdent thm)))
-        return
-      throwError s!"Could not generate wp_simps for {name}"
-
--- derive_wp_simp readThe, liftM
--- derive_wp_simp instMonadReaderOfOfMonadLift

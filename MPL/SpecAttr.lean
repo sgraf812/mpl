@@ -138,7 +138,7 @@ partial def computeMVarBetaPotentialForSPred (xs : Array Expr) (σs : Expr) (e :
       -- We could write a custom function should `simp` become a bottleneck.
     e := r.expr
     let count ← countBVarDependentMVars xs e
-    if count < boundAssignments then
+    if count < boundAssignments || e.getAppFn'.isMVar then
       lastSuccess := n
       boundAssignments := count
     σs ← whnfR (σs.getArg! 2)
@@ -161,7 +161,7 @@ private def mkSpecTheorem (type : Expr) (proof : SpecProof) (prio : Nat) : MetaM
   -- *eta*-expand the goal.
   let σs := mkApp (mkConst ``PostShape.args) ps
   let etaPotential ← computeMVarBetaPotentialForSPred xs σs P
-  -- logInfo m!"Beta potential {etaPotential} for {P}"
+  logInfo m!"Beta potential {etaPotential} for {P}"
   -- logInfo m!"mkSpecTheorem: {keys}, proof: {proof}"
   return { keys, prog := (← mkForallFVars xs prog), proof, etaPotential, priority := prio }
 

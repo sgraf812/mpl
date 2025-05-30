@@ -127,3 +127,19 @@ theorem test_match_splitting {m : Option Nat} (h : m = some 4) :
   ⦃⇓ r s => ⌜s = 4⌝⦄ := by
   mvcgen
   simp_all
+
+theorem test_sum :
+  ⦃True⦄
+  do
+    let mut x := 0
+    for i in [1:5] do
+      x := x + i
+    pure (f := Idd) x
+  ⦃⇓r => r < 30⦄ := by
+  mvcgen
+  case inv => exact (⇓ (r, xs) => (∀ x, x ∈ xs.suff → x ≤ 5) ∧ r + xs.suff.length * 5 ≤ 25)
+  case step =>
+    simp_all
+    omega
+  case post.success => simp_all; omega
+  simp_all +decide

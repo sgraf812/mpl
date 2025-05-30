@@ -24,7 +24,6 @@ initialize registerTraceClass `mpl.tactics.spec
 def findSpec (database : SpecTheorems) (prog : Expr) : MetaM SpecTheorem := do
   let prog ← instantiateMVarsIfMVarApp prog
   let prog := prog.headBeta
-  unless prog.getAppFn'.isConst do throwError m!"not an application of a constant: {prog}"
   let candidates ← database.specs.getMatch prog
   let candidates := candidates.filter fun spec => !database.erased.contains spec.proof
   let candidates := candidates.insertionSort fun s₁ s₂ => s₁.priority < s₂.priority

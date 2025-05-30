@@ -86,7 +86,8 @@ def addSubGoalAsVC (goal : MVarId) : VCGenM PUnit := do
 def liftSimpM (x : SimpM α) : VCGenM α := do
   let ctx ← read
   let s ← get
-  let (a, simpState) ← x (Simp.mkDefaultMethodsCore ctx.simprocs).toMethodsRef ctx.simpCtx |>.run s.simpState
+  let mref := (Simp.mkDefaultMethodsCore ctx.simprocs).toMethodsRef
+  let (a, simpState) ← x mref ctx.simpCtx |>.run s.simpState
   set { s with simpState }
   return a
 
@@ -148,7 +149,7 @@ private def mkSpecContext (optConfig : Syntax) (lemmas : Syntax) : TacticM Conte
     else
       throwUnsupportedSyntax
   -- Build a mock simp call to build a simp context that corresponds to `simp [simpStuff]`
-  let stx ← `(tactic| simp [$(Syntax.TSepArray.ofElems simpStuff),*])
+  let stx ← `(tactic| simp +unfoldPartialApp [$(Syntax.TSepArray.ofElems simpStuff),*])
   -- logInfo s!"{stx}"
   let res ← mkSimpContext stx.raw (eraseLocal := false) (simpTheorems := getSpecSimpTheorems)
   -- logInfo m!"{res.ctx.simpTheorems.map (·.toUnfold.toList)}"
@@ -247,6 +248,11 @@ where
         let args' := args.set! 2 wp'
         { goal with target := mkAppN (mkConst ``PredTrans.apply) args' }
 
+      -- lambda-expressions
+      if e.getAppFn'.isLambda && false then
+        -- We are likely in the implementation of a StateT function; do `mintro ∀s`
+        return ← onLambda goal name
+      -- let-expressions
       if let .letE x ty val body _nonDep := e.getAppFn' then
         burnOne
         return ← withNonTrivialLetDecl x ty val fun fv leave => do

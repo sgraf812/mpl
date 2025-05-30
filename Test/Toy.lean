@@ -21,15 +21,9 @@ theorem test_sum :
     pure (f := Idd) x
   ⦃⇓r => r < 30⦄ := by
   mintro -
-  mwp
-  mspec (Specs.forIn_list (⇓ (r, xs) => (∀ x, x ∈ xs.suff → x ≤ 5) ∧ r + xs.suff.length * 5 ≤ 25) ?step)
-  case step =>
-    intro b pref x suff h
-    mintro ⌜h₁⌝
-    -- grind -- does not work yet... Maybe in 4.17
-    simp_all
-    omega
-  all_goals simp; omega -- sgrind
+  mvcgen
+  case inv => exact (⇓ (r, xs) => (∀ x, x ∈ xs.suff → x ≤ 5) ∧ r + xs.suff.length * 5 ≤ 25)
+  all_goals simp_all +decide; try omega
 
 def mkFreshNat [Monad m] [MonadStateOf (Nat × Nat) m] : m Nat := do
   let n ← Prod.fst <$> get
@@ -46,8 +40,7 @@ theorem mkFreshNat_spec [Monad m] [WPMonad m sh] :
   ⦃⇓ r => ⌜r = n ∧ #fst = n + 1 ∧ #snd = o⌝⦄ := by
   mintro _
   unfold mkFreshNat
-  mwp
-  mintro ∀s
+  mvcgen
   simp
 
 @[wp_simp]
@@ -103,9 +96,9 @@ example :
     return x
   ⦃⇓ _ _ => True⦄ := by
   mintro hs
-  mwp
-  mspec (Specs.forIn_list (⇓ (p, xs) s => True) ?step)
-  case step => intros; mintro h; simp
+  mvcgen
+  case inv => exact (⇓ (p, xs) s => True)
+  all_goals simp
   mintro ∀s
   simp
 
@@ -119,27 +112,13 @@ theorem test_ex :
     return x
   ⦃post⟨fun _ _ => False,
         fun e s => e = 42 ∧ s = 4⟩⦄ := by
-  mintro hs ∀s
-  mpure hs
-  subst hs
-  mwp
---  set_option trace.mpl.tactics.spec true in
-  mspec (Specs.forIn_list post⟨fun (r, xs) s => r ≤ 4 ∧ s = 4 ∧ r + xs.suff.sum > 4, fun e s => e = 42 ∧ s = 4⟩ ?step)
-  case step =>
-    intro b pref x suff h
-    mintro H
-    mwp
-    simp only [h, List.sum_cons]
-    mintro ∀b'
-    mpure H
-    mpure_intro
-    split
-    · grind
-    · simp only [PredTrans.pure_apply]; omega
-  simp only [List.sum_nil]
-  mintro ∀s
-  mpure h
-  omega -- sgrind
+  mvcgen
+  case inv => exact post⟨fun (r, xs) s => r ≤ 4 ∧ s = 4 ∧ r + xs.suff.sum > 4, fun e s => e = 42 ∧ s = 4⟩
+  case post.success => simp at h; omega
+  case post.except => simp
+  case ifTrue => intro _; simp_all
+  case ifFalse => intro _; simp; omega
+  simp_all +decide
 
 example :
   (wp (m:= ExceptT Nat (StateT Nat (ReaderT Bool Id))) (withTheReader Bool not (do if (← read) then return 0 else return 1))).apply Q
@@ -147,7 +126,7 @@ example :
   (wp (m:= ExceptT Nat (StateT Nat (ReaderT Bool Id))) (do if (← read) then return 1 else return 0)).apply Q := by
     apply SPred.bientails.iff.mpr
     constructor
-    all_goals mstart; mwp; simp [SVal.ite_app]
+    all_goals mstart; mwp; simp [SVal.ite_app] -- TODO: Do we need mvcgen at h? Alas, mvcgen does not generate bientailments.
 
 example :
   (wp (m:= ReaderT Char (StateT Bool (ExceptT Nat Id))) (do set true; throw 42; set false; get)).apply Q
@@ -175,27 +154,16 @@ theorem test_loop_break :
     (set 1 : StateT Nat Idd PUnit)
     return x
   ⦃⇓ r => ⌜r > 4 ∧ ‹Nat›ₛ = 1⌝⦄ := by
-  mintro hs ∀s
-  mpure hs
-  mwp
-  mspec (Specs.forIn_list (⇓ (r, xs) s => (r ≤ 4 ∧ r = xs.rpref.sum ∨ r > 4) ∧ s = 42) ?step)
-  case step =>
-    intro b pref x suff h
-    mintro H ∀b'
-    mpure H
-    split
-    · simp_all
-    · simp_all; omega
+  mvcgen
+  case inv => exact (⇓ (r, xs) s => (r ≤ 4 ∧ r = xs.rpref.sum ∨ r > 4) ∧ s = 42)
+  case ifTrue => intro _; simp_all
+  case ifFalse => intro _; simp_all; omega
   case post.success =>
-    mintro ∀s
-    subst_vars
-    dsimp
-    (conv in (List.sum _) => whnf)
     simp_all
+    conv at h in (List.sum _) => whnf
+    simp at h
     omega
-
-theorem get_spec [Monad m] [WPMonad m ps] {Q : PostCond σ (.arg σ ps)} :
-  ⦃fun s => Q.1 s s⦄ (get : StateT σ m σ) ⦃Q⦄ := by mintro h; mwp
+  simp_all
 
 theorem test_loop_early_return :
   ⦃fun s => s = 4⦄
@@ -206,6 +174,17 @@ theorem test_loop_early_return :
     (set 1 : StateT Nat Idd PUnit)
     return x
   ⦃⇓ r s => r = 42 ∧ s = 4⦄ := by
+  mvcgen
+  case inv => exact (⇓ (r, xs) s => (r.1 = none ∧ r.2 = xs.rpref.sum ∧ r.2 ≤ 4 ∨ r.1 = some 42 ∧ r.2 > 4) ∧ s = 4)
+  case ifTrue => intro _; simp_all
+  case ifFalse => intro _; simp_all; omega
+  case post.success =>
+    simp_all
+    conv at h in (List.sum _) => whnf
+    simp at h
+    omega
+  simp_all
+
   mintro hs ∀s
   mpure hs
   subst hs
