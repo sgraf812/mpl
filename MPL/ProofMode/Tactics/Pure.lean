@@ -36,9 +36,9 @@ def mPureCore (σs : Expr) (hyp : Expr) (name : TSyntax ``binderIdent)
   (k : Expr /-φ:Prop-/ → Expr /-h:φ-/ → MetaM (α × SGoal × Expr)) : MetaM (α × SGoal × Expr) := do
   let φ ← mkFreshExprMVar (mkSort .zero)
   let inst ← synthInstance (mkApp3 (mkConst ``IsPure) σs hyp φ)
-  let (name, _ref) ← getFreshHypName name
+  let (name, ref) ← getFreshHypName name
   withLocalDeclD name φ fun h => do
-    -- addLocalVarInfo ref (← getLCtx) h φ
+    addLocalVarInfo ref (← getLCtx) h φ
     let (a, goal, prf /- : goal.toExpr -/) ← k φ h
     let prf ← mkLambdaFVars #[h] prf
     let prf := mkApp7 (mkConst ``Pure.thm) σs goal.hyps hyp goal.target φ inst prf
@@ -50,7 +50,7 @@ elab "mpure" colGt hyp:ident : tactic => do
   mvar.withContext do
   let g ← instantiateMVars <| ← mvar.getType
   let some goal := parseSGoal? g | throwError "not in proof mode"
-  let some res := goal.focusHyp hyp.getId | throwError "unknown identifier '{hyp}'"
+  let res ← goal.focusHypWithInfo hyp
   let (m, _new_goal, prf) ← mPureCore goal.σs res.focusHyp (← `(binderIdent| $hyp:ident)) fun _ _ => do
     let goal := res.restGoal goal
     let m ← mkFreshExprSyntheticOpaqueMVar goal.toExpr

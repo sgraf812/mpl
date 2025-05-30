@@ -16,7 +16,8 @@ theorem Exact.from_tautology {σs : List Type} {P T : SPred σs} [PropAsSPredTau
   SPred.true_intro.trans (PropAsSPredTautology.iff.mp h)
 
 def _root_.MPL.ProofMode.SGoal.exact (goal : SGoal) (hyp : TSyntax `term) : OptionT MetaM Expr := do
-  let some focusRes := goal.focusHyp hyp.raw.getId | failure
+  if goal.findHyp? hyp.raw.getId |>.isNone then failure
+  let focusRes ← goal.focusHypWithInfo ⟨hyp.raw⟩
   OptionT.mk do
   let proof := mkApp5 (mkConst ``Exact.assumption) goal.σs goal.hyps focusRes.restHyps goal.target focusRes.proof
   unless ← isDefEq focusRes.focusHyp goal.target do

@@ -109,9 +109,11 @@ partial def mCasesCore (σs : Expr) (H : Expr) (pat : MCasesPat) (k : Expr → M
     let goal := { goal with hyps := mkAnd! σs Q H }
     return (a, goal, prf)
   | .stateful name => do
-    let (name, _ref) ← getFreshHypName name
-    let H' := (Hyp.mk name H.consumeMData).toExpr
-    k H'
+    let (name, ref) ← getFreshHypName name
+    let uniq ← mkFreshId
+    let hyp := Hyp.mk name uniq H.consumeMData
+    addHypInfo ref σs hyp
+    k hyp.toExpr
   | .pure name => do
     mPureCore σs H name fun _ _hφ => do
       -- This case is very similar to the clear case, but we need to
@@ -213,7 +215,7 @@ elab_rules : tactic
   let (mvar, goal) ← mStartMVar (← getMainGoal)
   mvar.withContext do
 
-  let some focus := goal.focusHyp hyp.getId | throwError "unknown hypothesis '{hyp}'"
+  let focus ← goal.focusHypWithInfo hyp
   -- goal : P ⊢ₛ T,
   -- hfocus : P ⊣⊢ₛ Q ∧ H
   let Q := focus.restHyps

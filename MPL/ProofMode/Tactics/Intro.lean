@@ -21,9 +21,12 @@ theorem Intro.intro {σs : List Type} {P Q H T : SPred σs} (hand : Q ∧ H ⊣�
 partial def mIntro [Monad m] [MonadControlT MetaM m] (goal : SGoal) (ident : TSyntax ``binderIdent) (k : SGoal → m (α × Expr)) : m (α × Expr) :=
   controlAt MetaM fun map => do
   let some (σs, H, T) := goal.target.app3? ``SPred.imp | throwError "Target not an implication {goal.target}"
-  let (name, _ref) ← getFreshHypName ident
+  let (name, ref) ← getFreshHypName ident
+  let uniq ← mkFreshId
+  let hyp := Hyp.mk name uniq H
+  addHypInfo ref σs hyp (isBinder := true)
   let Q := goal.hyps
-  let H := (Hyp.mk name H).toExpr
+  let H := hyp.toExpr
   let (P, hand) := mkAnd goal.σs goal.hyps H
   map do
     let (a, prf) ← k { goal with hyps := P, target := T }

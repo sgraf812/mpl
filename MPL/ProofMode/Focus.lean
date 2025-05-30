@@ -51,7 +51,7 @@ partial def focusHyp (σs : Expr) (e : Expr) (name : Name) : Option FocusResult 
   else
     panic! s!"focusHyp: hypothesis without proper metadata: {e}"
 
-partial def SGoal.focusHyp (goal : SGoal) (name : Name) : Option FocusResult :=
+def SGoal.focusHyp (goal : SGoal) (name : Name) : Option FocusResult :=
   MPL.ProofMode.focusHyp goal.σs goal.hyps name
 
 def FocusResult.refl (σs : Expr) (restHyps : Expr) (focusHyp : Expr) : FocusResult :=
@@ -70,3 +70,9 @@ theorem FocusResult.rewrite_hyps {σs} {P Q R : SPred σs} (hrw : P ⊣⊢ₛ Q)
 /-- Turn a proof for `(res.recombineGoal goal).toExpr` into one for `goal.toExpr`. -/
 def FocusResult.rewriteHyps (res : FocusResult) (goal : SGoal) : Expr → Expr :=
   mkApp6 (mkConst ``rewrite_hyps) goal.σs goal.hyps (mkAnd! goal.σs res.restHyps res.focusHyp) goal.target res.proof
+
+def SGoal.focusHypWithInfo (goal : SGoal) (name : Ident) : MetaM FocusResult := do
+  let some res := goal.focusHyp name.getId | throwError "unknown hypothesis '{name}'"
+  let some hyp := parseHyp? res.focusHyp | throwError "impossible; res.focusHyp not a hypothesis"
+  addHypInfo name goal.σs hyp
+  pure res

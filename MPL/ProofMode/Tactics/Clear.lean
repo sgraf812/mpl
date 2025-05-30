@@ -18,7 +18,7 @@ elab "mclear" colGt hyp:ident : tactic => do
   mvar.withContext do
   let g ← instantiateMVars <| ← mvar.getType
   let some goal := parseSGoal? g | throwError "not in proof mode"
-  let some res := goal.focusHyp hyp.getId | throwError "unknown identifier '{hyp}'"
+  let res ← goal.focusHypWithInfo hyp
   let m ← mkFreshExprSyntheticOpaqueMVar (res.restGoal goal).toExpr
 
   mvar.assign (mkApp7 (mkConst ``Clear.clear) goal.σs goal.hyps

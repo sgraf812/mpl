@@ -31,23 +31,26 @@ theorem elim_entails {φ : Prop} [PropAsSPredTautology φ P] : φ → (⊢ₛ P)
   PropAsSPredTautology.iff.mp
 
 @[match_pattern] def nameAnnotation := `name
+@[match_pattern] def uniqAnnotation := `uniq
 
 structure Hyp where
   name : Name
+  uniq : Name -- for display purposes only
   p : Expr
 
 def parseHyp? : Expr → Option Hyp
-  | .mdata ⟨[(nameAnnotation, .ofName name)]⟩ p =>
-    some ⟨name, p⟩ -- NB: mdatas are transparent to SubExpr; hence no pos.push
+  | .mdata ⟨[(nameAnnotation, .ofName name), (uniqAnnotation, .ofName uniq)]⟩ p =>
+    some ⟨name, uniq, p⟩ -- NB: mdatas are transparent to SubExpr; hence no pos.push
   | _ => none
 
 def Hyp.toExpr (hyp : Hyp) : Expr :=
-  .mdata ⟨[(nameAnnotation, .ofName hyp.name)]⟩ hyp.p
+  .mdata ⟨[(nameAnnotation, .ofName hyp.name), (uniqAnnotation, .ofName hyp.uniq)]⟩ hyp.p
 
 /-- An elaborator to create a new named hypothesis for an `SGoal` context. -/
 elab "mk_hyp " name:ident " := " e:term : term <= ty? => do
   let e ← Lean.Elab.Term.elabTerm e ty?
-  return (Hyp.mk name.getId e).toExpr
+  let uniq ← mkFreshId
+  return (Hyp.mk name.getId uniq e).toExpr
 
 -- set_option pp.all true in
 -- #check ⌜True⌝
@@ -163,3 +166,20 @@ def dropStateList (σs : Expr) (n : Nat) : MetaM Expr := do
     let some (_type, _σ, σs') := (← whnfR σs).app3? ``List.cons | throwError "Ambient state list not a cons {σs}"
     σs := σs'
   return σs
+
+/-- This is only used for display purposes, so that we can render context variables that appear
+to have type `A : PROP` even though `PROP` is not a type. -/
+def HypMarker {σs : List Type} (_A : SPred σs) : Prop := True
+
+def addLocalVarInfo (stx : Syntax) (lctx : LocalContext)
+    (expr : Expr) (expectedType? : Option Expr) (isBinder := false) : MetaM Unit := do
+  Elab.withInfoContext' (pure ())
+    (fun _ =>
+      return .inl <| .ofTermInfo
+        { elaborator := .anonymous, lctx, expr, stx, expectedType?, isBinder })
+    (return .ofPartialTermInfo { elaborator := .anonymous, lctx, stx, expectedType? })
+
+def addHypInfo (stx : Syntax) (σs : Expr) (hyp : Hyp) (isBinder := false) : MetaM Unit := do
+  let lctx ← getLCtx
+  let ty := mkApp2 (mkConst ``HypMarker) σs hyp.p
+  addLocalVarInfo stx (lctx.mkLocalDecl ⟨hyp.uniq⟩ hyp.name ty) (.fvar ⟨hyp.uniq⟩) ty isBinder

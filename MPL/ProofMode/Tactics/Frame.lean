@@ -85,7 +85,8 @@ partial def transferHypNames (P P' : Expr) : MetaM Expr := (·.snd) <$> label (c
         repeat
           -- If we cannot find the hyp, it might be in a nested conjunction.
           -- Just pick a default name for it.
-          let P :: Ps'' := Ps' | return (Ps, { name := `h, p := P' : Hyp }.toExpr)
+          let uniq ← mkFreshId
+          let P :: Ps'' := Ps' | return (Ps, { name := `h, uniq, p := P' : Hyp }.toExpr)
           Ps' := Ps''
           if ← isDefEq P.p P' then
             return (Ps, { P with p := P' }.toExpr)

@@ -14,8 +14,7 @@ theorem Revert.revert {σs : List Type} {P Q H T : SPred σs} (hfoc : P ⊣⊢�
   hfoc.mp.trans (SPred.imp_elim h)
 
 partial def mRevertStep (goal : SGoal) (ref : TSyntax `ident) (k : SGoal → MetaM Expr) : MetaM Expr := do
-  let name := ref.getId
-  let some res := goal.focusHyp name | throwError "unknown hypothesis '{ref}'"
+  let res ← goal.focusHypWithInfo ref
   let P := goal.hyps
   let Q := res.restHyps
   let H := res.focusHyp
