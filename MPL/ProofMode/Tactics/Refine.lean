@@ -26,7 +26,7 @@ partial def mRefineCore (goal : MGoal) (pat : MRefinePat) (k : MGoal → TSyntax
   | .stateful name => liftMetaM do
     match name with
     | `(binderIdent| $name:ident) => do
-      let some prf ← goal.exact (← `($name)) | throwError "unknown hypothesis '{name}'"
+      let some prf ← goal.exact name | throwError "unknown hypothesis '{repr name}'"
       return prf
     | _ => do
       let some prf ← goal.assumption | throwError "could not solve {goal.target} by assumption"
@@ -34,8 +34,8 @@ partial def mRefineCore (goal : MGoal) (pat : MRefinePat) (k : MGoal → TSyntax
   | .pure t => do
     goal.exactPure t
   | .one name =>
-      if let `(binderIdent| $id:ident) := name then
-        mRefineCore goal (.pure (← `($id))) k <|> mRefineCore goal (.stateful name) k
+      if let `(binderIdent| $_:ident) := name then
+        mRefineCore goal (.pure ⟨name.raw⟩) k <|> mRefineCore goal (.stateful name) k
       else
         mRefineCore goal (.stateful name) k
   | .hole name => k goal name

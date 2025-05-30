@@ -40,15 +40,17 @@ theorem Specialize.pure_taut {σs} {φ} {P : SPred σs} [IsPure P φ] (h : φ) :
 
 def mSpecializeImpStateful (σs : Expr) (P : Expr) (QR : Expr) (arg : TSyntax `term) : OptionT TacticM (Expr × Expr) := do
   guard (arg.raw.isIdent)
-  let some arg := focusHyp σs (mkAnd! σs P QR) arg.raw.getId | failure
+  let some argRes := focusHyp σs (mkAnd! σs P QR) arg.raw.getId | failure
+  let some hyp := parseHyp? argRes.focusHyp | failure
+  addHypInfo arg σs hyp
   OptionT.mk do -- no OptionT failure after this point
   -- The goal is P ∧ (Q → R)
-  -- arg.proof : P ∧ (Q → R) ⊣⊢ₛ P' ∧ Q
+  -- argRes.proof : P ∧ (Q → R) ⊣⊢ₛ P' ∧ Q
   -- we want to return (R, (proof : P ∧ (Q → R) ⊢ₛ P ∧ R))
   let some specHyp := parseHyp? QR | panic! "Precondition of specializeImpStateful violated"
-  let P' := arg.restHyps
-  let Q := arg.focusHyp
-  let hrefocus := arg.proof -- P ∧ (Q → R) ⊣⊢ₛ P' ∧ Q
+  let P' := argRes.restHyps
+  let Q := argRes.focusHyp
+  let hrefocus := argRes.proof -- P ∧ (Q → R) ⊣⊢ₛ P' ∧ Q
   let mkApp3 (.const ``SPred.imp []) σs Q' R := specHyp.p | throwError "Expected implication {QR}"
   let proof := mkApp6 (mkConst ``Specialize.imp_stateful) σs P P' Q R hrefocus
   -- check proof
@@ -119,6 +121,8 @@ elab "mspecialize" hyp:ident args:(colGt term:max)* : tactic => do
   let σs := goal.σs
   let P := specFocus.restHyps
   let mut H := specFocus.focusHyp
+  let some hyp' := parseHyp? H | panic! "Invariant of specialize violated"
+  addHypInfo hyp σs hyp'
   -- invariant: proof (_ : { goal with hyps := mkAnd! σs P H }.toExpr) fills the mvar
   let mut proof : Expr → Expr :=
     mkApp7 (mkConst ``focus) σs goal.hyps P H goal.target specFocus.proof
@@ -160,7 +164,8 @@ elab "mspecialize_pure" head:(term:max) args:(colGt term:max)* " as " hyp:ident 
   let φ ← inferType hφ
   let H ← mkFreshExprMVar (mkApp (mkConst ``SPred) σs)
   let inst ← synthInstance (mkApp3 (mkConst ``PropAsSPredTautology) φ σs H)
-  let mut H := (Hyp.mk hyp.getId (← instantiateMVars H)).toExpr
+  let uniq ← mkFreshId
+  let mut H := (Hyp.mk hyp.getId uniq (← instantiateMVars H)).toExpr
 
   let goal : MGoal := { goal with hyps := mkAnd! σs P H }
   -- invariant: proof (_ : { goal with hyps := mkAnd! σs P H }.toExpr) fills the mvar
@@ -179,6 +184,9 @@ elab "mspecialize_pure" head:(term:max) args:(colGt term:max)* " as " hyp:ident 
       H := H'
     | none =>
       throwError "Could not specialize {H} with {arg}"
+
+  let some hyp' := parseHyp? H | panic! "Invariant of specialize_pure violated"
+  addHypInfo hyp σs hyp'
 
   let newMVar ← mkFreshExprSyntheticOpaqueMVar { goal with hyps := mkAnd! σs P H }.toExpr
   mvar.assign (proof newMVar)

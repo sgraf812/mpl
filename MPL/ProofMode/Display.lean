@@ -65,5 +65,5 @@ where
     `(mgoalσs| ∀ $stx*)
 -/
 
--- @[delab app.Iris.ProofMode.HypMarker]
--- def delabHypMarker : Delab := do unpackIprop (← withAppArg delab)
+@[app_delab HypMarker]
+def delabHypMarker : Delab := do SPred.Notation.unpack (← withAppArg delab)

@@ -77,9 +77,9 @@ private def getQH (goal : MGoal) : MetaM (Expr × Expr) := do
 def mCasesExists (H : Expr) (name : TSyntax ``binderIdent)
   (k : Expr /-name:α-/ → MetaM (α × MGoal × Expr)) : MetaM (α × MGoal × Expr) := do
   let some (α, σs, ψ) := H.consumeMData.app3? ``SPred.exists | throwError "Not an existential quantifier {H}"
-  let (name, _ref) ← getFreshHypName name
+  let (name, ref) ← getFreshHypName name
   withLocalDeclD name α fun x => do
-    -- addLocalVarInfo ref (← getLCtx) h φ
+    addLocalVarInfo ref (← getLCtx) x α
     let (r, goal, prf /- : goal.toExpr -/) ← k x
     let (Q, _) ← getQH goal
     let u ← getLevel α
@@ -112,7 +112,7 @@ partial def mCasesCore (σs : Expr) (H : Expr) (pat : MCasesPat) (k : Expr → M
     let (name, ref) ← getFreshHypName name
     let uniq ← mkFreshId
     let hyp := Hyp.mk name uniq H.consumeMData
-    addHypInfo ref σs hyp
+    addHypInfo ref σs hyp (isBinder := true)
     k hyp.toExpr
   | .pure name => do
     mPureCore σs H name fun _ _hφ => do

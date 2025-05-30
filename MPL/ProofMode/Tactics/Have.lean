@@ -28,7 +28,10 @@ elab "mdup" h:ident " => " h₂:ident : tactic => do
   let P := goal.hyps
   let Q := res.restHyps
   let H := res.focusHyp
-  let H' := (Hyp.mk h₂.raw.getId H.consumeMData).toExpr
+  let uniq ← mkFreshId
+  let hyp := Hyp.mk h₂.raw.getId uniq H.consumeMData
+  addHypInfo h goal.σs hyp (isBinder := true)
+  let H' := hyp.toExpr
   let T := goal.target
   let newGoal := { goal with hyps := mkAnd! goal.σs P H' }
   let m ← mkFreshExprSyntheticOpaqueMVar newGoal.toExpr
@@ -47,7 +50,10 @@ elab "mhave" h:ident ty?:Parser.Term.optType " := " rhs:term : tactic => do
   let H ← match ty? with
     | `(Parser.Term.optType| : $ty) => elabTerm ty spred
     | _                             => mkFreshExprMVar spred
-  let H := (Hyp.mk h.raw.getId H).toExpr
+  let uniq ← mkFreshId
+  let hyp := Hyp.mk h.raw.getId uniq H
+  addHypInfo h goal.σs hyp (isBinder := true)
+  let H := hyp.toExpr
   let T := goal.target
   let (PH, hand) := mkAnd goal.σs P H
   let haveGoal := { goal with target := H }
@@ -69,7 +75,10 @@ elab "mreplace" h:ident ty?:Parser.Term.optType " := " rhs:term : tactic => do
   let H' ← match ty? with
     | `(Parser.Term.optType| : $ty) => elabTerm ty spred
     | _                             => mkFreshExprMVar spred
-  let H' := (Hyp.mk h.raw.getId H').toExpr
+  let uniq ← mkFreshId
+  let hyp := Hyp.mk h.raw.getId uniq H'
+  addHypInfo h goal.σs hyp (isBinder := true)
+  let H' := hyp.toExpr
   let haveGoal := { goal with target := H' }
   let hhave ← elabTermEnsuringType rhs haveGoal.toExpr
   let T := goal.target

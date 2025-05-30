@@ -15,16 +15,16 @@ theorem Exact.assumption {σs : List Type} {P P' A : SPred σs}
 theorem Exact.from_tautology {σs : List Type} {P T : SPred σs} [PropAsSPredTautology φ T] (h : φ) : P ⊢ₛ T :=
   SPred.true_intro.trans (PropAsSPredTautology.iff.mp h)
 
-def _root_.MPL.ProofMode.MGoal.exact (goal : MGoal) (hyp : TSyntax `term) : OptionT MetaM Expr := do
-  if goal.findHyp? hyp.raw.getId |>.isNone then failure
-  let focusRes ← goal.focusHypWithInfo ⟨hyp.raw⟩
+def _root_.MPL.ProofMode.MGoal.exact (goal : MGoal) (hyp : Syntax) : OptionT MetaM Expr := do
+  if goal.findHyp? hyp.getId |>.isNone then failure
+  let focusRes ← goal.focusHypWithInfo ⟨hyp⟩
   OptionT.mk do
   let proof := mkApp5 (mkConst ``Exact.assumption) goal.σs goal.hyps focusRes.restHyps goal.target focusRes.proof
   unless ← isDefEq focusRes.focusHyp goal.target do
     throwError "mexact tactic failed, hypothesis {hyp} is not definitionally equal to {goal.target}"
   return proof
 
-def _root_.MPL.ProofMode.MGoal.exactPure (goal : MGoal) (hyp : TSyntax `term) : TacticM Expr := do
+def _root_.MPL.ProofMode.MGoal.exactPure (goal : MGoal) (hyp : Syntax) : TacticM Expr := do
   let φ ← mkFreshExprMVar (mkSort .zero)
   let h ← elabTermEnsuringType hyp φ
   let P ← mkFreshExprMVar (mkApp (mkConst ``SPred) goal.σs)

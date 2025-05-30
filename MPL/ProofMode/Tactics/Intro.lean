@@ -41,6 +41,7 @@ partial def mIntroForall [Monad m] [MonadControlT MetaM m] [MonadLiftT MetaM m] 
   | `(binderIdent| $name:ident) => pure name.getId
   | `(binderIdent| $_) => liftMetaM <| mkFreshUserName `s
   withLocalDeclD name σ fun s => do
+    addLocalVarInfo ident (← getLCtx) s σ (isBinder := true)
     let H := betaRevPreservingHypNames σs' goal.hyps #[s]
     let T := goal.target.betaRev #[s]
     map do
