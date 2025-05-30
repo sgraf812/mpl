@@ -126,7 +126,7 @@ theorem Specs.monadLift_ExceptT [Monad m] [WPMonad m ps] (x : m α) (Q : PostCon
 
 /-! # `MonadLiftT` -/
 
-attribute [spec] instMonadLiftTOfMonadLift instMonadLiftT
+attribute [spec] liftM instMonadLiftTOfMonadLift instMonadLiftT
 
 /-! # `MonadFunctor` -/
 
