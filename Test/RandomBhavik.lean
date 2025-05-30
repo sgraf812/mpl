@@ -1,13 +1,6 @@
--- import Batteries.Control.Lawful.MonadLift
--- import Batteries.Classes.SatisfiesM
--- import Batteries.Lean.LawfulMonad
--- import Batteries.Data.List.Monadic
--- import Mathlib.Control.Random
--- import Mathlib.Data.List.Nodup
 import Std.Data.TreeMap
 import MPL
 
-attribute [grind] List.mem_range'_1
 set_option grind.warning false
 
 section VendoredFromMathlib
