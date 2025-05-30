@@ -3,7 +3,7 @@ Copyright (c) 2022 Lars König. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Lars König, Mario Carneiro, Sebastian Graf
 -/
-import MPL.ProofMode.SGoal
+import MPL.ProofMode.MGoal
 import MPL.ProofMode.Focus
 import MPL.ProofMode.Tactics.Basic
 import MPL.ProofMode.Tactics.Pure
@@ -162,7 +162,7 @@ elab "mspecialize_pure" head:(term:max) args:(colGt term:max)* " as " hyp:ident 
   let inst ← synthInstance (mkApp3 (mkConst ``PropAsSPredTautology) φ σs H)
   let mut H := (Hyp.mk hyp.getId (← instantiateMVars H)).toExpr
 
-  let goal : SGoal := { goal with hyps := mkAnd! σs P H }
+  let goal : MGoal := { goal with hyps := mkAnd! σs P H }
   -- invariant: proof (_ : { goal with hyps := mkAnd! σs P H }.toExpr) fills the mvar
   let mut proof : Expr → Expr :=
     mkApp8 (mkConst ``Specialize.pure_start) σs φ H P T inst hφ

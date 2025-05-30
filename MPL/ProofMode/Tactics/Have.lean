@@ -22,7 +22,7 @@ def Have.replace {σs : List Type} {P H H' PH PH' T : SPred σs} (hfoc : PH ⊣�
   (SPred.and_intro (hfoc.mp.trans SPred.and_elim_l) hhave).trans (hand.mp.trans hgoal)
 
 elab "mdup" h:ident " => " h₂:ident : tactic => do
-  let (mvar, goal) ← ensureSGoal
+  let (mvar, goal) ← ensureMGoal
   mvar.withContext do
   let some res := goal.focusHyp h.raw.getId | throwError m!"Hypothesis {h} not found"
   let P := goal.hyps
@@ -39,7 +39,7 @@ macro "mhave" h₁:ident " := " h₂:ident args:(colGt term:max)* : tactic =>
   `(tactic| (mdup $h₂ => $h₁; mspecialize $h₁ $args*))
 
 elab "mhave" h:ident ty?:Parser.Term.optType " := " rhs:term : tactic => do
-  let (mvar, goal) ← ensureSGoal
+  let (mvar, goal) ← ensureMGoal
   mvar.withContext do
   -- build goal `P ⊢ₛ T` from `P ⊢ₛ H` and residual goal `P ∧ H ⊢ₛ T`
   let P := goal.hyps
@@ -58,7 +58,7 @@ elab "mhave" h:ident ty?:Parser.Term.optType " := " rhs:term : tactic => do
   replaceMainGoal [m.mvarId!]
 
 elab "mreplace" h:ident ty?:Parser.Term.optType " := " rhs:term : tactic => do
-  let (mvar, goal) ← ensureSGoal
+  let (mvar, goal) ← ensureMGoal
   mvar.withContext do
   -- build goal `P ⊢ₛ T` from `P ⊢ₛ H` and residual goal `P ∧ H ⊢ₛ T`
   let PH := goal.hyps

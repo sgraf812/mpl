@@ -3,13 +3,13 @@ Copyright (c) 2022 Lars König. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Lars König, Mario Carneiro, Sebastian Graf
 -/
-import MPL.ProofMode.SGoal
+import MPL.ProofMode.MGoal
 import Lean.Elab
 
 namespace MPL.ProofMode
 open Lean Elab.Tactic Meta
 
-/-- The result of focussing the context of a goal `goal : SGoal` on a particular hypothesis.
+/-- The result of focussing the context of a goal `goal : MGoal` on a particular hypothesis.
 The focussed hypothesis is returned as `focusHyp : Expr`, along with the
 residual `restHyps : Expr` and a `proof : Expr` for the property
 `goal.hyps ⊣⊢ₛ restHyps ∧ focusHyp`. -/
@@ -51,27 +51,27 @@ partial def focusHyp (σs : Expr) (e : Expr) (name : Name) : Option FocusResult 
   else
     panic! s!"focusHyp: hypothesis without proper metadata: {e}"
 
-def SGoal.focusHyp (goal : SGoal) (name : Name) : Option FocusResult :=
+def MGoal.focusHyp (goal : MGoal) (name : Name) : Option FocusResult :=
   MPL.ProofMode.focusHyp goal.σs goal.hyps name
 
 def FocusResult.refl (σs : Expr) (restHyps : Expr) (focusHyp : Expr) : FocusResult :=
   let proof := mkApp2 (mkConst ``SPred.bientails.refl) σs (mkAnd! σs restHyps focusHyp)
   { restHyps, focusHyp, proof }
 
-def FocusResult.restGoal (res : FocusResult) (goal : SGoal) : SGoal :=
+def FocusResult.restGoal (res : FocusResult) (goal : MGoal) : MGoal :=
   { goal with hyps := res.restHyps }
 
-def FocusResult.recombineGoal (res : FocusResult) (goal : SGoal) : SGoal :=
+def FocusResult.recombineGoal (res : FocusResult) (goal : MGoal) : MGoal :=
   { goal with hyps := mkAnd! goal.σs res.restHyps res.focusHyp }
 
 theorem FocusResult.rewrite_hyps {σs} {P Q R : SPred σs} (hrw : P ⊣⊢ₛ Q) (hgoal : Q ⊢ₛ R) : P ⊢ₛ R :=
   hrw.mp.trans hgoal
 
 /-- Turn a proof for `(res.recombineGoal goal).toExpr` into one for `goal.toExpr`. -/
-def FocusResult.rewriteHyps (res : FocusResult) (goal : SGoal) : Expr → Expr :=
+def FocusResult.rewriteHyps (res : FocusResult) (goal : MGoal) : Expr → Expr :=
   mkApp6 (mkConst ``rewrite_hyps) goal.σs goal.hyps (mkAnd! goal.σs res.restHyps res.focusHyp) goal.target res.proof
 
-def SGoal.focusHypWithInfo (goal : SGoal) (name : Ident) : MetaM FocusResult := do
+def MGoal.focusHypWithInfo (goal : MGoal) (name : Ident) : MetaM FocusResult := do
   let some res := goal.focusHyp name.getId | throwError "unknown hypothesis '{name}'"
   let some hyp := parseHyp? res.focusHyp | throwError "impossible; res.focusHyp not a hypothesis"
   addHypInfo name goal.σs hyp

@@ -179,12 +179,12 @@ theorem rewrite_program [WP m ps] {prog₁ prog₂ : m α}
   (heq : prog₁ = prog₂) (hprf : ⦃P⦄ prog₂ ⦃Q⦄) :
   ⦃P⦄ prog₁ ⦃Q⦄ := heq ▸ hprf
 
-partial def step (ctx : Context) (fuel : Fuel) (goal : SGoal) (name : Name) : MetaM (Expr × Array MVarId) := do
+partial def step (ctx : Context) (fuel : Fuel) (goal : MGoal) (name : Name) : MetaM (Expr × Array MVarId) := do
   withReducible do
   let (res, state) ← StateRefT'.run (ReaderT.run (onGoal goal name) ctx) { fuel }
   return (res, state.vcs)
 where
-  onFail (goal : SGoal) (name : Name) : VCGenM Expr := do
+  onFail (goal : MGoal) (name : Name) : VCGenM Expr := do
     -- logInfo m!"fail {goal.toExpr}"
     emitVC goal.toExpr name
 

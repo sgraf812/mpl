@@ -54,18 +54,18 @@ def synthIsAnd (σs H : Expr) : OptionT MetaM (Expr × Expr × Expr) := do
   catch _ => failure
 
 -- Produce a proof for Q ∧ H ⊢ₛ T by opening a new goal P ⊢ₛ T, where P ⊣⊢ₛ Q ∧ H.
-def mCasesAddGoal (goals : IO.Ref (Array MVarId)) (σs : Expr) (T : Expr) (Q : Expr) (H : Expr) : MetaM (Unit × SGoal × Expr) := do
+def mCasesAddGoal (goals : IO.Ref (Array MVarId)) (σs : Expr) (T : Expr) (Q : Expr) (H : Expr) : MetaM (Unit × MGoal × Expr) := do
   let (P, hand) := mkAnd σs Q H
   -- hand : Q ∧ H ⊣⊢ₛ P
   -- Need to produce a proof that P ⊢ₛ T and return res
-  let goal : SGoal := { σs := σs, hyps := P, target := T }
+  let goal : MGoal := { σs := σs, hyps := P, target := T }
   let m ← mkFreshExprSyntheticOpaqueMVar goal.toExpr
   goals.modify (·.push m.mvarId!)
   let prf := mkApp7 (mkConst ``SCases.add_goal) σs P Q H T hand m
   let goal := { goal with hyps := mkAnd! σs Q H }
   return ((), goal, prf)
 
-private def getQH (goal : SGoal) : MetaM (Expr × Expr) := do
+private def getQH (goal : MGoal) : MetaM (Expr × Expr) := do
   let some (_, Q, H) := parseAnd? goal.hyps | throwError m!"Internal error: Hypotheses not a conjunction {goal.hyps}"
   return (Q, H)
 
@@ -75,7 +75,7 @@ private def getQH (goal : SGoal) : MetaM (Expr × Expr) := do
 -- if `k` produces a proof for Q ∧ ψ n ⊢ₛ T that may range over `name : α`.
 -- It calls `k` with name.
 def mCasesExists (H : Expr) (name : TSyntax ``binderIdent)
-  (k : Expr /-name:α-/ → MetaM (α × SGoal × Expr)) : MetaM (α × SGoal × Expr) := do
+  (k : Expr /-name:α-/ → MetaM (α × MGoal × Expr)) : MetaM (α × MGoal × Expr) := do
   let some (α, σs, ψ) := H.consumeMData.app3? ``SPred.exists | throwError "Not an existential quantifier {H}"
   let (name, _ref) ← getFreshHypName name
   withLocalDeclD name α fun x => do
@@ -97,7 +97,7 @@ def mCasesExists (H : Expr) (name : TSyntax ``binderIdent)
 -- and finally the caller builds the proof for
 --   P ⊢ₛ Q ∧ H ⊢ₛ T
 -- by unfocussing.
-partial def mCasesCore (σs : Expr) (H : Expr) (pat : MCasesPat) (k : Expr → MetaM (α × SGoal × Expr)): MetaM (α × SGoal × Expr) :=
+partial def mCasesCore (σs : Expr) (H : Expr) (pat : MCasesPat) (k : Expr → MetaM (α × MGoal × Expr)): MetaM (α × MGoal × Expr) :=
   match pat with
   | .clear => do
     let H' := emptyHyp σs -- H' = ⌜True⌝

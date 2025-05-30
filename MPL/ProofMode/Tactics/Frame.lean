@@ -3,7 +3,7 @@ Copyright (c) 2025 Lars König. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Sebastian Graf
 -/
-import MPL.ProofMode.SGoal
+import MPL.ProofMode.MGoal
 import MPL.ProofMode.Focus
 
 namespace MPL.ProofMode.Tactics
@@ -93,7 +93,7 @@ partial def transferHypNames (P P' : Expr) : MetaM Expr := (·.snd) <$> label (c
         unreachable!
 
 def mFrameCore [Monad m] [MonadControlT MetaM m] [MonadLiftT MetaM m]
-  (goal : SGoal) (kFail : m (α × Expr)) (kSuccess : Expr /-φ:Prop-/ → Expr /-h:φ-/ → SGoal → m (α × Expr)) : m (α × Expr) := do
+  (goal : MGoal) (kFail : m (α × Expr)) (kSuccess : Expr /-φ:Prop-/ → Expr /-h:φ-/ → MGoal → m (α × Expr)) : m (α × Expr) := do
   let P := goal.hyps
   let φ ← mkFreshExprMVar (mkSort .zero)
   let P' ← mkFreshExprMVar (mkApp (mkConst ``SPred) goal.σs)
@@ -111,14 +111,14 @@ def mFrameCore [Monad m] [MonadControlT MetaM m] [MonadLiftT MetaM m]
     kFail
 
 def mTryFrame [Monad m] [MonadControlT MetaM m] [MonadLiftT MetaM m]
-  (goal : SGoal) (k : SGoal → m (α × Expr)) : m (α × Expr) :=
+  (goal : MGoal) (k : MGoal → m (α × Expr)) : m (α × Expr) :=
   mFrameCore goal (k goal) (fun _ _ goal => k goal)
 
 elab "mframe" : tactic => do
   let mvar ← getMainGoal
   mvar.withContext do
   let g ← instantiateMVars <| ← mvar.getType
-  let some goal := parseSGoal? g | throwError "not in proof mode"
+  let some goal := parseMGoal? g | throwError "not in proof mode"
   let (m, prf) ← mFrameCore goal (fun _ => throwError "Could not infer frame") fun _ _ goal => do
     let m ← mkFreshExprSyntheticOpaqueMVar goal.toExpr
     return (m, m)
