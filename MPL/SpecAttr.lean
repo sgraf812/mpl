@@ -161,7 +161,7 @@ private def mkSpecTheorem (type : Expr) (proof : SpecProof) (prio : Nat) : MetaM
   -- *eta*-expand the goal.
   let σs := mkApp (mkConst ``PostShape.args) ps
   let etaPotential ← computeMVarBetaPotentialForSPred xs σs P
-  logInfo m!"Beta potential {etaPotential} for {P}"
+  -- logInfo m!"Beta potential {etaPotential} for {P}"
   -- logInfo m!"mkSpecTheorem: {keys}, proof: {proof}"
   return { keys, prog := (← mkForallFVars xs prog), proof, etaPotential, priority := prio }
 

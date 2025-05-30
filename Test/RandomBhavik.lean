@@ -191,7 +191,7 @@ open MPL
 
 @[spec]
 theorem randFin_total {m : Type → Type u} [Monad m] [WPMonad m ps] {n : ℕ} [NeZero n] :
-  ⦃fun _ => P⦄
+  ⦃fun _ => P⦄ -- it's unfortunate that we have to "guess" the frame `fun _ => P` ourselves. TODO: autogeneralize based on "parametricity" in `m`?
   randFin (n:=n) (m:=m) (g:=StdGen)
   ⦃⇓ r _ => P⦄ := by
     unfold randFin
