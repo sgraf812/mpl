@@ -13,6 +13,24 @@ syntax mgoalStx := /-ppDedent(ppLine mgoalσs)-/ ppDedent(ppLine mgoalHyp)* ppDe
 
 open Lean Expr Meta PrettyPrinter Delaborator SubExpr
 
+/-
+-- Can't get this to work yet; doesn't make a difference.
+def Delab.addHypInfo (stx : Syntax) (σs : Expr) (hyp : Hyp) : DelabM Unit := do
+  let ty := mkApp2 (mkConst ``HypMarker) σs hyp.p
+  let lctx := (← getLCtx).mkLocalDecl ⟨hyp.uniq⟩ hyp.name ty
+  let fvar := mkFVar ⟨hyp.uniq⟩
+  let info := Elab.Info.ofTermInfo {
+    elaborator := `Delab,
+    stx := stx,
+    lctx := lctx,
+    expectedType? := ty,
+    expr := fvar,
+    isBinder := true
+  }
+  let pos ← getPos
+  modify fun s => { s with infos := s.infos.insert pos info }
+-/
+
 @[app_delab MGoalEntails]
 partial def delabMGoal : Delab := do
   let expr ← instantiateMVars <| ← getExpr
@@ -22,13 +40,13 @@ partial def delabMGoal : Delab := do
 
   -- delaborate
   -- let σs ← delabσs goal.σs
-  let (_, hyps) ← withAppFn ∘ withAppArg <| delabHypotheses ({}, #[])
+  let (_, hyps) ← withAppFn ∘ withAppArg <| delabHypotheses goal.σs ({}, #[])
   let target ← SPred.Notation.unpack (← withAppArg <| delab)
 
   -- build syntax
   return ⟨← `(mgoalStx| $hyps.reverse* ⊢ₛ $target:term)⟩
 where
-  delabHypotheses
+  delabHypotheses (σs : Expr)
       (acc : NameMap Nat × Array (TSyntax ``mgoalHyp)) :
       DelabM (NameMap Nat × Array (TSyntax ``mgoalHyp)) := do
     let hyps ← getExpr
@@ -41,11 +59,13 @@ where
           (idx + 1, hyp.name.appendAfter <| if idx == 0 then "✝" else "✝" ++ idx.toSuperscriptString)
         else
           (0, hyp.name)
-      let stx ← `(mgoalHyp| $(mkIdent name') : $(← SPred.Notation.unpack (← withMDataExpr <| delab)))
+      let name' := mkIdent name'
+      -- Delab.addHypInfo name' σs hyp -- see comment above
+      let stx ← `(mgoalHyp| $name' : $(← SPred.Notation.unpack (← withMDataExpr <| delab)))
       return (map.insert hyp.name idx, lines.push stx)
     if (parseAnd? hyps).isSome then
-      let acc_rhs ← withAppArg <| delabHypotheses acc
-      let acc_lhs ← withAppFn ∘ withAppArg <| delabHypotheses acc_rhs
+      let acc_rhs ← withAppArg <| delabHypotheses σs acc
+      let acc_lhs ← withAppFn ∘ withAppArg <| delabHypotheses σs acc_rhs
       return acc_lhs
     else
       failure
