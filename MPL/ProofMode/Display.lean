@@ -22,15 +22,16 @@ partial def delabMGoal : Delab := do
 
   -- delaborate
   -- let σs ← delabσs goal.σs
-  let (_, hyps) ← delabHypotheses goal.hyps ({}, #[])
-  let target ← SPred.Notation.unpack (← delab goal.target)
+  let (_, hyps) ← withAppFn ∘ withAppArg <| delabHypotheses ({}, #[])
+  let target ← SPred.Notation.unpack (← withAppArg <| delab)
 
   -- build syntax
   return ⟨← `(mgoalStx| $hyps.reverse* ⊢ₛ $target:term)⟩
 where
-  delabHypotheses (hyps : Expr)
+  delabHypotheses
       (acc : NameMap Nat × Array (TSyntax ``mgoalHyp)) :
       DelabM (NameMap Nat × Array (TSyntax ``mgoalHyp)) := do
+    let hyps ← getExpr
     if let some _ := parseEmptyHyp? hyps then
       return acc
     if let some hyp := parseHyp? hyps then
@@ -40,10 +41,12 @@ where
           (idx + 1, hyp.name.appendAfter <| if idx == 0 then "✝" else "✝" ++ idx.toSuperscriptString)
         else
           (0, hyp.name)
-      let stx ← `(mgoalHyp| $(mkIdent name') : $(← SPred.Notation.unpack (← delab hyp.p)))
+      let stx ← `(mgoalHyp| $(mkIdent name') : $(← SPred.Notation.unpack (← withMDataExpr <| delab)))
       return (map.insert hyp.name idx, lines.push stx)
-    if let some (_, lhs, rhs) := parseAnd? hyps then
-      delabHypotheses lhs (← delabHypotheses rhs acc)
+    if (parseAnd? hyps).isSome then
+      let acc_rhs ← withAppArg <| delabHypotheses acc
+      let acc_lhs ← withAppFn ∘ withAppArg <| delabHypotheses acc_rhs
+      return acc_lhs
     else
       failure
 /-
