@@ -280,7 +280,7 @@ theorem fib_impl_vcs
   mstart
   mwp
   mspec -- Specs.forIn_list
-  case pre => mpure_intro; exact loop_pre n hn
+  case pre1 => mpure_intro; exact loop_pre n hn
   case post.success => exact loop_post n hn r
   case step =>
     intro _ _ _ _ h;
@@ -328,8 +328,7 @@ theorem addRandomEvens_spec (n k) : ⦃True⦄ (addRandomEvens n k) ⦃⇓r => r
   unfold addRandomEvens
   mintro -
   mwp
-  let _ := inferInstanceAs (WPMonad IO _)
-  mspec Specs.forIn_list_const_inv -- is the one that is registered
+  mspec Specs.forIn_list_const_inv
   intro n r
   mintro ⌜h⌝
   mwp
