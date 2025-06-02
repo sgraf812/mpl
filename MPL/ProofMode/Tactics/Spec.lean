@@ -104,7 +104,7 @@ partial def dischargePostEntails (α : Expr) (ps : Expr) (Q : Expr) (Q' : Expr) 
     let Q1a := (← mkProj' ``Prod 0 Q).betaRev #[a]
     let Q'1a := (← mkProj' ``Prod 0 Q').betaRev #[a]
     let σs := mkApp (mkConst ``PostShape.args) ps
-    let uniq ← liftM (m:=MetaM) mkFreshId
+    let uniq ← liftMetaM mkFreshId
     let goal := MGoal.mk σs (Hyp.mk `h uniq Q1a).toExpr Q'1a
     mkLambdaFVars #[a] (← discharge goal.toExpr (goalTag ++ `success))
   let prf₂ ← dischargeFailEntails ps (← mkProj' ``Prod 1 Q) (← mkProj' ``Prod 1 Q') (goalTag ++ `except) discharge
@@ -129,7 +129,7 @@ partial def dischargeFailEntails (ps : Expr) (Q : Expr) (Q' : Expr) (goalTag : N
       let Q1e := (← mkProj' ``Prod 0 Q).betaRev #[e]
       let Q'1e := (← mkProj' ``Prod 0 Q').betaRev #[e]
       let σs := mkApp (mkConst ``PostShape.args) ps
-      let uniq ← liftM (m:=MetaM) mkFreshId
+      let uniq ← liftMetaM mkFreshId
       let goal := MGoal.mk σs (Hyp.mk `h uniq Q1e).toExpr Q'1e
       mkLambdaFVars #[e] (← discharge goal.toExpr (goalTag ++ `handle))
     let prf₂ ← dischargeFailEntails ps (← mkProj' ``Prod 1 Q) (← mkProj' ``Prod 1 Q') (goalTag ++ `except) discharge
@@ -141,7 +141,7 @@ end
 def dischargeMGoal (goal : MGoal) (goalTag : Name) (discharge : Expr → Name → n Expr) : n Expr := do
   -- controlAt MetaM (fun map => do trace[mpl.tactics.spec] "dischargeMGoal: {(← reduceProj? goal.target).getD goal.target}"; map (pure ()))
   -- simply try one of the assumptions for now. Later on we might want to decompose conjunctions etc; full xsimpl
-  let some prf ← liftM (m:=MetaM) goal.assumption | discharge goal.toExpr goalTag
+  let some prf ← liftMetaM goal.assumption | discharge goal.toExpr goalTag
   return prf
 
 def mkPreTag (goalTag : Name) : Name := Id.run do
@@ -158,7 +158,7 @@ def mSpec (goal : MGoal) (elabSpecAtWP : Expr → n (SpecTheorem × List MVarId)
   -- Elaborate the spec for the wp⟦e⟧ app in the target
   let T := goal.target.consumeMData
   unless T.getAppFn.constName! == ``PredTrans.apply do
-    liftM (m:=MetaM) (throwError "target not a PredTrans.apply application {indentExpr T}")
+    liftMetaM (throwError "target not a PredTrans.apply application {indentExpr T}")
   let wp := T.getArg! 2
   let (specThm, elabMVars) ← elabSpecAtWP wp
 
@@ -184,7 +184,7 @@ def mSpec (goal : MGoal) (elabSpecAtWP : Expr → n (SpecTheorem × List MVarId)
   let excessArgs := (args.extract 4 args.size).reverse
 
   -- Actually instantiate the specThm using the expected type computed from `wp`.
-  let_expr f@Triple m ps instWP α prog P Q := specTy | do liftM (m:=MetaM) (throwError "target not a Triple application {specTy}")
+  let_expr f@Triple m ps instWP α prog P Q := specTy | do liftMetaM (throwError "target not a Triple application {specTy}")
   let wp' := mkApp5 (mkConst ``WP.wp f.constLevels!) m ps instWP α prog
   unless (← withAssignableSyntheticOpaque <| isDefEq wp wp') do
     Term.throwTypeMismatchError none wp wp' spec
@@ -195,22 +195,26 @@ def mSpec (goal : MGoal) (elabSpecAtWP : Expr → n (SpecTheorem × List MVarId)
   -- often P or Q are schematic (i.e. an MVar app). Try to solve by rfl.
   let P ← instantiateMVarsIfMVarApp P
   let Q ← instantiateMVarsIfMVarApp Q
-  let HPRfl ← withDefault <| withAssignableSyntheticOpaque <| approxDefEq <| isDefEqGuarded P goal.hyps
-  let QQ'Rfl ← withDefault <| withAssignableSyntheticOpaque <| approxDefEq <| isDefEqGuarded Q Q'
+  let HPRfl ← withDefault <| withAssignableSyntheticOpaque <| isDefEqGuarded P goal.hyps
+  let QQ'Rfl ← withDefault <| withAssignableSyntheticOpaque <| isDefEqGuarded Q Q'
 
   -- Discharge the validity proof for the spec if not rfl
   let mut prePrf : Expr → Expr := id
   if !HPRfl then
     -- let P := (← reduceProjBeta? P).getD P
-    let HPPrf ← dischargeMGoal { goal with target := P } (mkPreTag goalTag) discharge
+    -- Try to avoid creating a longer name if the postcondition does not need to create a goal
+    let tag := if !QQ'Rfl then mkPreTag goalTag else goalTag
+    let HPPrf ← dischargeMGoal { goal with target := P } tag discharge
     prePrf := mkApp6 (mkConst ``SPred.entails.trans) goal.σs goal.hyps P goal.target HPPrf
 
   -- Discharge the entailment on postconditions if not rfl
   let mut postPrf : Expr → Expr := id
   if !QQ'Rfl then
+    -- Try to avoid creating a longer name if the precondition does not need to create a goal
+    let tag := if !HPRfl then goalTag ++ `post else goalTag
     let wpApplyQ  := mkApp4 (mkConst ``PredTrans.apply) ps α wp Q  -- wp⟦x⟧.apply Q; that is, T without excess args
     let wpApplyQ' := mkApp4 (mkConst ``PredTrans.apply) ps α wp Q' -- wp⟦x⟧.apply Q'
-    let QQ' ← dischargePostEntails α ps Q Q' (goalTag ++ `post) resultName discharge
+    let QQ' ← dischargePostEntails α ps Q Q' tag resultName discharge
     let QQ'mono := mkApp6 (mkConst ``PredTrans.mono) ps α wp Q Q' QQ'
     postPrf := fun h =>
       mkApp6 (mkConst ``SPred.entails.trans) goal.σs P (wpApplyQ.betaRev excessArgs) (wpApplyQ'.betaRev excessArgs)
@@ -230,7 +234,7 @@ syntax "mspec_no_bind" (ppSpace colGt term)? : tactic
 elab "mspec_no_bind" spec:optional(term) : tactic => withMainContext do
   let (mvar, goal) ← mStartMVar (← getMainGoal)
   let goals ← IO.mkRef []
-  let (prf, specHoles) ← mSpec goal (elabSpec spec) (fun goal name => liftM (m:=MetaM) (addMVar goals goal name)) (← getMainTag)
+  let (prf, specHoles) ← mSpec goal (elabSpec spec) (fun goal name => liftMetaM (addMVar goals goal name)) (← getMainTag)
   check prf
   mvar.assign prf
   let goals ← goals.get

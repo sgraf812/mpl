@@ -316,10 +316,7 @@ where
         try
           let specThm ← findSpec ctx.specThms e
           trace[mpl.tactics.vcgen] "Candidate spec for {f.constName!}: {specThm.proof}"
-          -- In case we encounter Bind.bind, the precondition becomes the new main goal.
-          -- Hence we simply use the goal tag as the tag for the precondition obligation.
-          let mkPreTag' := if f.constName! == ``Bind.bind then id else mkPreTag
-          let (prf, specHoles) ← mSpec goal (fun _wp  => return (specThm, [])) tryGoal name (mkPreTag := mkPreTag')
+          let (prf, specHoles) ← mSpec goal (fun _wp  => return (specThm, [])) tryGoal name
           assignMVars specHoles
           return prf
         catch ex =>
