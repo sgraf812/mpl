@@ -82,64 +82,6 @@ instance : BoundedRandom m Nat where
 
 end Random
 
-section Pairwise
-
-variable (R : α → α → Prop)
-
-/--
-Each element of a list is related to all later elements of the list by `R`.
-
-`Pairwise R l` means that all the elements of `l` with earlier indexes are `R`-related to all the
-elements with later indexes.
-
-For example, `Pairwise (· ≠ ·) l` asserts that `l` has no duplicates, and if `Pairwise (· < ·) l`
-asserts that `l` is (strictly) sorted.
-
-Examples:
- * `Pairwise (· < ·) [1, 2, 3] ↔ (1 < 2 ∧ 1 < 3) ∧ 2 < 3`
- * `Pairwise (· = ·) [1, 2, 3] = False`
- * `Pairwise (· ≠ ·) [1, 2, 3] = True`
--/
-inductive Pairwise : List α → Prop
-  /-- All elements of the empty list are vacuously pairwise related. -/
-  | nil : Pairwise []
-  /--
-  A nonempty list is pairwise related with `R` if the head is related to every element of the tail
-  and the tail is itself pairwise related.
-
-  That is, `a :: l` is `Pairwise R` if:
-   * `R` relates `a` to every element of `l`
-   * `l` is `Pairwise R`.
-  -/
-  | cons : ∀ {a : α} {l : List α}, (∀ a', a' ∈ l → R a a') → Pairwise l → Pairwise (a :: l)
-
-attribute [simp] Pairwise.nil
-
-variable {R}
-
-@[simp] theorem pairwise_cons : Pairwise R (a::l) ↔ (∀ a', a' ∈ l → R a a') ∧ Pairwise R l :=
-  ⟨fun | .cons h₁ h₂ => ⟨h₁, h₂⟩, fun ⟨h₁, h₂⟩ => h₂.cons h₁⟩
-
-instance instDecidablePairwise [DecidableRel R] :
-    (l : List α) → Decidable (Pairwise R l)
-  | [] => isTrue .nil
-  | hd :: tl =>
-    match instDecidablePairwise tl with
-    | isTrue ht =>
-      match List.decidableBAll (R hd) tl with
-      | isFalse hf => isFalse fun hf' => hf (pairwise_cons.1 hf').1
-      | isTrue ht' => isTrue <| pairwise_cons.mpr (And.intro ht' ht)
-    | isFalse hf => isFalse fun | .cons _ ih => hf ih
-
-end Pairwise
-
-/--
-The list has no duplicates: it contains every element at most once.
-
-It is defined as `Pairwise (· ≠ ·)`: each element is unequal to all other elements.
--/
-def Nodup : List α → Prop := Pairwise (· ≠ ·)
-
 end VendoredFromMathlib
 
 open Random
