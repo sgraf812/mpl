@@ -98,7 +98,7 @@ partial def dischargePostEntails (α : Expr) (ps : Expr) (Q : Expr) (Q' : Expr) 
   let Q' ← whnfR Q'
   -- If Q (postcond of the spec) is just an fvar, we do not decompose further
   if let some _fvarId := Q.fvarId? then
-    return ← discharge (mkApp4 (mkConst ``PostCond.entails) α ps Q Q') `post
+    return ← discharge (mkApp4 (mkConst ``PostCond.entails) α ps Q Q') (goalTag ++ `post)
   -- Otherwise decompose the conjunction
   let prf₁ ← withLocalDeclD resultName α fun a => do
     let Q1a := (← mkProj' ``Prod 0 Q).betaRev #[a]
@@ -144,7 +144,14 @@ def dischargeMGoal (goal : MGoal) (goalTag : Name) (discharge : Expr → Name �
   let some prf ← liftM (m:=MetaM) goal.assumption | discharge goal.toExpr goalTag
   return prf
 
-def mSpec (goal : MGoal) (elabSpecAtWP : Expr → n (SpecTheorem × List MVarId)) (discharge : Expr → Name → n Expr) (preTag := `pre) (resultName := `r) : n (Expr × List MVarId) := do
+def mkPreTag (goalTag : Name) : Name := Id.run do
+  let dflt := goalTag ++ `pre1
+  let .str p s := goalTag | return dflt
+  unless "pre".isPrefixOf s do return dflt
+  let some n := (s.toSubstring.drop 3).toString.toNat? | return dflt
+  return .str p ("pre" ++ toString (n + 1))
+
+def mSpec (goal : MGoal) (elabSpecAtWP : Expr → n (SpecTheorem × List MVarId)) (discharge : Expr → Name → n Expr) (goalTag : Name) (mkPreTag := mkPreTag) (resultName := `r) : n (Expr × List MVarId) := do
   -- First instantiate `fun s => ...` in the target via repeated `mintro ∀s`.
   Prod.swap <$> mIntroForallN goal goal.target.consumeMData.getNumHeadLambdas fun goal => do
 
@@ -195,7 +202,7 @@ def mSpec (goal : MGoal) (elabSpecAtWP : Expr → n (SpecTheorem × List MVarId)
   let mut prePrf : Expr → Expr := id
   if !HPRfl then
     -- let P := (← reduceProjBeta? P).getD P
-    let HPPrf ← dischargeMGoal { goal with target := P } preTag discharge
+    let HPPrf ← dischargeMGoal { goal with target := P } (mkPreTag goalTag) discharge
     prePrf := mkApp6 (mkConst ``SPred.entails.trans) goal.σs goal.hyps P goal.target HPPrf
 
   -- Discharge the entailment on postconditions if not rfl
@@ -203,7 +210,7 @@ def mSpec (goal : MGoal) (elabSpecAtWP : Expr → n (SpecTheorem × List MVarId)
   if !QQ'Rfl then
     let wpApplyQ  := mkApp4 (mkConst ``PredTrans.apply) ps α wp Q  -- wp⟦x⟧.apply Q; that is, T without excess args
     let wpApplyQ' := mkApp4 (mkConst ``PredTrans.apply) ps α wp Q' -- wp⟦x⟧.apply Q'
-    let QQ' ← dischargePostEntails α ps Q Q' `post resultName discharge
+    let QQ' ← dischargePostEntails α ps Q Q' (goalTag ++ `post) resultName discharge
     let QQ'mono := mkApp6 (mkConst ``PredTrans.mono) ps α wp Q Q' QQ'
     postPrf := fun h =>
       mkApp6 (mkConst ``SPred.entails.trans) goal.σs P (wpApplyQ.betaRev excessArgs) (wpApplyQ'.betaRev excessArgs)
@@ -223,7 +230,7 @@ syntax "mspec_no_bind" (ppSpace colGt term)? : tactic
 elab "mspec_no_bind" spec:optional(term) : tactic => withMainContext do
   let (mvar, goal) ← mStartMVar (← getMainGoal)
   let goals ← IO.mkRef []
-  let (prf, specHoles) ← mSpec goal (elabSpec spec) (fun goal name => liftM (m:=MetaM) (addMVar goals goal name))
+  let (prf, specHoles) ← mSpec goal (elabSpec spec) (fun goal name => liftM (m:=MetaM) (addMVar goals goal name)) (← getMainTag)
   check prf
   mvar.assign prf
   let goals ← goals.get
@@ -259,16 +266,8 @@ syntax "mspec_no_simp" (ppSpace colGt term)? : tactic
 syntax "mspec" (ppSpace colGt term)? : tactic
 macro_rules
   | `(tactic| mspec_no_simp $[$spec]?) => `(tactic| ((try with_reducible mspec_no_bind MPL.Specs.bind); mspec_no_bind $[$spec]?))
-  | `(tactic| mspec $[$spec]?)         => `(tactic| mspec_no_simp $[$spec]?; all_goals ((try simp only [SPred.true_intro_simp, SPred.true_intro_simp_nil, SVal.curry_cons, SVal.uncurry_cons, SVal.getThe_here, SVal.getThe_there]); (try mpure_intro; trivial)))
+  | `(tactic| mspec $[$spec]?)         =>
+    `(tactic| mspec_no_simp $[$spec]?; all_goals ((try simp only [SPred.true_intro_simp, SPred.true_intro_simp_nil, SVal.curry_cons, SVal.uncurry_cons, SVal.getThe_here, SVal.getThe_there]); (try mpure_intro; trivial)))
 
 example (Q : SPred []) : Q ⊢ₛ k%2 = k%2 := by simp only [SPred.true_intro_simp_nil]
 example (Q : SPred []) : Q ⊢ₛ ⌜k%2 = k%2⌝ := by simp only [SPred.true_intro_simp]
-
-/-
-abbrev M := StateT Nat (StateT Char (StateT Bool (StateT String Idd)))
-example : ⦃isValid⦄ pure (f := M) (a + b + c) ⦃⇓r => ⌜r > 100⌝ ∧ isValid⦄ := by
-  mintro h
-  -- set_option trace.Meta.whnf true in
-  set_option trace.mpl true in
-  mspec
--/

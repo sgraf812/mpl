@@ -79,7 +79,10 @@ structure SpecTheorems where
   erased : PHashSet SpecProof := {}
   deriving Inhabited
 
-partial def SpecTheorems.eraseCore (d : SpecTheorems) (thmId : SpecProof) : SpecTheorems :=
+def SpecTheorems.isErased (d : SpecTheorems) (thmId : SpecProof) : Bool :=
+  d.erased.contains thmId
+
+def SpecTheorems.eraseCore (d : SpecTheorems) (thmId : SpecProof) : SpecTheorems :=
   { d with erased := d.erased.insert thmId }
 
 abbrev SpecExtension := SimpleScopedEnvExtension SpecEntry SpecTheorems

@@ -175,14 +175,9 @@ theorem FileM.append_ok : ⦃⌜True⌝⦄ FileM.append bs ⦃⇓ () => ⌜True�
 
 theorem Schema.serialize_ok {s : Schema} (v : s.interp) :
   ⦃⌜True⌝⦄ s.serialize v ⦃⇓ () => ⌜True⌝⦄ := by
-  induction s, v using Schema.serialize.induct
-  case case1 => mvcgen [Schema.serialize]
-  case case2 => mvcgen [Schema.serialize]
-  case case3 ih => mvcgen [Schema.serialize, ih]
-  case case4 arr ih =>
-    mvcgen [Schema.serialize, ih]
-    case inv => exact (⇓ _ => ⌜True⌝)
-    all_goals simp_all
+  induction s, v using Schema.serialize.induct <;> mvcgen [Schema.serialize, *]
+  case inv => exact (⇓ _ => ⌜True⌝)
+  all_goals simp_all
 
 theorem serialize_ne_error {s : Schema} (v : s.interp) :
     s.serialize v File.mkEmpty ≠ .error e f := by
@@ -216,17 +211,29 @@ theorem serialize_byteSize {s : Schema} (v : s.interp) (oldf : File) :
   induction s, v using Schema.serialize.induct generalizing oldf
   case case1 => mvcgen [Schema.serialize]; simp +contextual +arith
   case case2 => mvcgen [Schema.serialize]; simp +contextual +arith
-  case case3 ih => mvcgen [Schema.serialize, ih]; simp_all; omega
+  case case3 ih => mvcgen [Schema.serialize, *]; simp_all; omega
   case case4 arr ih =>
-    -- set_option trace.mpl.tactics.spec true in
-    mvcgen [Schema.serialize, ih]
+    mvcgen [Schema.serialize, *]
     case inv => exact (⇓ ((), xs) f =>
       f.bytes.size = xs.pref.foldl (fun acc v => acc + byteSize v) 0 + oldf.bytes.size + 1)
     simp [*]
-    case post.success => simp +contextual +arith
-    case post.except => simp
-    case post.success => simp
+    case pre1.post.success => simp +contextual +arith
+    case pre1.post.except => simp
+    case step.post.success => simp
     case step => simp; set_option trace.Meta.isDefEq true in rfl
+
+theorem serialize_byteSize' {s : Schema} (v : s.interp) (oldf : File) :
+  ⦃fun f' => oldf = f'⦄
+  s.serialize v
+  ⦃⇓ () f' => f'.bytes.size = byteSize v + oldf.bytes.size⦄ := by
+  induction s, v using Schema.serialize.induct generalizing oldf <;> mvcgen [Schema.serialize, *]
+  case case1 => simp +contextual +arith
+  case case2 => simp +contextual +arith
+  case case3 ih => simp_all; omega
+  case inv => exact (⇓ ((), xs) f =>
+    f.bytes.size = xs.pref.foldl (fun acc v => acc + byteSize v) 0 + oldf.bytes.size + 1)
+  all_goals simp +arith +contextual [*]
+
 
 def serialized {s : Schema} (v : s.interp) (f : File) : Prop :=
   wp⟦s.serialize v⟧

@@ -95,18 +95,19 @@ instance : MonadLift SimpM VCGenM where
   monadLift x := liftSimpM x
 
 syntax (name := mvcgen_step) "mvcgen_step" optConfig
- (num)? (" [" withoutPosition((simpErase <|> simpLemma),*,?) "]")? : tactic
+ (num)? (" [" withoutPosition((simpStar <|> simpErase <|> simpLemma),*,?) "]")? : tactic
 
 syntax (name := mvcgen_no_trivial) "mvcgen_no_trivial" optConfig
-  (" [" withoutPosition((simpErase <|> simpLemma),*,?) "]")? : tactic
+  (" [" withoutPosition((simpStar <|> simpErase <|> simpLemma),*,?) "]")? : tactic
 
 syntax (name := mvcgen) "mvcgen" optConfig
-  (" [" withoutPosition((simpErase <|> simpLemma),*,?) "]")? : tactic
+  (" [" withoutPosition((simpStar <|> simpErase <|> simpLemma),*,?) "]")? : tactic
 
-private def mkSpecContext (optConfig : Syntax) (lemmas : Syntax) : TacticM Context := do
+private def mkSpecContext (optConfig : Syntax) (lemmas : Syntax) (ignoreStarArg := false) : TacticM Context := do
   let config ← elabConfig optConfig
   let mut specThms ← getSpecTheorems
   let mut simpStuff := #[]
+  let mut starArg := false
   for arg in lemmas[1].getSepArgs do
     if arg.getKind == ``simpErase then
       try
@@ -146,13 +147,27 @@ private def mkSpecContext (optConfig : Syntax) (lemmas : Syntax) : TacticM Conte
         catch _ =>
           simpStuff := simpStuff.push ⟨arg⟩
       | _ => withRef term <| throwError "Could not resolve {repr term}"
+    else if arg.getKind == ``simpStar then
+      starArg := true
+      simpStuff := simpStuff.push ⟨arg⟩
     else
       throwUnsupportedSyntax
   -- Build a mock simp call to build a simp context that corresponds to `simp [simpStuff]`
   let stx ← `(tactic| simp +unfoldPartialApp [$(Syntax.TSepArray.ofElems simpStuff),*])
   -- logInfo s!"{stx}"
-  let res ← mkSimpContext stx.raw (eraseLocal := false) (simpTheorems := getSpecSimpTheorems)
+  let res ← mkSimpContext stx.raw
+    (eraseLocal := false)
+    (simpTheorems := getSpecSimpTheorems)
+    (ignoreStarArg := ignoreStarArg)
   -- logInfo m!"{res.ctx.simpTheorems.map (·.toUnfold.toList)}"
+  if starArg && !ignoreStarArg then
+    let fvars ← getPropHyps
+    for fvar in fvars do
+      unless specThms.isErased (.local fvar) do
+        try
+          let thm ← mkSpecTheoremFromLocal fvar
+          specThms := addSpecTheoremEntry specThms thm
+        catch _ => continue
   return { config, specThms, simpCtx := res.ctx, simprocs := res.simprocs }
 
 def isTrivial (e : Expr) : Bool := match e with
@@ -301,7 +316,10 @@ where
         try
           let specThm ← findSpec ctx.specThms e
           trace[mpl.tactics.vcgen] "Candidate spec for {f.constName!}: {specThm.proof}"
-          let (prf, specHoles) ← mSpec goal (fun _wp  => return (specThm, [])) tryGoal (preTag := name)
+          -- In case we encounter Bind.bind, the precondition becomes the new main goal.
+          -- Hence we simply use the goal tag as the tag for the precondition obligation.
+          let mkPreTag' := if f.constName! == ``Bind.bind then id else mkPreTag
+          let (prf, specHoles) ← mSpec goal (fun _wp  => return (specThm, [])) tryGoal name (mkPreTag := mkPreTag')
           assignMVars specHoles
           return prf
         catch ex =>
