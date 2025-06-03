@@ -90,7 +90,7 @@ theorem ReaderT.tryCatch_apply [WP m sh] [Monad m] [MonadExceptOf ε m] :
       PredTrans.map_apply, ReaderT.run]
 
 theorem StateT.tryCatch_apply [WP m sh] [Monad m] [MonadExceptOf ε m] :
-  wp⟦MonadExceptOf.tryCatch (ε:=ε) x h : StateT σ m α⟧ Q = fun s => wp⟦MonadExceptOf.tryCatch (ε:=ε) (x.run s) (fun e => (h e).run s) : m (α × σ)⟧ (fun as => Q.1 as.1 as.2, Q.2) := by
+  wp⟦MonadExceptOf.tryCatch (ε:=ε) x h : StateT σ m α⟧ Q = fun s => wp⟦MonadExceptOf.tryCatch (ε:=ε) (x.run s) (fun e => (h e).run s) : m (α × σ)⟧ (fun xs => Q.1 xs.1 xs.2, Q.2) := by
     simp only [wp, MonadExceptOf.tryCatch, tryCatchThe, PredTrans.pushArg_apply, StateT.run]
 
 theorem ExceptT.lift_tryCatch_apply [WP m sh] [Monad m] [MonadExceptOf ε m] :

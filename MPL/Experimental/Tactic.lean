@@ -13,7 +13,7 @@ import MPL.WPMonadLift
 import MPL.WPMonadFunctor
 import MPL.WPMonadExceptOf
 import MPL.WPSimp
-import MPL.ProofMode
+import MPL.SPred.ProofMode
 
 namespace MPL
 

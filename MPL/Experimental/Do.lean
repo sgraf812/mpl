@@ -7,7 +7,8 @@ import Lean
 import MPL.WPMonad
 import MPL.Triple
 import MPL.Specs
-import MPL.ProofMode
+import MPL.SPred.ProofMode
+import MPL.SPred.ProofMode.Tactics.VCGen
 import MPL.Experimental.Tactic
 
 namespace MPL
@@ -373,7 +374,7 @@ partial def elab_newdecl : CommandElab := fun decl => do
   -- dbg_trace levelParams
 
 --  let refined_spec ← instantiateMVars (← spec_ty (← mkConstWithFreshMVarLevels defn.name) defn.type)
-  let val := (← Term.elabTerm (← `(by unfold $(TSyntax.mk (mkIdent refinedDeclId2)); repeat CHONK)) (.some refined_spec) (catchExPostpone := false))
+  let val := (← Term.elabTerm (← `(by mvcgen[$(TSyntax.mk (mkIdent refinedDeclId2))] <;> repeat CHONK)) (.some refined_spec) (catchExPostpone := false))
   synthesizeSyntheticMVarsNoPostponing
   let erased_spec ← instantiateMVars erased_spec
   let val ← instantiateMVars val
@@ -434,7 +435,7 @@ theorem fib_triple_new : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n�
   simp only [h, reduceIte]
   mspec Specs.forIn_list ?inv ?step
   case inv => exact PostCond.total fun (⟨a, b⟩, xs) => a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)
-  case pre => simp_all
+  case pre1 => simp_all
   case step => intros; mintro _; mwp; simp_all
   simp_all [Nat.sub_one_add_one]
 

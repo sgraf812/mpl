@@ -1,5 +1,4 @@
 import MPL
-import MPL.ProofMode.Tactics.VCGen
 import Test.Code
 
 namespace MPL.Test.VC

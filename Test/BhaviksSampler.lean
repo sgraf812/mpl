@@ -156,7 +156,7 @@ theorem sampler_correct {m : Type → Type u} {k h} [Monad m] [WPMonad m ps] :
     -- prove List.take k r.snd.toList = r.snd.toList for r.snd : Vector (Fin n) k
     sorry
   case post.except => simp
-  case post.success =>
+  case step.success =>
     dsimp
     mintro ∀s
     mcases h with ⌜hinv⌝

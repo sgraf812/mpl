@@ -114,11 +114,6 @@ instance EStateM.instWP : WP (EStateM ε σ) (.except ε (.arg σ .pure)) where
         ext s
         dsimp
         cases (x s) <;> simp
-      conjunctive0 := by
-        apply SPred.bientails.of_eq
-        ext s
-        dsimp
-        cases (x s) <;> simp
     }
 
 instance State.instWP : WP (StateM σ) (.arg σ .pure) :=

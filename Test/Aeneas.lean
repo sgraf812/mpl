@@ -4,7 +4,6 @@ Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Sebastian Graf
 -/
 import MPL
-import MPL.ProofMode.Tactics.VCGen
 
 namespace MPL.Test.Aeneas
 open MPL

@@ -178,39 +178,13 @@ theorem test_loop_early_return :
   case inv => exact (⇓ (r, xs) s => (r.1 = none ∧ r.2 = xs.rpref.sum ∧ r.2 ≤ 4 ∨ r.1 = some 42 ∧ r.2 > 4) ∧ s = 4)
   case ifTrue => intro _; simp_all
   case ifFalse => intro _; simp_all; omega
-  case post.success =>
+  case pre1 => simp_all
+  case h_1 =>
     simp_all
     conv at h in (List.sum _) => whnf
     simp at h
     omega
-  simp_all
-
-  mintro hs ∀s
-  mpure hs
-  subst hs
-  simp only [gt_iff_lt, bind_pure_comp, map_pure, Std.Range.forIn_eq_forIn_range', Std.Range.size,
-    Nat.div_one, pure_bind]
-  mspec get_spec
-  mspec (Specs.forIn_list (⇓ (r, xs) s => (r.1 = none ∧ r.2 = xs.rpref.sum ∧ r.2 ≤ 4 ∨ r.1 = some 42 ∧ r.2 > 4) ∧ s = 4) ?step)
-  case step =>
-    intro b pref x suff h
-    mintro ⟨h, hs⟩
-    mintro ∀s
-    mpure hs
-    subst hs
-    mwp
-    simp_all only [Nat.add_one_sub_one, PostShape.args, SPred.and_nil, gt_iff_lt, SPred.or_nil,
-      List.reverse_append, List.reverse_cons, List.reverse_reverse, List.append_assoc,
-      List.singleton_append, List.sum_cons, false_and, and_self, or_true, true_and,
-      or_false, SVal.ite_app, and_true, if_true_left, SPred.entails_nil]
-    omega
-  rcases r with ⟨r, x⟩
-  mintro ∀s'
-  mcases h with ⟨h,hs'⟩
-  subst hs'
-  cases r
-  case none => simp at h; (conv at h in (List.sum _) => whnf); exfalso; have ⟨h₁,h₂⟩ := h; subst_vars; contradiction -- omega -- WTF why doesn't omega
-  case some r => simp_all
+  case h_2 => simp_all
 
 example : wp⟦do try { throw 42; return 1 } catch _ => return 2 : Except Nat Nat⟧ Q
           ⊣⊢ₛ
@@ -236,57 +210,71 @@ abbrev fib_spec : Nat → Nat
 | 1 => 1
 | n+2 => fib_spec n + fib_spec (n+1)
 
+--theorem fib_triple : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ := by
+--  unfold fib_impl
+--  dsimp
+--  mintro _
+--  if h : n = 0 then simp [h] else
+--  simp only [h, reduceIte]
+--  mspec
+--  mspec_no_bind Specs.bind
+--  set_option trace.mpl.tactics.spec true in
+--  mspec_no_bind Specs.forIn_list (⇓ (⟨a, b⟩, xs) => a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)) ?step
+--
+--  case step => dsimp; intros; mintro _; simp_all
+--  simp_all [Nat.sub_one_add_one]
+
 theorem fib_triple : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ := by
   unfold fib_impl
   dsimp
   mintro _
   if h : n = 0 then simp [h] else
-  simp only [h]
-  mwp
-  mspec Specs.forIn_list (⇓ (⟨a, b⟩, xs) => a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)) ?step
-  case step => dsimp; intros; mintro _; mwp; simp_all
+  simp only [h, reduceIte]
+  mspec -- Specs.pure
+  mspec Specs.forIn_range (⇓ (⟨a, b⟩, xs) => a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)) ?step
+  case step => dsimp; intros; mintro _; simp_all
   simp_all [Nat.sub_one_add_one]
 
 #check fib_impl.fun_cases
 theorem fib_triple_cases : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ := by
-  apply fib_impl.fun_cases _ ?case1 ?case2 n
-  case case1 => unfold fib_impl; mintro -; mwp
+  apply fib_impl.fun_cases n _ ?case1 ?case2
+  case case1 => rintro rfl; mintro -; simp only [fib_impl, ↓reduceIte]; mspec
   case case2 =>
-  intro n h
-  unfold fib_impl
+  intro h
   mintro -
-  simp only [h, reduceIte]
-  mwp
-  mspec Specs.forIn_list (⇓ (⟨a, b⟩, xs) => a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)) ?step
+  simp only [fib_impl, h, reduceIte]
+  mspec
+  mspec Specs.forIn_range (⇓ (⟨a, b⟩, xs) => a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)) ?step
   case step => dsimp; intros; mintro _; mwp; simp_all
   simp_all [Nat.sub_one_add_one]
 
 theorem fib_impl_vcs
     (Q : Nat → PostCond Nat PostShape.pure)
     (I : (n : Nat) → (_ : ¬n = 0) →
-      PostCond (MProd Nat Nat × List.Zipper (List.range' 1 (n - 1) 1)) PostShape.pure)
+      PostCond (MProd Nat Nat × List.Zipper [1:n].toList) PostShape.pure)
     (ret : (Q 0).1 0)
     (loop_pre : ∀ n (hn : ¬n = 0), (I n hn).1 (⟨0, 1⟩, List.Zipper.begin _))
     (loop_post : ∀ n (hn : ¬n = 0) r, (I n hn).1 (r, List.Zipper.end _) ⊢ₛ (Q n).1 r.snd)
-    (loop_step : ∀ n (hn : ¬n = 0) r rpref x suff (h : List.range' 1 (n - 1) 1 = rpref.reverse ++ x :: suff),
+    (loop_step : ∀ n (hn : ¬n = 0) r rpref x suff (h : [1:n].toList = rpref.reverse ++ x :: suff),
                   (I n hn).1 (r, ⟨rpref, x::suff, by simp[h]⟩) ⊢ₛ (I n hn).1 (⟨r.2, r.1+r.2⟩, ⟨x::rpref, suff, by simp[h]⟩))
     : wp⟦fib_impl n⟧ (Q n) := by
-  apply fib_impl.fun_cases _ ?case1 ?case2 n
-  case case1 => unfold fib_impl; mstart; mwp; mpure_intro; exact ret
+  apply fib_impl.fun_cases n _ ?case1 ?case2
+  case case1 => intro h; simp only [fib_impl, h, ↓reduceIte]; mstart; mspec
   case case2 =>
-  intro n hn
-  unfold fib_impl
-  simp only [*, reduceIte]
+  intro hn
+  simp only [fib_impl, hn, ↓reduceIte]
   mstart
-  mwp
-  mspec -- Specs.forIn_list
+  mspec
+  mspec
   case pre1 => mpure_intro; exact loop_pre n hn
-  case post.success => exact loop_post n hn r
+  case post.success => mspec; mpure_intro; apply_rules [loop_post]
   case step =>
     intro _ _ _ _ h;
     mintro _;
-    mwp;
-    exact loop_step n hn _ _ _ _ h
+    mspec
+    mspec
+    mpure_intro
+    apply_rules [loop_step]
 
 theorem fib_triple_vcs : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ := by
   intro _
@@ -327,11 +315,10 @@ open scoped MPL.IO
 theorem addRandomEvens_spec (n k) : ⦃True⦄ (addRandomEvens n k) ⦃⇓r => r % 2 = k % 2⦄ := by
   unfold addRandomEvens
   mintro -
-  mwp
   mspec Specs.forIn_list_const_inv
+  mspec
   intro n r
   mintro ⌜h⌝
-  mwp
   mspec IO.rand_spec
   simp_all -- sgrind
 
@@ -340,11 +327,11 @@ the entire result is even. -/
 theorem program_spec (n k) : ⦃True⦄ program n k ⦃⇓r => r % 2 = 0⦄ := by
   unfold program
   mintro -
-  mwp
   mspec (addRandomEvens_spec n k)
   mpure h
   mspec /- registered spec is taken -/
   mpure h
+  mspec
   mpure_intro
   omega  -- grind -- can't do it; check after 4.17 release
 

@@ -22,6 +22,10 @@ namespace Std.Range
 abbrev toList (r : Std.Range) : List Nat :=
   List.range' r.start ((r.stop - r.start + r.step - 1) / r.step) r.step
 
+theorem toList_range' (r : Std.Range) (h : r.step = 1) :
+    toList r = List.range' r.start (r.stop - r.start) := by
+  simp [toList, h]
+
 end Std.Range
 
 namespace MPL
@@ -304,7 +308,7 @@ theorem Specs.tryCatch_ReaderT [WP m ps] [Monad m] [MonadExceptOf ε m] (Q : Pos
 
 @[spec]
 theorem Specs.tryCatch_StateT [WP m ps] [Monad m] [MonadExceptOf ε m] (Q : PostCond α (.arg σ ps)) :
-    ⦃fun s => wp⟦MonadExceptOf.tryCatch (ε:=ε) (x.run s) (fun e => (h e).run s) : m (α × σ)⟧ (fun as => Q.1 as.1 as.2, Q.2)⦄
+    ⦃fun s => wp⟦MonadExceptOf.tryCatch (ε:=ε) (x.run s) (fun e => (h e).run s) : m (α × σ)⟧ (fun xs => Q.1 xs.1 xs.2, Q.2)⦄
     (MonadExceptOf.tryCatch x h : StateT σ m α)
     ⦃Q⦄ := SPred.entails.rfl
 

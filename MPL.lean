@@ -12,4 +12,5 @@ import MPL.SpecAttr
 import MPL.Specs
 import MPL.IO
 import MPL.Idd
-import MPL.ProofMode
+import MPL.SPred
+import MPL.Tactics

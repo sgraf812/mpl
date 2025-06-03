@@ -1,5 +1,4 @@
 import MPL
-import MPL.ProofMode.Tactics.VCGen
 
 open MPL
 
