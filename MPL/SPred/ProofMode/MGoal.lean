@@ -100,7 +100,7 @@ This constant is used to detect `SPred` proof mode goals. -/
 abbrev MGoalEntails := @SPred.entails
 
 def parseMGoal? (expr : Expr) : Option MGoal := do
-  let some (σs, hyps, target) := expr.app3? ``MGoalEntails | none
+  let some (σs, hyps, target) := expr.consumeMData.app3? ``MGoalEntails | none
   some { σs, hyps, target }
 
 open Tactic in

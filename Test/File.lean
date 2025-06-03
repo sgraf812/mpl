@@ -236,7 +236,6 @@ theorem canRead_mono {n m : Nat} (hn : n ≤ m) :
   simp[canRead]
   intro h
   omega
-  sorry
 
 theorem serialized_canRead {s : Schema} (v : s.interp) (hn : n ≤ byteSize v):
     SPred.entails (σs:=[File]) (serialized v) (canRead n) := by
@@ -262,22 +261,26 @@ theorem range_elim : List.range' s n = xs ++ i :: ys → i = s + xs.length := by
     simp[ih h.2]
     omega
 
+@[simp]
+theorem Array.extract_complete {v : Vector α n} :
+    Array.extract v.toArray 0 n = v.toArray := by simp
+
 @[spec]
 theorem read_spec :
-  ⦃fun f' => ⌜canRead n f' ∧ f' = f⌝⦄
-  FileM.read n
-  ⦃⇓ v f' => hasRead v f f'⦄
-  := by
+    ⦃fun f' => ⌜canRead n f' ∧ f' = f⌝⦄
+    FileM.read n
+    ⦃⇓ v f' => hasRead v f f'⦄ := by
   mintro h ∀f'
   mpure h
   have ⟨hread, hfile⟩ := h
   subst hfile
   unfold FileM.read
-  mwp
-  mspec (Specs.forIn'_list ?inv ?step)
+  dsimp only [get, getThe]
+  mspec
+  mspec
   case inv => exact ⇓ (⟨pos, buf⟩, xs) =>
     ⌜pos = f'.pos + xs.pref.length ∧ pos + xs.suff.length ≤ f'.bytes.size
-    ∧ f'.bytes.extract f'.pos pos = buf.toArray.take xs.pref.length⌝
+    ∧ f'.bytes.extract f'.pos pos = (buf.take xs.pref.length).toArray⌝
   case pre1 => intro hread; simp_all[canRead]; omega
   case step =>
     intro ⟨pos, buf⟩ pref i hi suff hsuff
@@ -286,16 +289,23 @@ theorem read_spec :
     subst_vars
     mintro ⌜hinv⌝
     simp at hinv
-    mwp
+    dsimp
     split
-    · mpure_intro
+    · mspec
+      mspec
+      mpure_intro
       simp +arith [hinv]
       sorry -- pure proof about offset arithmetic and Array.extract
     · simp_all
       omega
-  case post.except.handle => simp
+  case post.except => simp
   mintro ∀f
-  simp_all [hasRead]
+  mspec
+  cases r
+  simp_all [canRead, hasRead]
+  rw[← h.right.right]
+  congr
+  rw[← h.left]
 
 @[spec]
 theorem read_spec' :
@@ -308,7 +318,7 @@ theorem read_spec' :
     rename_i f'
     exact ⇓ (⟨pos, buf⟩, xs) =>
     ⌜pos = f'.pos + xs.pref.length ∧ pos + xs.suff.length ≤ f'.bytes.size
-    ∧ f'.bytes.extract f'.pos pos = buf.toArray.take xs.pref.length⌝
+    ∧ f'.bytes.extract f'.pos pos = (buf.take xs.pref.length).toArray⌝
   all_goals simp_all
   case pre1 => simp_all +arith [canRead]; have := h.right; subst this; refine ⟨by grind, by omega⟩
   case post.success => cases r; simp_all +arith [hasRead]; constructor <;> push_cast
@@ -316,7 +326,6 @@ theorem read_spec' :
 theorem serialized_hasRead_byte {bs : Vector UInt8 1} {v : Schema.byte.interp} :
     serialized v f → hasRead bs f f' → v = bs[0] := by
   simp[serialized, hasRead, Schema.serialize]
-  wp_simp
   simp_all
   intro _ hv hbytes hpos hbs
   cases bs

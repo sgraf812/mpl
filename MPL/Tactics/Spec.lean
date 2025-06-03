@@ -223,8 +223,9 @@ private def addMVar (mvars : IO.Ref (List MVarId)) (goal : Expr) (name : Name) :
 
 syntax "mspec_no_bind" (ppSpace colGt term)? : tactic
 
-elab "mspec_no_bind" spec:optional(term) : tactic => withMainContext do
+elab "mspec_no_bind" spec:optional(term) : tactic => do
   let (mvar, goal) ← mStartMVar (← getMainGoal)
+  mvar.withContext do
   let goals ← IO.mkRef []
   let (prf, specHoles) ← mSpec goal (elabSpec spec) (fun goal name => liftMetaM (addMVar goals goal name)) (← getMainTag)
   mvar.assign prf

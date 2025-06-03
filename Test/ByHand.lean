@@ -322,11 +322,36 @@ axiom isValid : Nat → Char → Bool → String → Prop
 
 axiom op.spec {n} : ⦃isValid⦄ op n ⦃⇓r => ⌜r > 42⌝ ∧ isValid⦄
 
+theorem prog.spec : ⦃isValid⦄ prog n ⦃⇓r => ⌜r > 100⌝ ∧ isValid⦄ := by
+  unfold prog
+  mintro h
+  mstart; mspec op.spec; mstop
+  intro a b c d h
+  mstart; mspec op.spec; mstop
+  intro a b c d h
+  mstart; mspec op.spec; mstop
+  intro a b c d h
+  mspec
+  simp_all
+  omega
+
 theorem prog.spec' : ⦃isValid⦄ prog n ⦃⇓r => ⌜r > 100⌝ ∧ isValid⦄ := by
   unfold prog
   mintro h
   mspec op.spec
   mcases h with ⟨⌜hr₁⌝, □h⟩
+  /-
+  n r : Nat
+  hr₁ : r > 42
+  ⊢
+  h : isValid
+  ⊢ₛ
+  wp⟦do
+      let b ← op r
+      let c ← op b
+      pure (r + b + c)⟧
+    (⇓r => ⌜r > 100⌝ ∧ isValid)
+  -/
   mspec op.spec
   mcases h with ⟨⌜hr₂⌝, □h⟩
   mspec op.spec
