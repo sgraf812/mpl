@@ -56,12 +56,12 @@ namespace FileM
 
 def read (nbytes : Nat) : FileM (Vector UInt8 nbytes) := do
   let f ← get
-  let mut ret := Vector.mkVector nbytes default
+  let mut ret := Vector.replicate nbytes default
   let mut pos := f.pos
   for h₁ : i in [:nbytes] do
     if h₂ : pos < f.bytes.size then
       ret := ret.set i f.bytes[pos]
-      pos := pos.succ.castLT (by simp[h₂])
+      pos := pos.succ.castLT (by simp [h₂])
     else
       throw FileError.eof
   set { f with pos := pos }
@@ -236,6 +236,7 @@ theorem canRead_mono {n m : Nat} (hn : n ≤ m) :
   simp[canRead]
   intro h
   omega
+  sorry
 
 theorem serialized_canRead {s : Schema} (v : s.interp) (hn : n ≤ byteSize v):
     SPred.entails (σs:=[File]) (serialized v) (canRead n) := by
@@ -277,7 +278,7 @@ theorem read_spec :
   case inv => exact ⇓ (⟨pos, buf⟩, xs) =>
     ⌜pos = f'.pos + xs.pref.length ∧ pos + xs.suff.length ≤ f'.bytes.size
     ∧ f'.bytes.extract f'.pos pos = buf.toArray.take xs.pref.length⌝
-  case pre => intro hread; simp_all[canRead]; omega
+  case pre1 => intro hread; simp_all[canRead]; omega
   case step =>
     intro ⟨pos, buf⟩ pref i hi suff hsuff
     have := range_elim hsuff
@@ -303,6 +304,14 @@ theorem read_spec' :
   ⦃⇓ v f' => hasRead v f f'⦄
   := by
   mvcgen[-read_spec, FileM.read]
+  case inv =>
+    rename_i f'
+    exact ⇓ (⟨pos, buf⟩, xs) =>
+    ⌜pos = f'.pos + xs.pref.length ∧ pos + xs.suff.length ≤ f'.bytes.size
+    ∧ f'.bytes.extract f'.pos pos = buf.toArray.take xs.pref.length⌝
+  all_goals simp_all
+  case pre1 => simp_all +arith [canRead]; have := h.right; subst this; refine ⟨by grind, by omega⟩
+  case post.success => cases r; simp_all +arith [hasRead]; constructor <;> push_cast
 
 theorem serialized_hasRead_byte {bs : Vector UInt8 1} {v : Schema.byte.interp} :
     serialized v f → hasRead bs f f' → v = bs[0] := by

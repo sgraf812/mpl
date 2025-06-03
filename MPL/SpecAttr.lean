@@ -203,8 +203,10 @@ def mkSpecAttr (ext : SpecExtension) : IO Unit :=
   registerBuiltinAttribute {
     name  := `spec
     descr := "Marks Hoare triple specifications and simp theorems to use with the `mspec` and `mvcgen` tactics"
-    -- applicationTime := AttributeApplicationTime.afterCompilation -- this seems unnecessarily conservative?
-    applicationTime := AttributeApplicationTime.afterTypeChecking
+    -- .afterCompilation seems unnecessarily conservative, but the simp attribute impl needs it.
+    -- The reason is that we cannot annotate definitions with `@[spec]` otherwise; the error is
+    -- > trying to realize id.eq_1 but `enableRealizationsForConst` must be called for 'id' first
+    applicationTime := AttributeApplicationTime.afterCompilation
     add   := fun declName stx attrKind => do
       let go : MetaM Unit := do
         let info ← getConstInfo declName
@@ -215,7 +217,8 @@ def mkSpecAttr (ext : SpecExtension) : IO Unit :=
         let impl ← getBuiltinAttributeImpl `spec_internal_simp
         try
           impl.add declName stx attrKind
-        catch _ =>
+        catch e =>
+        logInfo m!"{e.toMessageData}"
         throwError "Invalid 'spec': target was neither a Hoare triple specification nor a 'simp' lemma"
       discard <| go.run {} {}
   }

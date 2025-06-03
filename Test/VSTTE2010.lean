@@ -15,7 +15,11 @@ def max_and_sum (xs : Array Nat) : Idd (Nat × Nat) := do
 
 theorem max_and_sum_spec (xs : Array Nat) :
     ⦃⌜∀ i, (h : i < xs.size) → xs[i] ≥ 0⌝⦄ max_and_sum xs ⦃⇓ (m, s) => s ≤ m * xs.size ⦄ := by
-  unfold max_and_sum
+  mvcgen [max_and_sum]
+  case inv => exact (⇓ (⟨m, s⟩, xs) => s ≤ m * xs.rpref.length)
+  all_goals simp_all
+  -- not sure what's goidn on here. This was the old proof that worked:
+/-
   mintro ⌜h⌝
   mwp
   mspec (Specs.forIn'_list (⇓ (⟨m, s⟩, xs) => s ≤ m * xs.rpref.length) ?step)
@@ -37,6 +41,7 @@ theorem max_and_sum_spec (xs : Array Nat) :
       rw[Nat.left_distrib]
       omega
   simp
+-/
 
 end MaxAndSum
 
@@ -73,7 +78,6 @@ theorem invert_injection_spec (xs : Array Nat)
     ⦃⇓ ys => ∃ (h₁ : ys.size = xs.size), ∀ i, (h₂ : i < xs.size) → ys[xs[i]]'(h₁ ▸ h i h₂) = i ⦄ := by
   unfold invert_injection'
   mintro -
-  mwp
   mspec (Specs.forIn_list ?inv ?step)
   case inv => exact (⇓ (ys, is) =>
     ∃ (h₁ : ys.size = xs.size), ∀ i, (h₂ : i < is.rpref.length) →
@@ -91,7 +95,6 @@ theorem invert_injection_spec (xs : Array Nat)
     mintro ⌜h⌝
     simp at h
     rcases h with ⟨h₁, h₂⟩
-    mwp
     simp_all only [PostShape.args, SVal.curry_nil, Array.set!_eq_setIfInBounds, List.length_cons,
       SPred.forall_nil, SPred.exists_nil, Array.size_setIfInBounds, exists_true_left,
       SPred.entails_nil, forall_const]

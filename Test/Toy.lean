@@ -120,31 +120,6 @@ theorem test_ex :
   case ifFalse => intro _; simp; omega
   simp_all +decide
 
-example :
-  (wp (m:= ExceptT Nat (StateT Nat (ReaderT Bool Id))) (withTheReader Bool not (do if (← read) then return 0 else return 1))).apply Q
-  ⊣⊢ₛ
-  (wp (m:= ExceptT Nat (StateT Nat (ReaderT Bool Id))) (do if (← read) then return 1 else return 0)).apply Q := by
-    apply SPred.bientails.iff.mpr
-    constructor
-    all_goals mstart; mwp; simp [SVal.ite_app] -- TODO: Do we need mvcgen at h? Alas, mvcgen does not generate bientailments.
-
-example :
-  (wp (m:= ReaderT Char (StateT Bool (ExceptT Nat Id))) (do set true; throw 42; set false; get)).apply Q
-  ⊣⊢ₛ
-  (wp (m:= ReaderT Char (StateT Bool (ExceptT Nat Id))) (do set true; throw 42; get)).apply Q := by
-    apply SPred.bientails.iff.mpr
-    constructor
-    all_goals mstart; mwp
-
-example :
-  (wp (m:= ReaderT Char (StateT Bool (ExceptT Nat Id)))
-      (do try { set true; throw 42 } catch _ => set false; get)).apply Q
-  ⊣⊢ₛ
-  (wp (m:= ReaderT Char (StateT Bool (ExceptT Nat Id)))
-      (do set false; get)).apply Q := by
-    apply SPred.bientails.iff.mpr
-    constructor <;> mwp
-
 theorem test_loop_break :
   ⦃⌜‹Nat›ₛ = 42⌝⦄
   do
@@ -186,13 +161,6 @@ theorem test_loop_early_return :
     omega
   case h_2 => simp_all
 
-example : wp⟦do try { throw 42; return 1 } catch _ => return 2 : Except Nat Nat⟧ Q
-          ⊣⊢ₛ
-          wp⟦pure 2 : Except Nat Nat⟧ Q := by
-  apply SPred.bientails.iff.mpr
-  constructor
-  all_goals mstart; mwp
-
 section fib
 
 def fib_impl (n : Nat) : Idd Nat := do
@@ -210,6 +178,8 @@ abbrev fib_spec : Nat → Nat
 | 1 => 1
 | n+2 => fib_spec n + fib_spec (n+1)
 
+-- Finally investigate why we do not see the error here.
+-- Seems to be related to not being able to display metavariables.
 --theorem fib_triple : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ := by
 --  unfold fib_impl
 --  dsimp

@@ -8,15 +8,19 @@ import MPL.WPMonad
 import MPL.Triple
 import MPL.Specs
 import MPL.SPred.ProofMode
-import MPL.SPred.ProofMode.Tactics.VCGen
-import MPL.Experimental.Tactic
+import MPL.Experimental.Crush
+import MPL.Tactics.VCGen
 
 namespace MPL
 
 open Lean Parser Meta Elab Term Command
 
-def forInWithInvariant {m : Type → Type u₂} {α : Type} {β : Type} [Monad m]
+def forInWithInvariant_list {m : Type → Type u₂} {α : Type} {β : Type} [Monad m]
   (xs : List α) (init : β) (f : α → β → m (ForInStep β)) {ps : PostShape} [WP m ps] (_inv : PostCond (β × List.Zipper xs) ps) : m β :=
+    pure () >>= fun _ => forIn xs init f
+
+def forInWithInvariant_range {m : Type → Type u₂} {β : Type} [Monad m]
+  (xs : Std.Range) (init : β) (f : Nat → β → m (ForInStep β)) {ps : PostShape} [WP m ps] (_inv : PostCond (β × List.Zipper xs.toList) ps) : m β :=
     pure () >>= fun _ => forIn xs init f
 
 @[spec]
@@ -30,9 +34,24 @@ theorem Specs.forInWithInvariant_list {α : Type} {β : Type} ⦃m : Type → Ty
       ⦃(fun r => match r with
                  | .yield b' => inv.1 (b', ⟨x::rpref, suff, by simp [h]⟩)
                  | .done b' => inv.1 (b', ⟨xs.reverse, [], by simp⟩), inv.2)⦄) :
-  ⦃inv.1 (init, ⟨[], xs, by simp⟩)⦄ forInWithInvariant xs init f inv ⦃(fun b => inv.1 (b, ⟨xs.reverse, [], by simp⟩), inv.2)⦄ := by
-  simp only [forInWithInvariant, pure_bind]
+  ⦃inv.1 (init, ⟨[], xs, by simp⟩)⦄ forInWithInvariant_list xs init f inv ⦃(fun b => inv.1 (b, ⟨xs.reverse, [], by simp⟩), inv.2)⦄ := by
+  simp only [MPL.forInWithInvariant_list, pure_bind]
   exact Specs.forIn_list inv step
+
+@[spec]
+theorem Specs.forInWithInvariant_range {β : Type} ⦃m : Type → Type v⦄ {ps : PostShape}
+  [Monad m] [WPMonad m ps]
+  {xs : Std.Range} {init : β} {f : Nat → β → m (ForInStep β)}
+  {inv : PostCond (β × List.Zipper xs.toList) ps}
+  (step : ∀ b rpref x suff (h : xs.toList = rpref.reverse ++ x :: suff),
+      ⦃inv.1 (b, ⟨rpref, x::suff, by simp [h]⟩)⦄
+      f x b
+      ⦃(fun r => match r with
+                 | .yield b' => inv.1 (b', ⟨x::rpref, suff, by simp [h]⟩)
+                 | .done b' => inv.1 (b', ⟨xs.toList.reverse, [], by simp⟩), inv.2)⦄) :
+  ⦃inv.1 (init, ⟨[], xs.toList, by simp⟩)⦄ forInWithInvariant_range xs init f inv ⦃(fun b => inv.1 (b, ⟨xs.toList.reverse, [], by simp⟩), inv.2)⦄ := by
+  simp only [MPL.forInWithInvariant_range, pure_bind]
+  exact Specs.forIn_range inv step
 
 -- Q: Why not also steal the following doElem in the syntax?
 -- A: What would we expand `assert ... x` to?
@@ -59,20 +78,15 @@ def ForIn.toList [ForIn Id ρ α] (xs : ρ) : List α := Id.run do
 class LawfulForIn (m : Type → Type u) (ρ : Type u) (α : Type u) [Monad m] [ForIn m ρ α] [ForIn Id ρ α] where
   forIn_forIn_toList (xs : ρ) b (f : α → β → m (ForInStep β)) : forIn xs b f = forIn (ForIn.toList xs) b f
 
-abbrev requiresGadget {α : Type} {m : Type → Type u} {ps : PostShape} [WP m ps] (_p : Assertion ps) (x : m α) : m α :=
+@[spec]
+def requiresGadget {α : Type} {m : Type → Type u} {ps : PostShape} [WP m ps] (_p : Assertion ps) (x : m α) : m α :=
   x
 
-abbrev ensuresGadget {α : Type} {m : Type → Type u} {ps : PostShape} [WP m ps] (_p : α → Assertion ps) (x : m α): m α :=
+@[spec]
+def ensuresGadget {α : Type} {m : Type → Type u} {ps : PostShape} [WP m ps] (_p : α → Assertion ps) (x : m α): m α :=
   x
 
-@[wp_simp]
-theorem requiresGadget_apply [WP m sh] (x : m α) :
-  wp⟦requiresGadget P x⟧ Q = wp⟦x⟧ Q := rfl
-
-@[wp_simp]
-theorem ensuresGadget_apply [WP m sh] (x : m α) :
-  wp⟦ensuresGadget P x⟧ Q = wp⟦x⟧ Q := rfl
-
+@[spec]
 def assertGadget {m : Type → Type u} {ps : PostShape} [Monad m] [WP m ps] (_p : Assertion ps) : m Unit :=
   pure ()
 
@@ -84,17 +98,25 @@ def invariantGadget1.{u} {m : Type → Type u} {ps : PostShape} [Monad m] [WP m 
 def invariantGadget2.{u,v} {β : Type v} {m : Type → Type u} {ps : PostShape} [Monad m] [WP m ps] (_inv : β → {α : Type} → {xs:List α} → List.Zipper xs → Assertion ps) : m Unit :=
   pure ()
 
-@[wp_simp]
-theorem assertGadget_apply {m : Type → Type u} {ps : PostShape} [Monad m] [WP m ps] {P : Assertion ps} {Q : PostCond Unit ps} : -- (h : Q.1 () ≤ P) :
-  wp⟦assertGadget P : m Unit⟧ Q = wp⟦pure () : m Unit⟧ Q := rfl
+@[spec]
+theorem Specs.invariantGadget_list {m : Type → Type u₂} {ps : PostShape} {α : Type} {β γ : Type} [Monad m] [WPMonad m ps]
+  (xs : List α) (init : β) (f : α → β → m (ForInStep β)) (inv : β → {α : Type} → {xs : List α} → List.Zipper xs → Assertion ps) (k : β → m γ) (Q : PostCond γ ps):
+  ⦃wp⟦(do let r ← MPL.forInWithInvariant_list xs init f (PostCond.total fun p => (inv p.1 p.2)); k r)⟧ Q⦄
+  (do (invariantGadget2 inv : m Unit); let r ← forIn xs init f; k r)
+  ⦃Q⦄ := by
+    unfold invariantGadget2 MPL.forInWithInvariant_list
+    simp only [pure_bind]
+    exact .rfl
 
-@[wp_simp]
-theorem invariantGadget_apply {m : Type → Type u₂} {ps : PostShape} {α : Type} {β : Type} [Monad m] [WPMonad m ps]
-  (xs : List α) (init : β) (f : α → β → m (ForInStep β)) (inv : β → {α : Type} → {xs : List α} → List.Zipper xs → Assertion ps) (Q : PostCond β ps) :
-  wp⟦invariantGadget2 inv : m Unit⟧ (no_index (fun _ => wp⟦forIn xs init f⟧ Q, Q.2)) = wp⟦forInWithInvariant xs init f (PostCond.total fun (β, xs) => (inv β xs))⟧ Q := by
-    calc
-      _ = wp⟦invariantGadget2 inv >>= fun _ => forIn xs init f⟧ Q := by simp
-      _ = wp⟦forInWithInvariant xs init f (PostCond.total fun (β, xs) => (inv β xs))⟧ Q := rfl
+@[spec 0]
+theorem Specs.invariantGadget_range {m : Type → Type u₂} {ps : PostShape} {β γ : Type} [Monad m] [WPMonad m ps]
+  (xs : Std.Range) (init : β) (f : Nat → β → m (ForInStep β)) (inv : β → {α : Type} → {xs : List α} → List.Zipper xs → Assertion ps) (k : β → m γ) (Q : PostCond γ ps):
+  ⦃wp⟦(do let r ← MPL.forInWithInvariant_range xs init f (PostCond.total fun p => (inv p.1 p.2)); k r)⟧ Q⦄
+  (do (invariantGadget2 inv : m Unit); let r ← forIn xs init f; k r)
+  ⦃Q⦄ := by
+    unfold invariantGadget2 MPL.forInWithInvariant_range
+    simp only [pure_bind]
+    exact .rfl
 
 macro_rules
   | `(doElem| assert $xs* => $p) => `(doElem| assertGadget (fun $xs* => $p))
@@ -374,7 +396,7 @@ partial def elab_newdecl : CommandElab := fun decl => do
   -- dbg_trace levelParams
 
 --  let refined_spec ← instantiateMVars (← spec_ty (← mkConstWithFreshMVarLevels defn.name) defn.type)
-  let val := (← Term.elabTerm (← `(by mvcgen[$(TSyntax.mk (mkIdent refinedDeclId2))] <;> repeat CHONK)) (.some refined_spec) (catchExPostpone := false))
+  let val := (← Term.elabTerm (← `(by unfold $(mkIdent refinedDeclId2); intros; mvcgen <;> repeat crush)) (.some refined_spec) (catchExPostpone := false))
   synthesizeSyntheticMVarsNoPostponing
   let erased_spec ← instantiateMVars erased_spec
   let val ← instantiateMVars val
@@ -399,6 +421,8 @@ abbrev fib_spec : Nat → Nat
 | 1 => 1
 | n+2 => fib_spec n + fib_spec (n+1)
 
+set_option trace.mpl.tactics.spec true in
+set_option trace.Meta.isDefEq true in
 def fib_impl (n : Nat) : Idd Nat
   ensures r => r = fib_spec n
 := do
@@ -414,29 +438,17 @@ def fib_impl (n : Nat) : Idd Nat
 
 --#check fib_impl.spec
 
-theorem fib_triple_old : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ := by
-  -- This is how CHONK could prove fib_impl.spec using the old way (intro+xwp)
-  unfold fib_impl
-  intro _
-  xwp
-  if h : n = 0 then simp [h] else
-  simp only [h, reduceIte]
-  xapp Specs.forIn_list ?inv ?step
-  case inv => exact PostCond.total fun (⟨a, b⟩, xs) => a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)
-  case pre => simp_all
-  case step => intros; intro _; xwp; simp_all
-  simp_all [Nat.sub_one_add_one]
-
-theorem fib_triple_new : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ := by
+theorem fib_triple : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec n⦄ := by
   unfold fib_impl
   mintro -
-  mwp
   if h : n = 0 then simp [h] else
   simp only [h, reduceIte]
-  mspec Specs.forIn_list ?inv ?step
+  mspec
+  mspec
+  mspec Specs.forIn_range ?inv ?step
   case inv => exact PostCond.total fun (⟨a, b⟩, xs) => a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)
   case pre1 => simp_all
-  case step => intros; mintro _; mwp; simp_all
+  case step => intros; intro _; simp_all
   simp_all [Nat.sub_one_add_one]
 
 theorem fib_correct {n} : (fib_impl n).run = fib_spec n := by
