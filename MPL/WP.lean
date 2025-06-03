@@ -6,7 +6,6 @@ Authors: Sebastian Graf
 import Lean
 import MPL.Idd
 import MPL.PredTrans
-import MPL.WPSimp
 
 /-!
 # Weakest precondition interpretation

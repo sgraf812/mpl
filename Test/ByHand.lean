@@ -1,34 +1,27 @@
-/-
-Copyright (c) 2025 Lean FRO LLC. All rights reserved.
-Released under Apache 2.0 license as described in the file LICENSE.
-Authors: Sebastian Graf
--/
 import Lean
 import MPL
 import MPL.IO
+import Test.Code
 
 namespace MPL.Test.Toy
-open MPL
+open MPL Test.Code
 
 set_option grind.warning false
 
-theorem test_sum :
+theorem sum_loop_spec :
   ⦃True⦄
-  do
-    let mut x := 0
-    for i in [1:5] do
-      x := x + i
-    pure (f := Idd) x
+  sum_loop
   ⦃⇓r => r < 30⦄ := by
   mintro -
-  mvcgen
+  unfold sum_loop
+  mspec
   case inv => exact (⇓ (r, xs) => (∀ x, x ∈ xs.suff → x ≤ 5) ∧ r + xs.suff.length * 5 ≤ 25)
   all_goals simp_all +decide; try omega
-
-def mkFreshNat [Monad m] [MonadStateOf (Nat × Nat) m] : m Nat := do
-  let n ← Prod.fst <$> get
-  modify (fun s => (s.1 + 1, s.2))
-  pure n
+  intros
+  mintro _
+  mspec
+  simp_all +decide
+  omega
 
 private abbrev fst : SVal ((Nat × Nat)::σs) Nat := fun s => SVal.pure s.1
 private abbrev snd : SVal ((Nat × Nat)::σs) Nat := fun s => SVal.pure s.2
@@ -39,8 +32,11 @@ theorem mkFreshNat_spec [Monad m] [WPMonad m sh] :
   (mkFreshNat : StateT (Nat × Nat) m Nat)
   ⦃⇓ r => ⌜r = n ∧ #fst = n + 1 ∧ #snd = o⌝⦄ := by
   mintro _
-  unfold mkFreshNat
-  mvcgen
+  dsimp only [mkFreshNat, get, getThe, instMonadStateOfOfMonadLift, liftM, monadLift, modify, modifyGet]
+  mspec
+  mspec
+  mspec
+  mspec
   simp
 
 @[wp_simp]
@@ -87,79 +83,80 @@ example : PostCond (Nat × List.Zipper (List.range' 1 3 1)) (PostShape.except Na
 example : (Nat × List.Zipper (List.range' 1 3 1)) → Assertion (PostShape.except Nat (PostShape.arg Nat PostShape.pure)) :=
   let x := ⟨fun (r, xs) s => r ≤ 4 ∧ s = 4 ∧ r + xs.suff.sum > 4, fun e s => e = 42 ∧ s = 4⟩; Prod.fst x
 
-example :
+theorem throwing_loop_spec :
   ⦃fun s => s = 4⦄
-  do
-    let mut x := 0
-    for i in [1:4] do { x := x + i }
-    (pure () : (StateT Nat Idd) Unit)
-    return x
-  ⦃⇓ _ _ => True⦄ := by
-  mintro hs
-  mvcgen
-  case inv => exact (⇓ (p, xs) s => True)
-  all_goals simp
-  mintro ∀s
-  simp
-
-theorem test_ex :
-  ⦃fun s => s = 4⦄
-  do
-    let mut x := 0
-    let s ← get
-    for i in [1:s] do { x := x + i; if x > 4 then throw 42 }
-    (set 1 : ExceptT Nat (StateT Nat Idd) PUnit)
-    return x
+  throwing_loop
   ⦃post⟨fun _ _ => False,
         fun e s => e = 42 ∧ s = 4⟩⦄ := by
-  mvcgen
+  mintro hs
+  dsimp only [throwing_loop, get, getThe, instMonadStateOfOfMonadLift, liftM, monadLift]
+  mspec
+  mspec
+  mspec
   case inv => exact post⟨fun (r, xs) s => r ≤ 4 ∧ s = 4 ∧ r + xs.suff.sum > 4, fun e s => e = 42 ∧ s = 4⟩
-  case post.success => simp at h; omega
+  case post.success => mspec; mspec; mspec; simp at h; omega
   case post.except => simp
-  case ifTrue => intro _; simp_all
-  case ifFalse => intro _; simp; omega
-  simp_all +decide
+  case pre1 => simp_all +decide
+  case step =>
+    simp_all
+    intros
+    mintro _
+    mspec
+    case ifTrue => intro _; mintro _; mspec; mspec; intro _; simp_all
+    case ifFalse => intro _; mintro _; mspec; intro _; simp_all +arith
 
-theorem test_loop_break :
+theorem beaking_loop_spec :
   ⦃⌜‹Nat›ₛ = 42⌝⦄
-  do
-    let mut x := 0
-    let s ← get
-    for i in [1:s] do { x := x + i; if x > 4 then break }
-    (set 1 : StateT Nat Idd PUnit)
-    return x
+  breaking_loop
   ⦃⇓ r => ⌜r > 4 ∧ ‹Nat›ₛ = 1⌝⦄ := by
-  mvcgen
+  mintro hs
+  dsimp only [breaking_loop, get, getThe, instMonadStateOfOfMonadLift, liftM, monadLift]
+  mspec
+  mspec
+  mspec
   case inv => exact (⇓ (r, xs) s => (r ≤ 4 ∧ r = xs.rpref.sum ∨ r > 4) ∧ s = 42)
-  case ifTrue => intro _; simp_all
-  case ifFalse => intro _; simp_all; omega
-  case post.success =>
-    simp_all
+  all_goals simp_all
+  case post =>
+    intro _ h
     conv at h in (List.sum _) => whnf
     simp at h
     omega
-  simp_all
+  case step =>
+    intros
+    mintro _
+    mspec
+    case ifTrue => intro _; mintro _; mspec; intro _ _; simp_all
+    case ifFalse => intro _; mintro _; mspec; intro _ _; simp_all; omega
 
-theorem test_loop_early_return :
+theorem returning_loop_spec :
   ⦃fun s => s = 4⦄
-  do
-    let mut x := 0
-    let s ← get
-    for i in [1:s] do { x := x + i; if x > 4 then return 42 }
-    (set 1 : StateT Nat Idd PUnit)
-    return x
+  returning_loop
   ⦃⇓ r s => r = 42 ∧ s = 4⦄ := by
-  mvcgen
+  mintro hs
+  dsimp only [returning_loop, get, getThe, instMonadStateOfOfMonadLift, liftM, monadLift]
+  mspec
+  mspec
   case inv => exact (⇓ (r, xs) s => (r.1 = none ∧ r.2 = xs.rpref.sum ∧ r.2 ≤ 4 ∨ r.1 = some 42 ∧ r.2 > 4) ∧ s = 4)
-  case ifTrue => intro _; simp_all
-  case ifFalse => intro _; simp_all; omega
-  case pre1 => simp_all
-  case h_1 =>
-    simp_all
-    conv at h in (List.sum _) => whnf
-    simp at h
-    omega
-  case h_2 => simp_all
+  all_goals simp_all
+  case post =>
+    split
+    · mspec
+      mspec
+      intro _ h
+      conv at h in (List.sum _) => whnf
+      simp at h
+      grind
+    · mspec
+      intro _ h
+      conv at h in (List.sum _) => whnf
+      simp at h
+      grind
+  case step =>
+    intros
+    mintro _
+    mspec
+    case ifTrue => intro _; mintro _; mspec; intro _ _; simp_all
+    case ifFalse => intro _; mintro _; mspec; intro _ _; simp_all; omega
 
 section fib
 

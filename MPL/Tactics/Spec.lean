@@ -9,7 +9,6 @@ import MPL.SPred.ProofMode.Tactics.Pure
 import MPL.SPred.ProofMode.Tactics.Frame
 import MPL.SPred.ProofMode.Tactics.Assumption
 import MPL.Tactics.Utils
-import MPL.Tactics.WP
 import MPL.Specs -- important for MPL.Specs.bind
 
 /-!

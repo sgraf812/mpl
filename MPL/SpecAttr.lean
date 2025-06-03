@@ -6,6 +6,7 @@ Authors: Sebastian Graf
 import Lean
 import MPL.Triple
 import MPL.Util.Trace
+import MPL.SimpAttr
 
 namespace MPL
 
@@ -157,8 +158,6 @@ private def mkSpecTheorem (type : Expr) (proof : SpecProof) (prio : Nat) : MetaM
   let type ← whnfR type
   let_expr Triple _m ps _inst _α prog P _Q := type
     | throwError "unexpected kind of spec theorem; not a triple{indentExpr type}"
-  let f := prog.getAppFn'
-  unless f.isConst do throwError s!"not an application of a constant: {prog}"
   let keys ← DiscrTree.mkPath prog (noIndexAtArgs := false)
   -- beta potential of `P` describes how many times we want to `mintro ∀s`, that is,
   -- *eta*-expand the goal.

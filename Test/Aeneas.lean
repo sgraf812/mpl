@@ -1,8 +1,3 @@
-/-
-Copyright (c) 2025 Lean FRO LLC. All rights reserved.
-Released under Apache 2.0 license as described in the file LICENSE.
-Authors: Sebastian Graf
--/
 import MPL
 
 namespace MPL.Test.Aeneas
@@ -105,6 +100,7 @@ theorem U32.add_spec {x y : U32} (hmax : x.val + y.val ≤ U32.max) :
 
 abbrev PCond (α : Type) := PostCond α (PostShape.except Error PostShape.pure)
 
+@[spec]
 theorem U32.add_spec' {x y : U32} {Q : PCond U32} (hmax : ↑x + ↑y ≤ U32.max):
   ⦃Q.1 (UScalar.ofNatCore (↑x + ↑y) sorry)⦄ (x + y) ⦃Q⦄ := by
     mintro h
@@ -122,17 +118,5 @@ def mul2_add1 (x : U32) : Result U32 :=
 
 theorem mul2_add1_spec' (x : U32) (h : 2 * x.val + 1 ≤ U32.max)
   : ⦃Q.1 (UScalar.ofNatCore (2 * ↑x + (1 : Nat)) sorry)⦄ (mul2_add1 x) ⦃Q⦄ := by
-  rw[mul2_add1]
-  mintro _
-  mspec U32.add_spec' (by omega)
-  mspec U32.add_spec' (by simp; omega)
-  simp +arith [h]
-
-attribute [local spec] U32.add_spec'
-theorem mul2_add1_spec_vc (x : U32) (hmax : 2 * x.val + 1 ≤ U32.max)
-  : ⦃Q.1 (UScalar.ofNatCore (2 * ↑x + (1 : Nat)) sorry)⦄ (mul2_add1 x) ⦃Q⦄ := by
-  rw[mul2_add1]
-  mvcgen
-  · simp +arith [h]
-  · simp +arith [hmax]
-  · simp +arith [hmax]; omega
+  mvcgen [mul2_add1]
+  all_goals simp_all +arith; try omega

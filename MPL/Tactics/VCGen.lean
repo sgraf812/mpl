@@ -4,7 +4,6 @@ Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Sebastian Graf
 -/
 import MPL.SPred.ProofMode.Tactics.Basic
-import MPL.WPSimp
 import MPL.WP
 import MPL.WPMonad
 import MPL.WPMonadLift

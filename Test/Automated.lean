@@ -1,3 +1,6 @@
+/-!
+This module tests `mvcgen` by maximally automating many of the proofs in `ByHand.lean`.
+-/
 import MPL
 import Test.Code
 
@@ -84,6 +87,16 @@ theorem mkFreshPair_triple : ⦃⌜True⌝⦄ mkFreshPair ⦃⇓ (a, b) => ⌜a 
   mvcgen
   simp_all [SPred.entails_elim_cons]
 
+theorem sum_loop_spec :
+  ⦃True⦄
+  sum_loop
+  ⦃⇓r => r < 30⦄ := by
+  -- cf. `Toy.sum_loop_spec`
+  mintro -
+  mvcgen [sum_loop]
+  case inv => exact (⇓ (r, xs) => (∀ x, x ∈ xs.suff → x ≤ 5) ∧ r + xs.suff.length * 5 ≤ 25)
+  all_goals simp_all +decide; try omega
+
 theorem throwing_loop_spec :
   ⦃fun s => s = 4⦄
   throwing_loop
@@ -97,6 +110,37 @@ theorem throwing_loop_spec :
   · simp_all
   · intro _; simp_all
   · intro _; simp_all only [List.sum_cons, true_and, SPred.entails_nil]; omega
+
+theorem test_loop_break :
+  ⦃⌜‹Nat›ₛ = 42⌝⦄
+  breaking_loop
+  ⦃⇓ r => ⌜r > 4 ∧ ‹Nat›ₛ = 1⌝⦄ := by
+  mvcgen [breaking_loop]
+  case inv => exact (⇓ (r, xs) s => (r ≤ 4 ∧ r = xs.rpref.sum ∨ r > 4) ∧ s = 42)
+  case ifTrue => intro _; simp_all
+  case ifFalse => intro _; simp_all; omega
+  case post.success =>
+    simp_all
+    conv at h in (List.sum _) => whnf
+    simp at h
+    omega
+  simp_all
+
+theorem test_loop_early_return :
+  ⦃fun s => s = 4⦄
+  returning_loop
+  ⦃⇓ r s => r = 42 ∧ s = 4⦄ := by
+  mvcgen [returning_loop]
+  case inv => exact (⇓ (r, xs) s => (r.1 = none ∧ r.2 = xs.rpref.sum ∧ r.2 ≤ 4 ∨ r.1 = some 42 ∧ r.2 > 4) ∧ s = 4)
+  case ifTrue => intro _; simp_all
+  case ifFalse => intro _; simp_all; omega
+  case pre1 => simp_all
+  case h_1 =>
+    simp_all
+    conv at h in (List.sum _) => whnf
+    simp at h
+    omega
+  case h_2 => simp_all
 
 -- theorem returning_loop_spec :
 --   ⦃fun s => s = 4⦄

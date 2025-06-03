@@ -229,7 +229,7 @@ def patch_invariant (e : Expr) (args : Array Expr := Array.empty) (names : Array
             mkLet name prod_ty (.bvar 0) <|
             e
       let some max := mut_vars.foldr (fun a mb => max (some a) mb) none | throwError "TODO: handle invariants without mut vars"
-      let mut subst : Array Expr := mkArray (max + 1) (.bvar 0)
+      let mut subst : Array Expr := Array.replicate (max + 1) (.bvar 0)
       for i in [0:subst.size] do
         subst := subst.set! i (.bvar (i + mut_vars.size * 2))
       -- up until now, subst is the identity substitution for the body of wrapper (which shifts by mut_vars.size * 2)
@@ -369,13 +369,15 @@ partial def elab_newdecl : CommandElab := fun decl => do
   -- dbg_trace erased_value
   -- dbg_trace erased_ty
   --log erased_value
-  addDecl (.defnDecl { defn with
-    name := declId
-    type := erased_ty
-    -- value := ← Term.elabTermEnsuringType (← `(by sorry)) refined_spec
-    value := erased_value
-  })
+  withOptions (Elab.async.set · false) <|
+    addDecl (.defnDecl { defn with
+      name := declId
+      type := erased_ty
+      -- value := ← Term.elabTermEnsuringType (← `(by sorry)) refined_spec
+      value := erased_value
+    })
   let .some (.defnInfo defn) := (← getEnv).find? declId | throwUnsupportedSyntax
+  enableRealizationsForConst defn.name
   -- dbg_trace defn.name
   synthesizeSyntheticMVarsNoPostponing
   let refined_spec ← instantiateMVars refined_spec
@@ -421,8 +423,6 @@ abbrev fib_spec : Nat → Nat
 | 1 => 1
 | n+2 => fib_spec n + fib_spec (n+1)
 
-set_option trace.mpl.tactics.spec true in
-set_option trace.Meta.isDefEq true in
 def fib_impl (n : Nat) : Idd Nat
   ensures r => r = fib_spec n
 := do

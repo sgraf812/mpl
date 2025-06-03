@@ -6,4 +6,3 @@ Authors: Sebastian Graf
 import MPL.Tactics.Spec
 import MPL.Tactics.VCGen
 import MPL.Tactics.LetElim
-import MPL.Tactics.WP

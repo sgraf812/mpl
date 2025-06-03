@@ -1,3 +1,8 @@
+/-
+Copyright (c) 2025 Lean FRO LLC. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE.
+Authors: Sebastian Graf
+-/
 import MPL.Idd
 
 namespace MPL.Test.Code
@@ -35,11 +40,23 @@ def mkFreshPair : StateM AppState (Nat × Nat) := do
   let b ← mkFreshNat
   pure (a, b)
 
+def sum_loop : Idd Nat := do
+  let mut x := 0
+  for i in [1:5] do x := x + i
+  return x
+
 def throwing_loop : ExceptT Nat (StateT Nat Idd) Nat := do
   let mut x := 0
   let s ← get
   for i in [1:s] do { x := x + i; if x > 4 then throw 42 }
   (set 1 : ExceptT Nat (StateT Nat Idd) PUnit)
+  return x
+
+def breaking_loop : StateT Nat Idd Nat := do
+  let mut x := 0
+  let s ← get
+  for i in [1:s] do { x := x + i; if x > 4 then break }
+  set 1
   return x
 
 def returning_loop : StateT Nat Idd Nat := do
