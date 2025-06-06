@@ -2,6 +2,58 @@ import MPL
 
 open MPL
 
+set_option grind.warning false
+
+@[grind →]
+theorem range_elim : List.range' s n = xs ++ i :: ys → i = s + xs.length := by
+  intro h
+  induction xs generalizing s n
+  case nil => cases n <;> simp_all[List.range']
+  case cons head tail ih =>
+    cases n <;> simp[List.range'] at h
+    have := ih h.2
+    simp[ih h.2]
+    omega
+
+@[simp]
+theorem Array.extract_min_stop_size {xs : Array α} :
+    xs.extract 0 (min stop xs.size) = xs.extract 0 stop := by
+  ext i h₁ h₂
+  · simp
+  · simp
+
+@[simp]
+theorem Array.extract_push_2 {xs : Array α} (h : xs.size ≤ start) :
+    ((xs.push x).extract start stop) = #[x].extract (start - xs.size) (stop - xs.size) := by
+  ext i h₁ h₂
+  · simp
+    grind
+  · simp_all [getElem_push]
+    grind
+
+@[simp]
+theorem Array.extract_complete {v : Vector α n} :
+    Array.extract v.toArray 0 n = v.toArray := by simp
+
+theorem Array.extract_set' {xs : Array α} (hxs : m < xs.size) :
+    (xs.set m v).extract i m = xs.extract i m := by
+  grind
+
+theorem Array.extract_add_one {xs : Array α} (h₁ : i ≤ j) (h₂ : j < xs.size) :
+    (xs.extract i (j + 1)) = (xs.extract i j).push xs[j] := by
+  simp [h₁]
+
+theorem Array.extract_sub_n {xs : Array α} (h : n < xs.size) (h₂ : xs.size > 0) :
+    xs.extract (xs.size - (n+1)) = #[xs[xs.size - (n+1)]] ++ xs.extract (xs.size - n) := by
+  ext i h₁ h₂
+  · grind
+  · simp; grind
+
+theorem Array.extract_split_last {xs ys : Array α} (h₁ : xstart ≤ xend) (h₂ : ystart ≤ yend) (hxs : xend < xs.size) (hys : yend < ys.size) :
+    (xs.extract xstart xend = ys.extract ystart yend) → xs[xend] = ys[yend] →
+    xs.extract xstart (xend + 1) = ys.extract ystart (yend + 1) := by
+  grind [Array.extract_add_one]
+
 namespace Mem
 def Mem := Array UInt8
 def MemPos := Int
@@ -36,8 +88,9 @@ end Mem
 structure File where
   bytes : Array UInt8
   pos : Fin (bytes.size + 1)
+  deriving Inhabited
 
-def File.mkEmpty : File := { bytes := Array.mkEmpty 0, pos := ⟨0, by simp⟩ }
+abbrev File.mkEmpty : File := { bytes := Array.mkEmpty 0, pos := ⟨0, by simp⟩ }
 
 inductive FileError where
   | invalidPos
@@ -49,6 +102,9 @@ def File.append (f : File) (bs : Array UInt8) : File :=
 
 @[simp]
 theorem File.append_bytes : (File.append f bs).bytes = f.bytes ++ bs := rfl
+
+@[simp]
+theorem File.append_pos : (File.append f bs).pos = f.pos.castLE (by simp) := rfl
 
 abbrev FileM := EStateM FileError File
 
@@ -88,6 +144,100 @@ def move (offs : Int) : FileM PUnit := do
     set { f with pos := ⟨pos.toNat, h.2⟩ }
   else
     throw FileError.invalidPos
+
+theorem wp_append : wp⟦FileM.append bs⟧ Q f = Q.1 () (f.append bs) := by
+  simp [wp, append, modify, modifyGet, EStateM.instMonadStateOf, EStateM.modifyGet]
+
+def canRead (n : Nat) (f : File) : Prop :=
+  f.pos + n ≤ f.bytes.size
+
+theorem canRead_mono {n m : Nat} (hn : n ≤ m) :
+    SPred.entails (σs:=[File]) (canRead m) (canRead n) := by
+  intro f
+  simp[canRead]
+  intro h
+  omega
+
+def hasRead {n : Nat} (v : Vector UInt8 n) (oldF newF : File) : Prop :=
+  oldF.bytes = newF.bytes ∧ oldF.pos + n = newF.pos  ∧ oldF.bytes.extract oldF.pos newF.pos = v.toArray
+
+theorem read_spec_manual :
+    ⦃fun f' => ⌜canRead n f' ∧ f' = f⌝⦄
+    FileM.read n
+    ⦃⇓ v f' => hasRead v f f'⦄ := by
+  mintro h ∀f'
+  mpure h
+  have ⟨hread, hfile⟩ := h
+  subst hfile
+  unfold FileM.read
+  dsimp only [get, getThe]
+  mspec
+  mspec
+  case inv => exact ⇓ (⟨pos, buf⟩, xs) =>
+    ⌜pos = f'.pos + xs.pref.length ∧ pos + xs.suff.length ≤ f'.bytes.size
+    ∧ f'.bytes.extract f'.pos pos = (buf.take xs.pref.length).toArray⌝
+  case pre1 => intro hread; simp_all[canRead]; omega
+  case step =>
+    intro ⟨pos, buf⟩ pref i hi suff hsuff
+    have := range_elim hsuff
+    simp at this
+    subst_vars
+    mintro ⌜hinv⌝
+    simp at hinv
+    dsimp
+    split
+    · mspec
+      mspec
+      mpure_intro
+      simp +arith [hinv]
+      sorry -- pure proof about offset arithmetic and Array.extract
+    · grind
+  case post.except => simp
+  mintro ∀f
+  mspec
+  cases r
+  simp_all [canRead, hasRead]
+  rw[← h.right.right]
+  congr
+  rw[← h.left]
+
+@[spec]
+theorem read_spec :
+  ⦃fun f' => ⌜canRead n f' ∧ f' = f⌝⦄
+  read n
+  ⦃⇓ v f' => hasRead v f f'⦄
+  := by
+  mvcgen [read]
+  case inv =>
+    rename_i f'
+    exact ⇓ (⟨pos, buf⟩, xs) =>
+    ⌜pos = f'.pos + xs.pref.length ∧ pos + xs.suff.length ≤ f'.bytes.size
+    ∧ f'.bytes.extract f'.pos pos = (buf.take xs.pref.length).toArray⌝
+  all_goals simp_all
+  case pre1 => simp_all +arith [canRead]; have := h.right.symm; subst this; grind
+  case post.success =>
+    rename_i hread _
+    have := hread.right.symm
+    subst this
+    simp_all +arith [hasRead]
+    grind
+  case ifTrue =>
+    -- read_spec_manual above omits this proof
+    rename_i hread hx'
+    have hx' := range_elim hx'
+    simp at hx'
+    subst hx'
+    have := hread.right.symm
+    subst this
+    simp +arith
+    intro ⟨hfst, hsuff, hextract⟩
+    constructor
+    · exact hfst ▸ hsuff
+    · apply Array.extract_split_last <;> try simp_all
+      · rw [Array.extract_set']
+        exact hfst ▸ hextract
+      · exact hx.upper
+  case ifFalse => grind
 
 end FileM
 
@@ -213,16 +363,54 @@ theorem serialize_byteSize {s : Schema} (v : s.interp) (oldf : File) :
   case step.pre1 => mpure_intro; rfl
   all_goals simp_all +arith
 
+theorem Array.extract_sub {xs ys : Array α} (hsub : stop₁ ≤ stop₂) (h : xs.extract start stop₂ = ys) :
+    xs.extract start stop₁ = ys.extract 0 (stop₁ - start) := by
+  ext i h₁ h₂
+  · grind
+  · simp; grind
+
+theorem serialize_history {s : Schema} (v : s.interp) (oldf : File) :
+  ⦃fun f => oldf = f⦄
+  s.serialize v
+  ⦃⇓ () newf => newf.bytes.take oldf.bytes.size = oldf.bytes⦄ := by
+  induction s, v using Schema.serialize.induct generalizing oldf <;> mvcgen [Schema.serialize]
+  case case1 => simp_all
+  case case2 => simp_all
+  case case3 tag v ih oldf' =>
+    mspec ih (oldf.append #[tag])
+    case pre1 f => simp_all; rfl
+    subst h
+    intro newf h
+    have := Array.extract_sub (stop₁ := oldf.bytes.size) (by simp) h
+    simp at this
+    simp_all
+  case inv =>
+    exact ⇓ (_, xs) newf => oldf.bytes = newf.bytes.take oldf.bytes.size
+  case step ih oldf _ =>
+    subst_vars
+    simp_all
+    mspec ih
+    rename_i oldf'
+    intro newf h₂
+    rw [←h₂] at h
+    simp [show oldf.bytes.size ≤ oldf'.bytes.size by rw [h]; simp; omega] at h
+    exact h
+  case pre1 => simp [h]
+  case except => simp
+  case success =>
+    subst_vars
+    simp
+    intro h
+    exact h.symm
+  all_goals simp_all
+
+abbrev serialized.Q {s : Schema} (v : s.interp) (f : File) : PostCond PUnit (.except FileError (.arg File .pure)) :=
+  ⇓ _ newf =>
+    f.pos + byteSize v ≤ f.bytes.size
+    ∧ f.bytes.extract f.pos (f.pos + byteSize v) = newf.bytes.extract (newf.bytes.size - byteSize v) newf.bytes.size
+
 def serialized {s : Schema} (v : s.interp) (f : File) : Prop :=
-  wp⟦s.serialize v⟧
-    (⇓ _ f' => f'.bytes.size = byteSize v ∧ f.bytes.extract f.pos.val (f.pos.val + byteSize v) = f'.bytes)
-    File.mkEmpty
-
-def canRead (n : Nat) (f : File) : Prop :=
-  f.pos + n ≤ f.bytes.size
-
-def hasRead {n : Nat} (v : Vector UInt8 n) (oldF newF : File) : Prop :=
-  oldF.bytes = newF.bytes ∧ oldF.pos + n = newF.pos  ∧ oldF.bytes.extract oldF.pos newF.pos = v.toArray
+  ∀ oldf, wp⟦s.serialize v⟧ (serialized.Q v f) oldf
 
 theorem Array.extract_size_eq {a : Array α} {start : Nat} :
     start ≤ a.size → (a.extract start (start + n)).size = n → start + n ≤ a.size := by
@@ -230,157 +418,184 @@ theorem Array.extract_size_eq {a : Array α} {start : Nat} :
   intro h
   omega
 
-theorem canRead_mono {n m : Nat} (hn : n ≤ m) :
-    SPred.entails (σs:=[File]) (canRead m) (canRead n) := by
-  intro f
-  simp[canRead]
-  intro h
-  omega
-
 theorem serialized_canRead {s : Schema} (v : s.interp) (hn : n ≤ byteSize v):
-    SPred.entails (σs:=[File]) (serialized v) (canRead n) := by
-  apply SPred.entails.trans _ (canRead_mono hn)
+    SPred.entails (σs:=[File]) (serialized v) (FileM.canRead n) := by
+  apply SPred.entails.trans _ (FileM.canRead_mono hn)
   intro f
-  simp [serialized, canRead]
+  simp [serialized, FileM.canRead]
   intro h
-  simp[wp] at h
+  replace h := h File.mkEmpty
+  simp [wp] at h
   split at h; case h_2 => contradiction
-  rcases h with ⟨h₁, h₂⟩
-  rw[← h₂] at h₁
-  have := Array.extract_size_eq (Nat.le_of_lt_add_one f.pos.isLt) h₁
   simp_all
 
-@[grind →]
-theorem range_elim : List.range' s n = xs ++ i :: ys → i = s + xs.length := by
+/-
+theorem serialized.Q.enum_mono {nalts : Nat} {h : nalts ≤ 256} {alts : Fin nalts → Schema} {tag : Fin nalts} (v : (alts tag).interp) (f : File) (start : File) :
+    serialized.Q v f ⊢ₚ serialized.Q (s := .enum _ h _) ⟨tag, v⟩ (f.append #[tag]) := by
+  simp only [PostCond.entails, byteSize, forall_const, FailConds.false, FailConds.const,
+    FailConds.entails.refl, and_true]
+  intro stop h
+  simp +arith
+  ext i h₁ h₂
+  · simp +arith; sorry -- uff
+  · simp
+    by_cases h₀ : i = 0
+    · simp_all
+
+theorem serialized.Q.append' {nalts : Nat} {h : nalts ≤ 256} {alts : Fin nalts → Schema} {tag : Fin nalts} (v : (alts tag).interp) (f : File) (start : File) :
+    wp⟦(alts tag).serialize v⟧ (serialized.Q v (f.append #[tag])) (start.append #[tag])
+    → wp⟦(alts tag).serialize v⟧ (serialized.Q (s := .enum _ h _) ⟨tag, v⟩ f) (start.append #[tag]) := by
+  simp [-Array.append_singleton, serialized.Q]
   intro h
-  induction xs generalizing s n
-  case nil => cases n <;> simp_all[List.range']
-  case cons head tail ih =>
-    cases n <;> simp[List.range'] at h
-    have := ih h.2
-    simp[ih h.2]
-    omega
+  induction s, v using Schema.serialize.induct generalizing f start₁ start₂
+  case case1 => simp_all [Schema.serialize, FileM.wp_append]
+  case case2 => simp_all [Schema.serialize, FileM.wp_append]
+  case case3 tag v ih =>
+    simp_all [Schema.serialize, FileM.wp_append]
+    apply ih f _ _ h
+
+theorem serialized.Q.blah : wp⟦(alts✝ tag).serialize v⟧ (Q ⟨tag, v⟩ f) (start₁.append #[OfNat.ofNat ↑tag])
+
+theorem serialized.Q.append {s : Schema} (v : s.interp) (f : File) (start₁ start₂ : File) :
+    wp⟦s.serialize v⟧ (serialized.Q v f) start₁ → wp⟦s.serialize v⟧ (serialized.Q v f) start₂ := by
+  intro h
+  induction s, v using Schema.serialize.induct generalizing f start₁ start₂
+  case case1 => simp_all [Schema.serialize, FileM.wp_append]
+  case case2 => simp_all [Schema.serialize, FileM.wp_append]
+  case case3 tag v ih =>
+    simp_all [Schema.serialize, FileM.wp_append]
+    apply ih f _ _ h
+
+theorem serialized_of_some_file {s : Schema} (v : s.interp) (f : File) (somef : File):
+  wp⟦s.serialize v⟧ (serialized.Q v f) somef
+  → serialized v f := by
+  simp [serialized]
+  intro h oldf
+  induction s, v using Schema.serialize.induct generalizing f oldf somef
+  case case1 => simp_all [Schema.serialize, FileM.wp_append]
+  case case2 => simp_all [Schema.serialize, FileM.wp_append]
+  case case3 tag v ih =>
+    simp_all [Schema.serialize, FileM.wp_append]
+    let f' := f.append #[tag]
+    let somef' := somef.append #[tag]
+    simp_all [serialized.Q]
+    conv at h in _ ∧ _ =>
+      congr
+      · rhs; rw [← Nat.add_assoc]; rw [show somef.bytes.size + 1 = somef'.bytes.size by simp [somef']]
+      · rfl
+
+    have := ih somef' h
+    apply ih _ h
+  all_goals
+  simp [serialized] at h
+  simp_all
+  intro h
+  subst h
 
 @[simp]
 theorem Array.extract_complete {v : Vector α n} :
     Array.extract v.toArray 0 n = v.toArray := by simp
 
-@[spec]
-theorem read_spec :
-    ⦃fun f' => ⌜canRead n f' ∧ f' = f⌝⦄
-    FileM.read n
-    ⦃⇓ v f' => hasRead v f f'⦄ := by
-  mintro h ∀f'
-  mpure h
-  have ⟨hread, hfile⟩ := h
-  subst hfile
-  unfold FileM.read
-  dsimp only [get, getThe]
-  mspec
-  mspec
-  case inv => exact ⇓ (⟨pos, buf⟩, xs) =>
-    ⌜pos = f'.pos + xs.pref.length ∧ pos + xs.suff.length ≤ f'.bytes.size
-    ∧ f'.bytes.extract f'.pos pos = (buf.take xs.pref.length).toArray⌝
-  case pre1 => intro hread; simp_all[canRead]; omega
-  case step =>
-    intro ⟨pos, buf⟩ pref i hi suff hsuff
-    have := range_elim hsuff
-    simp at this
-    subst_vars
-    mintro ⌜hinv⌝
-    simp at hinv
-    dsimp
-    split
-    · mspec
-      mspec
-      mpure_intro
-      simp +arith [hinv]
-      sorry -- pure proof about offset arithmetic and Array.extract
-    · simp_all
-      omega
-  case post.except => simp
-  mintro ∀f
-  mspec
-  cases r
-  simp_all [canRead, hasRead]
-  rw[← h.right.right]
-  congr
-  rw[← h.left]
-
-@[spec]
-theorem read_spec' :
-  ⦃fun f' => ⌜canRead n f' ∧ f' = f⌝⦄
-  FileM.read n
-  ⦃⇓ v f' => hasRead v f f'⦄
-  := by
-  mvcgen[-read_spec, FileM.read]
-  case inv =>
-    rename_i f'
-    exact ⇓ (⟨pos, buf⟩, xs) =>
-    ⌜pos = f'.pos + xs.pref.length ∧ pos + xs.suff.length ≤ f'.bytes.size
-    ∧ f'.bytes.extract f'.pos pos = (buf.take xs.pref.length).toArray⌝
-  all_goals simp_all
-  case pre1 => simp_all +arith [canRead]; have := h.right; subst this; refine ⟨by grind, by omega⟩
-  case post.success => cases r; simp_all +arith [hasRead]; constructor <;> push_cast
-
 theorem serialized_hasRead_byte {bs : Vector UInt8 1} {v : Schema.byte.interp} :
     serialized v f → hasRead bs f f' → v = bs[0] := by
-  simp[serialized, hasRead, Schema.serialize]
-  simp_all
-  intro _ hv hbytes hpos hbs
   cases bs
-  simp_all
-
-example :
-  ⦃fun f' => ⌜canRead n f' ∧ f' = f⌝⦄
-  FileM.read n
-  ⦃⇓ v f' => hasRead v f f'⦄
-  = (
-  (fun f' => ⌜canRead n f' ∧ f' = f⌝)
-  ⊢ₛ
-  wp⟦FileM.read n⟧ (⇓ v f' => hasRead v f f')
-  )
-  := rfl
-
-example :
-  wp⟦FileM.read n⟧ (⇓ v f' => hasRead v f f') f
-  = (
-  match FileM.read n f with
-  | .ok v f' => hasRead v f f'
-  | .error e f' => False
-  )
-  := rfl
-
-example :
-  PostCond α (.except FileError (.arg File .pure))
-  = ((α → File → Prop) × (FileError → File → Prop) × Unit)
-  := rfl
+  simp [serialized, hasRead, Schema.serialize, FileM.wp_append]
+  intro hv hff' hpos harr
+  subst harr
+  simp
+  rw [Array.extract_add_one] at hv
+  simp only [Nat.le_refl, Array.extract_empty_of_stop_le_start, List.push_toArray_fun,
+    List.nil_append_fun, id_def] at hv
+  injection hv with hv
+  case h₁ => grind
+  case h₂ => grind
+  simp at hv
+  injection hv with hv
+  simp_all only
 
 theorem serialized_hasRead_word {bs : Vector UInt8 4} {v : Schema.word.interp} :
     serialized v f → hasRead bs f f' → v = ((bs[0].toUInt32 <<< 24) ||| (bs[1].toUInt32 <<< 16) ||| (bs[2].toUInt32 <<< 8) ||| bs[3].toUInt32) := by
-  simp[serialized, hasRead, Schema.serialize]
-  wp_simp
-  simp_all
-  intro _ hv hbytes hpos hbs
-  cases bs
-  simp_all
+  cases bs with | mk arr =>
+  simp [serialized, hasRead, Schema.serialize, FileM.wp_append]
+  intro hbuf hff' hpos harr
+  have hix : ↑f.pos + 3 < f.bytes.size := by grind
+  simp +arith (discharger := omega) [Array.extract_sub_n] at hbuf
+  subst harr
+  simp_all [Nat.le_refl, Array.extract_empty_of_stop_le_start, List.push_toArray,
+    List.nil_append, List.cons_append, Array.mk.injEq, List.cons.injEq, and_true,
+    Array.getElem_extract, Nat.add_zero, UInt32.toUInt32_toUInt8]
   bv_decide
 
 theorem serialized_hasRead_enum {alts : Fin nalts → Schema} {bs : Vector UInt8 1} {v : (alts tag).interp} :
-    serialized v f → hasRead bs f f' → tag = bs[0] ∧ v = bs[1:] := by
-  simp[serialized, hasRead, Schema.serialize]
+    serialized (s := .enum nalts _ alts) ⟨tag, v⟩ f → hasRead bs f f' → tag = bs[0] ∧ serialized v (f.append #[tag]) ∧ hasRead bs (f.append #[tag]) f' := by
+  simp [serialized, hasRead, Schema.serialize, FileM.wp_append]
+  intro hser
   wp_simp
   simp_all
   intro _ hv hbytes hpos hbs
   cases bs
   simp_all
+-/
 
 theorem blah {s : Schema} (v : s.interp) :
     ⦃serialized v⦄
     s.parse
     ⦃⇓ v' => ⌜v = v'⌝⦄ := by
   mintro hser
-  induction s using Schema.parse.induct
+  mhave hcanRead : FileM.canRead (byteSize v) := serialized_canRead v .refl
+  induction s using Schema.parse.induct <;> mvcgen [Schema.parse, *]
+  case case1.pre1 =>
+    mpure_intro
+    refine ⟨h.right, rfl⟩
+  case case1.post f =>
+    intro f' hread
+    simp only [SVal.curry_cons, SVal.curry_nil]
+    rcases h with ⟨hser, hread⟩
+    cases r
+    -- Doing it in one go loses info on `v`?!
+--    simp_all only [serialized, EStateM.instWP, Schema.serialize, FileM.append, modify, modifyGet,
+--      EStateM.instMonadStateOf, FailConds.pure_def, EStateM.modifyGet, byteSize, SPred.and_nil,
+--      File.append_bytes, Array.append_singleton, Array.size_push, Nat.add_eq_right,
+--      Array.size_eq_zero_iff, hasRead]
+    simp_all only [serialized, Schema.serialize, FileM.append, modify, modifyGet,
+      EStateM.instMonadStateOf, FailConds.pure_def, byteSize, SPred.and_nil, FileM.hasRead,
+      Vector.getElem_mk]
+    simp_all only [EStateM.instWP, EStateM.modifyGet, File.append_bytes, Array.append_singleton,
+      Array.size_push, Nat.add_eq_right, Array.size_eq_zero_iff]
+    replace hser := hser f
+    simp (discharger := omega) [Array.extract_add_one, Array.extract_empty_of_stop_le_start] at hser
+    simp [← hread.right, hread.left]
+    simp_all
+  case case2.pre1 =>
+    mpure_intro
+    refine ⟨h.right, rfl⟩
+  case case2.post f =>
+    intro f' hread
+    simp only [SVal.curry_cons, SVal.curry_nil]
+    rcases h with ⟨hser, hread⟩
+    cases r
+    -- Doing it in one go loses info on `v`?!
+--    simp_all only [serialized, EStateM.instWP, Schema.serialize, FileM.append, modify, modifyGet,
+--      EStateM.instMonadStateOf, FailConds.pure_def, EStateM.modifyGet, byteSize, SPred.and_nil,
+--      File.append_bytes, Array.append_singleton, Array.size_push, Nat.add_eq_right,
+--      Array.size_eq_zero_iff, hasRead]
+    simp_all only [serialized, Schema.serialize, FileM.append, modify, modifyGet,
+      EStateM.instMonadStateOf, FailConds.pure_def, byteSize, SPred.and_nil, FileM.hasRead,
+      Vector.getElem_mk]
+    simp_all only [EStateM.instWP, EStateM.modifyGet, File.append_bytes, Array.append_singleton,
+      Array.size_push, Nat.add_eq_right, Array.size_eq_zero_iff]
+    replace hser := hser f
+    simp (discharger := omega) [Array.extract_add_one, Array.extract_empty_of_stop_le_start] at hser
+    simp [← hread.right, hread.left]
+    simp_all
+  case case1.ifTrue =>
+    simp_all only [hasRead, serialized, Schema.serialize, FileM.append, modify, modifyGet, instMonadStateOf]
+    exact serialized_hasRead_enum hser hread
+  case case1.ifFalse =>
+    simp_all only [hasRead, serialized, Schema.serialize, FileM.append, modify, modifyGet, instMonadStateOf]
+    exact serialized_hasRead_enum hser hread
+  case case2 => sorry
+/-
   case case1 =>
     unfold Schema.parse
     mintro ∀f
@@ -388,7 +603,6 @@ theorem blah {s : Schema} (v : s.interp) :
     mwp
     mspec read_spec
     case pre => mpure_intro; refine ⟨?_, rfl⟩; apply serialized_canRead _ .refl _ hser
-    case post.success => intro f hread; exact serialized_hasRead_byte hser hread
   case case2 =>
     unfold Schema.parse
     mintro ∀f
@@ -405,3 +619,4 @@ theorem blah {s : Schema} (v : s.interp) :
     mspec read_spec
     case pre => mpure_intro; refine ⟨?_, rfl⟩; apply serialized_canRead _ (by simp) _ hser
     case post.success => intro f hread; exact serialized_hasRead_byte hser hread
+-/
