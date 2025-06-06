@@ -39,11 +39,6 @@ theorem mkFreshNat_spec [Monad m] [WPMonad m sh] :
   mspec
   simp
 
-@[wp_simp]
-theorem StateT.mkFreshNat_apply [Monad m] [LawfulMonad m] [WPMonad m sh] :
-  wp⟦(mkFreshNat : StateT (Nat × Nat) m Nat)⟧ Q = fun s => Q.1 s.1 (s.1 + 1, s.2) := by
-    unfold mkFreshNat; wp_simp
-
 def mkFreshPair : StateM (Nat × Nat) (Nat × Nat) := do
   let a ← mkFreshNat
   let b ← mkFreshNat
@@ -212,7 +207,7 @@ theorem fib_triple_cases : ⦃⌜True⌝⦄ fib_impl n ⦃⇓ r => r = fib_spec 
   simp only [fib_impl, h, reduceIte]
   mspec
   mspec Specs.forIn_range (⇓ (⟨a, b⟩, xs) => a = fib_spec xs.rpref.length ∧ b = fib_spec (xs.rpref.length + 1)) ?step
-  case step => dsimp; intros; mintro _; mwp; simp_all
+  case step => dsimp; intros; mintro _; mspec; mspec; simp_all
   simp_all [Nat.sub_one_add_one]
 
 theorem fib_impl_vcs
@@ -333,7 +328,7 @@ theorem prog.spec : ⦃isValid⦄ prog n ⦃⇓r => ⌜r > 100⌝ ∧ isValid⦄
   intro a b c d h
   mspec
   simp_all
-  omega
+  grind
 
 theorem prog.spec' : ⦃isValid⦄ prog n ⦃⇓r => ⌜r > 100⌝ ∧ isValid⦄ := by
   unfold prog

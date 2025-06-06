@@ -168,22 +168,22 @@ private def mkSpecContext (optConfig : Syntax) (lemmas : Syntax) (ignoreStarArg 
         catch _ => continue
   return { config, specThms, simpCtx := res.ctx, simprocs := res.simprocs }
 
-def isTrivial (e : Expr) : Bool := match e with
+def isDuplicable (e : Expr) : Bool := match e with
   | .bvar .. => true
   | .mvar .. => true
   | .fvar .. => true
   | .const .. => true
   | .lit .. => true
   | .sort .. => true
-  | .mdata _ e => isTrivial e
-  | .proj _ _ e => isTrivial e
+  | .mdata _ e => isDuplicable e
+  | .proj _ _ e => isDuplicable e
   | .lam .. => false
   | .forallE .. => false
   | .letE .. => false
   | .app .. => e.isAppOf ``OfNat.ofNat
 
-def withNonTrivialLetDecl (name : Name) (type : Expr) (val : Expr) (k : Expr → (Expr → VCGenM Expr) → VCGenM α) (kind : LocalDeclKind := .default) : VCGenM α :=
-  if isTrivial val then
+def withSharing (name : Name) (type : Expr) (val : Expr) (k : Expr → (Expr → VCGenM Expr) → VCGenM α) (kind : LocalDeclKind := .default) : VCGenM α :=
+  if isDuplicable val then
     k val pure
   else
     withLetDecl name type val (kind := kind) fun fv => do
@@ -268,7 +268,7 @@ where
       -- let-expressions
       if let .letE x ty val body _nonDep := e.getAppFn' then
         burnOne
-        return ← withNonTrivialLetDecl x ty val fun fv leave => do
+        return ← withSharing x ty val fun fv leave => do
         let e' := ((body.instantiate1 fv).betaRev e.getAppRevArgs)
         leave (← onWPApp (goalWithNewProg e') name)
       -- match-expressions
