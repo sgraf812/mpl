@@ -1,8 +1,9 @@
+import MPL
+import Test.Code
+
 /-!
 This module tests `mvcgen` by maximally automating many of the proofs in `ByHand.lean`.
 -/
-import MPL
-import Test.Code
 
 namespace MPL.Test.VC
 
@@ -186,3 +187,20 @@ theorem test_sum :
     omega
   case post.success => simp_all; omega
   simp_all +decide
+
+/--
+  The main point about this test is that `mSpec` should return all unassigned MVars it creates.
+  This used to be untrue because `mkForallFVars` etc. would instantiate MVars and introduce new
+  unassigned MVars in turn. It is important for `mSpec` to return these new MVars, otherwise
+  we get `(kernel) declaration has metavariables 'MPL.Test.VC.mspec_forwards_mvars'`
+-/
+theorem mspec_forwards_mvars {n : Nat} :
+  ⦃⌜True⌝⦄
+  (do
+    for i in [2:n] do
+      if n < i * i then
+        return 1
+    return 1 : Idd Nat)
+  ⦃⇓ r => ⌜True⌝⦄ := by
+  mvcgen
+  all_goals admit

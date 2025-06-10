@@ -215,6 +215,7 @@ where
 
   assignMVars (mvars : List MVarId) : VCGenM PUnit := do
     for mvar in mvars do
+      -- trace[mpl.tactics.vcgen] "assignMVars {← mvar.getTag}, assigned: {← mvar.isAssigned}"
       if ← mvar.isAssigned then continue
       -- I used to filter for `isProp` here and add any non-Props directly as subgoals,
       -- but then we would get spurious instantiations of non-synthetic goals such as loop
