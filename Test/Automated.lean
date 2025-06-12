@@ -204,3 +204,43 @@ theorem mspec_forwards_mvars {n : Nat} :
   ⦃⇓ r => ⌜True⌝⦄ := by
   mvcgen
   all_goals admit
+
+def check_all (p : Nat → Prop) [DecidablePred p] (n : Nat) : Bool := Id.run do
+  for i in [0:n] do
+    if ¬ p i then
+      return false
+  return true
+
+@[simp]
+theorem Std.Range.mem_toList {x} {r : Std.Range} :
+    x ∈ r.toList ↔ x ∈ r := sorry
+
+@[simp]
+theorem Nat.mod_one {n : Nat} : n % 1 = 0 := by omega
+
+/--
+VC generation is normally not useful to massage hypotheses such as `ht`, but in this example
+we manage to prove a contradiction `hf` using the VC generator.
+-/
+example (p : Nat → Prop) [DecidablePred p] (n : Nat) :
+    (∀ i, i < n → p i) ↔ check_all p n := by
+  constructor
+  · intro h
+    apply Id.by_wp (P := (· = true)) rfl
+    mvcgen
+    case inv => exact (⇓ (r, xs) => r.1 = none ∧ ∀ x, x ∈ xs.suff → p x)
+    case pre1 => simp; intro a ha; apply h a ha.upper
+    all_goals simp_all
+  · intro ht i hin
+    apply Classical.byContradiction
+    intro h'
+    have hf : check_all p n = false := by
+      have hin : i ∈ [0:n] := by simp [Std.instMembershipNatRange, hin]
+      apply Id.by_wp (P := (· = false)) rfl
+      mvcgen
+      case inv => exact (⇓ (r, xs) =>
+        match r.1 with
+        | none => i ∈ xs.suff
+        | some b => b = false ∧ xs.suff = [])
+      all_goals simp_all; try grind
+    simp [ht] at hf
