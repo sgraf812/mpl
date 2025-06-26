@@ -183,14 +183,17 @@ def mSpec (goal : MGoal) (elabSpecAtWP : Expr → n (SpecTheorem × List MVarId)
     unless (← withAssignableSyntheticOpaque <| isDefEq wp wp') do
       Term.throwTypeMismatchError none wp wp' spec
 
-    let P := P.betaRev excessArgs
-    let spec := spec.betaRev excessArgs
-
-    -- often P or Q are schematic (i.e. an MVar app). Try to solve by rfl.
     let P ← instantiateMVarsIfMVarApp P
     let Q ← instantiateMVarsIfMVarApp Q
-    let HPRfl ← withDefault <| withAssignableSyntheticOpaque <| isDefEqGuarded P goal.hyps
+
+    -- often P or Q are schematic (i.e. an MVar app). Try to solve by rfl.
+    let hypsFn ← forallBoundedTelescope (← inferType P) (.some excessArgs.size) fun xs _ => do
+      mkLambdaFVars xs goal.hyps
+    let HPRfl ← withDefault <| withAssignableSyntheticOpaque <| isDefEqGuarded P hypsFn
     let QQ'Rfl ← withDefault <| withAssignableSyntheticOpaque <| isDefEqGuarded Q Q'
+
+    let P := P.betaRev excessArgs
+    let spec := spec.betaRev excessArgs
 
     -- Discharge the validity proof for the spec if not rfl
     let mut prePrf : Expr → Expr := id
