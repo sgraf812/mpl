@@ -1,9 +1,6 @@
 # `mpl`
 
-**Disclaimer**: This library is still an unreleased pre-alpha, unfit for production use. 
-While the dust on the semantic foundations and the proof mode has mostly settled,
-aspects such as automation are still underdeveloped and experimental.
-In particular, there is no full-blown verification condition generator yet. 
+**This library has been upstreamed into the Lean 4 distribution under `Std.Do` and `Std.Tactic.Do`.**
 
 ---
 
